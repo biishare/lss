@@ -3,7 +3,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Gestao Academica",
-  description: "Demo de gestão académica",
+  description:
+    "Portal academico por perfis para turmas, matriculas, mensalidades e recibos.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

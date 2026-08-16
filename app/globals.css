@@ -39,9 +39,11 @@ select:focus-visible {
 }
 
 .table-scroll {
+  width: 100%;
   max-width: 100%;
   overflow-x: auto;
   overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -52,4 +54,12 @@ select:focus-visible {
 .table-scroll th,
 .table-scroll td {
   white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .table-scroll {
+    margin-inline: -1rem;
+    max-width: calc(100% + 2rem);
+    padding-inline: 1rem;
+  }
 }
