@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Gestao Academica",
+  title: "Liceu São Silvestre",
   description:
-    "Portal academico por perfis para turmas, matriculas, mensalidades e recibos.",
+    "Sistema de gestão escolar do Liceu São Silvestre.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

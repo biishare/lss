@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   initialAcademicStages,
   initialClassDefinitions,
@@ -11,15 +11,10 @@ import {
   initialRoomDefinitions,
   initialRooms,
   initialStudents,
-  monthOptions,
   type AcademicStageDefinition,
-  type ClassGroup,
   type ClassDefinition,
-  type EnrollmentType,
+  type ClassGroup,
   type EntityStatus,
-  type FinanceStatus,
-  type MonthOption,
-  type PaymentEntry,
   type PaymentSettings,
   type RoomDefinition,
   type SchoolClass,
@@ -27,926 +22,114 @@ import {
   type Student,
   type StudentPaymentRecord,
 } from "../lib/school-demo-data";
-
-type ProfileId =
-  | "administrador"
-  | "secretaria"
-  | "direcao"
-  | "professor"
-  | "caixa"
-  | "aluno"
-  | "encarregado";
-
-type WorkspaceView =
-  | "overview"
-  | "catalog"
-  | "classes"
-  | "rooms"
-  | "groups"
-  | "enrollments"
-  | "payments"
-  | "reports"
-  | "profiles";
-
-type PaymentCategory = "registration" | "tuition" | "miscellaneous";
-
-type PaymentWorkspaceSection =
-  | "settings"
-  | "student-rules"
-  | "entry"
-  | "reports";
-
-type BillingRun = {
-  id: string;
-  classId: string;
-  groupId: string;
-  monthKey: string;
-  studentIds: string[];
-  exemptedStudentIds: string[];
-  amount: number;
-  expectedTotal: number;
-  createdAt: string;
-};
-
-type ClassDraft = {
-  definitionId: string;
-  status: EntityStatus;
-};
-
-type RoomDraft = {
-  definitionId: string;
-  status: EntityStatus;
-};
-
-type AcademicStageDraft = {
-  name: string;
-  status: EntityStatus;
-};
-
-type ClassDefinitionDraft = {
-  id: string;
-  name: string;
-  stageId: string;
-  status: EntityStatus;
-};
-
-type RoomDefinitionDraft = {
-  name: string;
-  block: string;
-  capacity: string;
-  status: EntityStatus;
-};
-
-type GroupDraft = {
-  name: string;
-  classId: string;
-  shift: string;
-  roomId: string;
-  capacity: string;
-  status: EntityStatus;
-};
-
-type EnrollmentDraft = {
-  fullName: string;
-  guardianName: string;
-  guardianPhone: string;
-  enrollmentType: EnrollmentType;
-  financeStatus: FinanceStatus;
-  discountPercent: string;
-  exceptionStartMonth: string;
-  exceptionEndMonth: string;
-  exceptionReason: string;
-  classId: string;
-  groupId: string;
-};
-
-type FinanceSettingsDraft = {
-  academicYear: string;
-  inscriptionRenewalFee: string;
-  monthlyFee: string;
-  startMonth: string;
-  endMonth: string;
-  firstPenaltyDay: string;
-  firstPenaltyAmount: string;
-  secondPenaltyDay: string;
-  secondPenaltyAmount: string;
-};
-
-type FinanceProfileDraft = {
-  studentId: string;
-  status: FinanceStatus;
-  discountPercent: string;
-  startMonth: string;
-  endMonth: string;
-  reason: string;
-};
-
-type PaymentLaunchDraft = {
-  studentId: string;
-  category: PaymentCategory;
-  monthKey: string;
-  amount: string;
-  method: string;
-  reference: string;
-  description: string;
-};
-
-type PaymentDetails = Omit<PaymentEntry, "amount">;
-
-type MonthLedger = {
-  month: MonthOption;
-  entry: PaymentEntry;
-  due: number;
-  discount: number;
-  ruleLabel: string;
-  carryIn: number;
-  paid: number;
-  balance: number;
-  carryOut: number;
-  fine: number;
-};
-
-type StudentLedgerRow = {
-  student: Student;
-  record: StudentPaymentRecord;
-  ledger: ReturnType<typeof buildLedger>;
-};
-
-type StoredDemoState = {
-  academicStages?: AcademicStageDefinition[];
-  classDefinitions?: ClassDefinition[];
-  roomDefinitions?: RoomDefinition[];
-  classes?: SchoolClass[];
-  rooms?: SchoolRoom[];
-  groups?: ClassGroup[];
-  students?: Student[];
-  paymentSettings?: PaymentSettings;
-  paymentRecords?: StudentPaymentRecord[];
-  billingRuns?: BillingRun[];
-};
-
-const storageKey = "gestao-academica-demo-state-v2";
-
-type ProfileConfig = {
-  id: ProfileId;
-  title: string;
-  subtitle: string;
-  description: string;
-  permissions: string[];
-  defaultView: WorkspaceView;
-  operational: boolean;
-  glyph: string;
-  accent: string;
-  surface: string;
-  featured?: boolean;
-};
-
-const profiles: ProfileConfig[] = [
-  {
-    id: "administrador",
-    title: "Administrador",
-    subtitle: "Configura toda a escola",
-    description: "Perfil completo para escola, perfis e regras.",
-    permissions: [
-      "Parametros academicos",
-      "Perfis e permissoes",
-      "Regras financeiras",
-      "Relatorios globais",
-    ],
-    defaultView: "overview",
-    operational: true,
-    glyph: "AD",
-    accent: "border-t-[#178f7f]",
-    surface: "bg-teal-50 text-[#0b6b5c]",
-  },
-  {
-    id: "secretaria",
-    title: "Secretaria academica",
-    subtitle: "Matriculas e registos",
-    description: "Regista turmas, matriculas, alunos e pagamentos.",
-    permissions: [
-      "Classes e salas",
-      "Turmas",
-      "Matricular alunos",
-      "Registar pagamentos",
-    ],
-    defaultView: "overview",
-    operational: true,
-    glyph: "SE",
-    accent: "border-t-[#2867d8]",
-    surface: "bg-blue-50 text-[#2459bd]",
-    featured: true,
-  },
-  {
-    id: "direcao",
-    title: "Direcao pedagogica",
-    subtitle: "Parametros academicos",
-    description: "Gere niveis, classes e salas.",
-    permissions: [
-      "Niveis de ensino",
-      "Classes",
-      "Salas",
-      "Autorizar bolsas",
-    ],
-    defaultView: "catalog",
-    operational: true,
-    glyph: "DP",
-    accent: "border-t-[#8b5cf6]",
-    surface: "bg-violet-50 text-[#6d3bd1]",
-  },
-  {
-    id: "professor",
-    title: "Professor",
-    subtitle: "Turmas e presencas",
-    description: "Acesso focado nas turmas atribuidas e acompanhamento pedagogico.",
-    permissions: [
-      "Ver turmas atribuidas",
-      "Consultar listas de alunos",
-      "Registar presencas",
-      "Lancar notas futuramente",
-    ],
-    defaultView: "groups",
-    operational: false,
-    glyph: "PR",
-    accent: "border-t-[#f08c16]",
-    surface: "bg-orange-50 text-[#c96700]",
-  },
-  {
-    id: "caixa",
-    title: "Tesouraria",
-    subtitle: "Regras financeiras",
-    description: "Define valores, multas, bolsas e consulta relatorios.",
-    permissions: [
-      "Configurar mensalidades",
-      "Definir multas",
-      "Gerir bolsas e isencoes",
-      "Auditar recebimentos",
-    ],
-    defaultView: "payments",
-    operational: true,
-    glyph: "CX",
-    accent: "border-t-[#25965a]",
-    surface: "bg-emerald-50 text-[#177245]",
-    featured: true,
-  },
-  {
-    id: "aluno",
-    title: "Aluno",
-    subtitle: "Area academica",
-    description: "Portal de consulta para situacao academica e financeira.",
-    permissions: [
-      "Ver turma",
-      "Ver pagamentos",
-      "Baixar recibos futuramente",
-      "Consultar comunicados",
-    ],
-    defaultView: "overview",
-    operational: false,
-    glyph: "AL",
-    accent: "border-t-[#0ea5c7]",
-    surface: "bg-cyan-50 text-[#087d95]",
-  },
-  {
-    id: "encarregado",
-    title: "Encarregado",
-    subtitle: "Acompanhar educandos",
-    description: "Consulta dos educandos, pagamentos, saldos e avisos.",
-    permissions: [
-      "Ver dados dos educandos",
-      "Consultar dividas",
-      "Receber alertas",
-      "Baixar recibos futuramente",
-    ],
-    defaultView: "overview",
-    operational: false,
-    glyph: "EE",
-    accent: "border-t-[#e2551f]",
-    surface: "bg-red-50 text-[#bd4216]",
-  },
-];
-
-const workspaceNavigation: Array<{
-  id: WorkspaceView;
-  label: string;
-  profiles: ProfileId[];
-}> = [
-  { id: "overview", label: "Painel", profiles: ["administrador", "secretaria", "caixa"] },
-  { id: "catalog", label: "Parametros", profiles: ["administrador", "direcao"] },
-  { id: "classes", label: "Classes", profiles: ["administrador", "secretaria"] },
-  { id: "rooms", label: "Salas", profiles: ["administrador", "secretaria"] },
-  { id: "groups", label: "Turmas", profiles: ["administrador", "secretaria"] },
-  { id: "enrollments", label: "Matriculas", profiles: ["administrador", "secretaria"] },
-  { id: "payments", label: "Pagamentos", profiles: ["administrador", "secretaria", "caixa"] },
-  { id: "reports", label: "Relatorios", profiles: ["administrador", "caixa"] },
-  { id: "profiles", label: "Perfis", profiles: ["administrador"] },
-];
-
-const paymentSections: Array<{
-  id: PaymentWorkspaceSection;
-  label: string;
-  profiles: ProfileId[];
-}> = [
-  {
-    id: "settings",
-    label: "Dados de pagamentos",
-    profiles: ["administrador", "secretaria", "caixa"],
-  },
-  {
-    id: "student-rules",
-    label: "Bolsas e isencoes",
-    profiles: ["administrador", "caixa"],
-  },
-  {
-    id: "entry",
-    label: "Inscricao/Renovacao e propinas",
-    profiles: ["administrador", "secretaria"],
-  },
-  {
-    id: "reports",
-    label: "Relatorio",
-    profiles: ["administrador", "caixa"],
-  },
-];
-
-const paymentCategories: Array<{ id: PaymentCategory; label: string }> = [
-  { id: "registration", label: "Inscricao/Renovacao" },
-  { id: "tuition", label: "Mensalidade" },
-  { id: "miscellaneous", label: "Pagamentos diversos" },
-];
-
-const paymentMethods = [
-  "Numerario",
-  "Transferencia",
-  "Multicaixa",
-  "Deposito bancario",
-];
-
-const statusOptions: Array<{ value: EntityStatus; label: string }> = [
-  { value: "active", label: "Activo" },
-  { value: "inactive", label: "Inactivo" },
-];
-
-const financeStatusOptions: Array<{ value: FinanceStatus; label: string }> = [
-  { value: "regular", label: "Regular" },
-  { value: "scholarship", label: "Bolseiro integral" },
-  { value: "partial_scholarship", label: "Bolseiro parcial" },
-  { value: "exception", label: "Excecao temporaria" },
-];
-
-const buttonBase =
-  "inline-flex min-h-10 items-center justify-center rounded-md px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50";
-
-const moneyFormatter = new Intl.NumberFormat("pt-MZ", {
-  maximumFractionDigits: 0,
-});
-
-function cx(...classes: Array<string | false | null | undefined>) {
-  return classes.filter(Boolean).join(" ");
-}
-
-function loadStoredState() {
-  try {
-    const rawState = window.localStorage.getItem(storageKey);
-
-    return rawState ? (JSON.parse(rawState) as StoredDemoState) : null;
-  } catch {
-    return null;
-  }
-}
-
-function storedArray<T>(items: T[] | undefined, fallback: T[]) {
-  return Array.isArray(items) ? items : fallback;
-}
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function currentAcademicYear() {
-  return String(new Date().getFullYear());
-}
-
-function nowIso() {
-  return new Date().toISOString();
-}
-
-function formatDate(date: string) {
-  const [year, month, day] = date.split("-");
-
-  if (!year || !month || !day) {
-    return date;
-  }
-
-  return `${day}/${month}/${year}`;
-}
-
-function formatDateTime(value?: string) {
-  if (!value) {
-    return "Sem data";
-  }
-
-  return new Intl.DateTimeFormat("pt-PT", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
-
-function formatCurrency(value: number) {
-  return `${moneyFormatter.format(Math.max(0, value))} MT`;
-}
-
-function parseMoney(value: string) {
-  return Math.max(0, Number(value) || 0);
-}
-
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("pt-PT")
-    .trim();
-}
-
-function sortClasses(items: SchoolClass[]) {
-  return [...items].sort((a, b) => {
-    const aNumber = Number(a.id);
-    const bNumber = Number(b.id);
-
-    if (Number.isFinite(aNumber) && Number.isFinite(bNumber)) {
-      return aNumber - bNumber;
-    }
-
-    return a.name.localeCompare(b.name, "pt-PT", { sensitivity: "base" });
-  });
-}
-
-function sortByName<T extends { name: string }>(items: T[]) {
-  return [...items].sort((a, b) =>
-    a.name.localeCompare(b.name, "pt-PT", { sensitivity: "base" }),
-  );
-}
-
-function sortStudents(items: Student[]) {
-  return [...items].sort((a, b) =>
-    a.fullName.localeCompare(b.fullName, "pt-PT", { sensitivity: "base" }),
-  );
-}
-
-function nextId(items: Array<{ id: string }>, prefix: string) {
-  const currentMax = items.reduce((max, item) => {
-    const idNumber = Number(item.id.replace(`${prefix}-`, ""));
-    return Number.isFinite(idNumber) ? Math.max(max, idNumber) : max;
-  }, 0);
-
-  return `${prefix}-${String(currentMax + 1).padStart(3, "0")}`;
-}
-
-function nextRegistrationNumber(students: Student[]) {
-  return `GA-${new Date().getFullYear()}-${String(students.length + 1).padStart(
-    3,
-    "0",
-  )}`;
-}
-
-function activeAcademicStages(stages: AcademicStageDefinition[]) {
-  return sortByName(stages.filter((stage) => stage.status === "active"));
-}
-
-function activeClassDefinitions(
-  classDefinitions: ClassDefinition[],
-  stages: AcademicStageDefinition[],
-) {
-  const activeStageIds = new Set(
-    stages.filter((stage) => stage.status === "active").map((stage) => stage.id),
-  );
-
-  return sortByName(
-    classDefinitions.filter(
-      (definition) =>
-        definition.status === "active" && activeStageIds.has(definition.stageId),
-    ),
-  );
-}
-
-function activeRoomDefinitions(roomDefinitions: RoomDefinition[]) {
-  return sortByName(
-    roomDefinitions.filter((definition) => definition.status === "active"),
-  );
-}
-
-function stageLabel(stages: AcademicStageDefinition[], stageId: string) {
-  return stages.find((stage) => stage.id === stageId)?.name ?? "Sem nivel";
-}
-
-function availableClassDefinitions(
-  classes: SchoolClass[],
-  classDefinitions: ClassDefinition[],
-  stages: AcademicStageDefinition[],
-) {
-  const usedLevelIds = new Set(classes.map((schoolClass) => schoolClass.id));
-
-  return activeClassDefinitions(classDefinitions, stages).filter(
-    (option) => !usedLevelIds.has(option.id),
-  );
-}
-
-function firstAvailableClassDefinitionId(
-  classes: SchoolClass[],
-  classDefinitions: ClassDefinition[],
-  stages: AcademicStageDefinition[],
-) {
-  return availableClassDefinitions(classes, classDefinitions, stages)[0]?.id ?? "";
-}
-
-function availableRoomDefinitions(
-  rooms: SchoolRoom[],
-  roomDefinitions: RoomDefinition[],
-) {
-  const usedRoomIds = new Set(rooms.map((room) => room.id));
-
-  return activeRoomDefinitions(roomDefinitions).filter(
-    (definition) => !usedRoomIds.has(definition.id),
-  );
-}
-
-function firstAvailableRoomDefinitionId(
-  rooms: SchoolRoom[],
-  roomDefinitions: RoomDefinition[],
-) {
-  return availableRoomDefinitions(rooms, roomDefinitions)[0]?.id ?? "";
-}
-
-function getGroupCode(groupName: string) {
-  const cleanedName = groupName.trim().replace(/^turma\s+/i, "").trim();
-  const match = cleanedName.match(/[a-z0-9]/i);
-
-  return (match?.[0] ?? "A").toUpperCase();
-}
-
-function buildGroupId(classId: string, groupName: string) {
-  if (!classId) {
-    return "AGUARDAR";
-  }
-
-  return `${classId}${getGroupCode(groupName)}${new Date().getFullYear()}`;
-}
-
-function nextStageDefinitionId(stages: AcademicStageDefinition[]) {
-  return nextId(stages, "NIVEL");
-}
-
-function nextRoomDefinitionId(roomDefinitions: RoomDefinition[]) {
-  return nextId(roomDefinitions, "SALA");
-}
-
-function roomById(rooms: SchoolRoom[], roomId: string) {
-  return rooms.find((room) => room.id === roomId);
-}
-
-function roomLabel(rooms: SchoolRoom[], roomId: string) {
-  const room = roomById(rooms, roomId);
-
-  return room ? `${room.name} - ${room.block}` : "Sala por seleccionar";
-}
-
-function activeRooms(rooms: SchoolRoom[]) {
-  return rooms.filter((room) => room.status === "active");
-}
-
-function statusLabel(status: EntityStatus) {
-  return status === "active" ? "Activo" : "Inactivo";
-}
-
-function financeStatusLabel(status: FinanceStatus) {
-  return (
-    financeStatusOptions.find((option) => option.value === status)?.label ??
-    "Regular"
-  );
-}
-
-function clampPercent(value: number) {
-  return Math.min(100, Math.max(0, value));
-}
-
-function monthIndex(monthKey: string) {
-  return monthOptions.findIndex((month) => month.key === monthKey);
-}
-
-function isMonthInRange(monthKey: string, startMonth?: string, endMonth?: string) {
-  if (!startMonth || !endMonth) {
-    return true;
-  }
-
-  const current = monthIndex(monthKey);
-  const start = monthIndex(startMonth);
-  const end = monthIndex(endMonth);
-
-  if (current < 0 || start < 0 || end < 0) {
-    return true;
-  }
-
-  if (start <= end) {
-    return current >= start && current <= end;
-  }
-
-  return current >= start || current <= end;
-}
-
-function getMonthsInRange(startMonth: string, endMonth: string) {
-  const startIndex = monthOptions.findIndex((month) => month.key === startMonth);
-  const endIndex = monthOptions.findIndex((month) => month.key === endMonth);
-
-  if (startIndex < 0 || endIndex < 0) {
-    return [];
-  }
-
-  if (startIndex <= endIndex) {
-    return monthOptions.slice(startIndex, endIndex + 1);
-  }
-
-  return [...monthOptions.slice(startIndex), ...monthOptions.slice(0, endIndex + 1)];
-}
-
-function emptyEntry(): PaymentEntry {
-  return { amount: 0, paidDay: 0 };
-}
-
-function buildPaymentRecord(studentId: string): StudentPaymentRecord {
-  return {
-    studentId,
-    inscriptionRenewal: emptyEntry(),
-    monthlyPayments: {},
-    miscellaneousPayments: [],
-  };
-}
-
-function calculateMonthlyDue(
-  student: Student,
-  month: MonthOption,
-  settings: PaymentSettings,
-) {
-  const profile = student.financialProfile;
-  const baseAmount = settings.monthlyFee;
-  const inRange = isMonthInRange(
-    month.key,
-    profile.startMonth ?? settings.startMonth,
-    profile.endMonth ?? settings.endMonth,
-  );
-  let discountPercent = 0;
-  let ruleLabel = "Regular";
-
-  if (profile.status === "scholarship") {
-    discountPercent = inRange ? 100 : 0;
-    ruleLabel = inRange ? "Bolsa integral" : "Regular";
-  }
-
-  if (profile.status === "partial_scholarship") {
-    discountPercent = inRange ? clampPercent(profile.discountPercent) : 0;
-    ruleLabel = inRange ? `Bolsa ${discountPercent}%` : "Regular";
-  }
-
-  if (profile.status === "exception") {
-    discountPercent = inRange ? clampPercent(profile.discountPercent || 100) : 0;
-    ruleLabel = inRange ? "Excecao" : "Regular";
-  }
-
-  const discount = Math.round((baseAmount * discountPercent) / 100);
-  const due = Math.max(0, baseAmount - discount);
-
-  return {
-    due,
-    discount,
-    ruleLabel,
-  };
-}
-
-function calculateFine(
-  entry: PaymentEntry,
-  settings: PaymentSettings,
-  dueAmount: number,
-) {
-  if (dueAmount <= 0 || entry.amount <= 0 || entry.paidDay <= 0) {
-    return 0;
-  }
-
-  if (entry.paidDay > settings.secondPenaltyDay) {
-    return settings.firstPenaltyAmount + settings.secondPenaltyAmount;
-  }
-
-  if (entry.paidDay > settings.firstPenaltyDay) {
-    return settings.firstPenaltyAmount;
-  }
-
-  return 0;
-}
-
-function addMonthlyPayment(
-  record: StudentPaymentRecord,
-  monthKey: string,
-  amount: number,
-  paymentDetails: PaymentDetails,
-) {
-  if (amount <= 0) {
-    return;
-  }
-
-  const currentEntry = record.monthlyPayments[monthKey] ?? emptyEntry();
-
-  record.monthlyPayments[monthKey] = {
-    ...currentEntry,
-    amount: currentEntry.amount + amount,
-    ...paymentDetails,
-  };
-}
-
-function advancePaymentDetails(
-  paymentDetails: PaymentDetails,
-  settings: PaymentSettings,
-) {
-  return {
-    ...paymentDetails,
-    paidDay: Math.max(1, Math.min(paymentDetails.paidDay, settings.firstPenaltyDay)),
-  };
-}
-
-function distributeMonthlyPayment(
-  record: StudentPaymentRecord,
-  student: Student,
-  startMonthKey: string,
-  amount: number,
-  months: MonthOption[],
-  settings: PaymentSettings,
-  paymentDetails: PaymentDetails,
-) {
-  const startIndex = months.findIndex((month) => month.key === startMonthKey);
-
-  if (startIndex < 0 || months.length === 0) {
-    addMonthlyPayment(record, startMonthKey, amount, paymentDetails);
-    return;
-  }
-
-  let remaining = amount;
-  let lastMonthKey = months[startIndex].key;
-  const futurePaymentDetails = advancePaymentDetails(paymentDetails, settings);
-
-  for (let index = startIndex; index < months.length && remaining > 0; index += 1) {
-    const month = months[index];
-    const ledger = buildLedger(student, record, months, settings);
-    const monthLedger = ledger.monthly.find((item) => item.month.key === month.key);
-    const balance = monthLedger?.balance ?? 0;
-
-    lastMonthKey = month.key;
-
-    if (balance <= 0) {
-      continue;
-    }
-
-    const amountForMonth = Math.min(remaining, balance);
-
-    addMonthlyPayment(
-      record,
-      month.key,
-      amountForMonth,
-      index === startIndex ? paymentDetails : futurePaymentDetails,
-    );
-    remaining -= amountForMonth;
-  }
-
-  if (remaining > 0) {
-    addMonthlyPayment(
-      record,
-      lastMonthKey,
-      remaining,
-      lastMonthKey === startMonthKey ? paymentDetails : futurePaymentDetails,
-    );
-  }
-}
-
-function buildLedger(
-  student: Student,
-  record: StudentPaymentRecord,
-  months: MonthOption[],
-  settings: PaymentSettings,
-) {
-  const miscellaneousPaid = (record.miscellaneousPayments ?? []).reduce(
-    (total, entry) => total + entry.amount,
-    0,
-  );
-  const registrationBalance = Math.max(
-    0,
-    settings.inscriptionRenewalFee - record.inscriptionRenewal.amount,
-  );
-  let carry = Math.max(
-    0,
-    record.inscriptionRenewal.amount - settings.inscriptionRenewalFee,
-  );
-  let totalPaid = record.inscriptionRenewal.amount + miscellaneousPaid;
-  let totalBalance = registrationBalance;
-  let totalFine = calculateFine(
-    record.inscriptionRenewal,
-    settings,
-    settings.inscriptionRenewalFee,
-  );
-
-  const monthly = months.map((month) => {
-    const entry = record.monthlyPayments[month.key] ?? emptyEntry();
-    const monthlyDue = calculateMonthlyDue(student, month, settings);
-    const available = entry.amount + carry;
-    const paid = Math.min(monthlyDue.due, available);
-    const balance = Math.max(0, monthlyDue.due - available);
-    const carryOut = Math.max(0, available - monthlyDue.due);
-    const fine = calculateFine(entry, settings, monthlyDue.due);
-    const item: MonthLedger = {
-      month,
-      entry,
-      due: monthlyDue.due,
-      discount: monthlyDue.discount,
-      ruleLabel: monthlyDue.ruleLabel,
-      carryIn: carry,
-      paid,
-      balance,
-      carryOut,
-      fine,
-    };
-
-    totalPaid += entry.amount;
-    totalBalance += balance;
-    totalFine += fine;
-    carry = carryOut;
-
-    return item;
-  });
-
-  return {
-    registrationBalance,
-    registrationCarry: Math.max(
-      0,
-      record.inscriptionRenewal.amount - settings.inscriptionRenewalFee,
-    ),
-    monthly,
-    totals: {
-      expected:
-        settings.inscriptionRenewalFee +
-        monthly.reduce((total, item) => total + item.due, 0),
-      discount: monthly.reduce((total, item) => total + item.discount, 0),
-      paid: totalPaid,
-      balance: totalBalance,
-      fine: totalFine,
-      carry,
-      miscellaneous: miscellaneousPaid,
-    },
-  };
-}
-
-function inputClasses() {
-  return "min-h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-950 shadow-sm transition-colors placeholder:text-slate-400 focus:border-[#207a70]";
-}
-
-function monthByKey(monthKey: string) {
-  return monthOptions.find((month) => month.key === monthKey);
-}
-
-function monthLabel(monthKey?: string) {
-  if (!monthKey) {
-    return "Todo periodo";
-  }
-
-  return monthByKey(monthKey)?.shortLabel ?? monthKey;
-}
-
-function buildFinanceSettingsDraft(settings: PaymentSettings): FinanceSettingsDraft {
-  return {
-    academicYear: settings.academicYear,
-    inscriptionRenewalFee: String(settings.inscriptionRenewalFee),
-    monthlyFee: String(settings.monthlyFee),
-    startMonth: settings.startMonth,
-    endMonth: settings.endMonth,
-    firstPenaltyDay: String(settings.firstPenaltyDay),
-    firstPenaltyAmount: String(settings.firstPenaltyAmount),
-    secondPenaltyDay: String(settings.secondPenaltyDay),
-    secondPenaltyAmount: String(settings.secondPenaltyAmount),
-  };
-}
-
-function buildFinanceProfileDraft(
-  student: Student | undefined,
-  settings: PaymentSettings,
-): FinanceProfileDraft {
-  const profile = student?.financialProfile;
-
-  return {
-    studentId: student?.id ?? "",
-    status: profile?.status ?? "regular",
-    discountPercent: String(profile?.discountPercent ?? 0),
-    startMonth: profile?.startMonth ?? settings.startMonth,
-    endMonth: profile?.endMonth ?? settings.endMonth,
-    reason: profile?.reason ?? "",
-  };
-}
-
-function isOperationalProfile(profileId: ProfileId | null) {
-  return profiles.some((profile) => profile.id === profileId && profile.operational);
-}
+import {
+  addMiscellaneousCharge,
+  activeAcademicStages,
+  activeClassDefinitions,
+  activeRoomDefinitions,
+  activeRooms,
+  availableClassDefinitions,
+  availableRoomDefinitions,
+  buildFinanceProfileDraft,
+  buildFinanceSettingsDraft,
+  buildGroupId,
+  buildLedger,
+  buildPaymentRecord,
+  buildStudentFinanceProfile,
+  currentAcademicYear,
+  cx,
+  financeStatusLabel,
+  firstAvailableClassDefinitionId,
+  firstAvailableRoomDefinitionId,
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  getMiscellaneousCellState,
+  getMonthCellState,
+  getMonthsInRange,
+  getRegistrationCellState,
+  getStudentDebt,
+  getStudentEnrollmentDate,
+  getStudentTuitionStartMonth,
+  getTuitionInstallmentNumber,
+  inputClasses,
+  institutionLogoText,
+  institutionName,
+  loadStoredState,
+  monthByKey,
+  monthLabel,
+  nextId,
+  nextRegistrationNumber,
+  nextRoomDefinitionId,
+  nextStageDefinitionId,
+  normalizePaymentRecord,
+  normalizeStudentForPolicy,
+  normalizeText,
+  nowIso,
+  paidOnToIso,
+  parseMoney,
+  paymentMethods,
+  paymentSections,
+  profiles,
+  recordStudentPayment,
+  rowMatchesPaymentAlertFilter,
+  roomById,
+  roomLabel,
+  sortByName,
+  sortClasses,
+  sortStudents,
+  stageLabel,
+  statusOptions,
+  storageKey,
+  storedArray,
+  summarizePaymentRows,
+  today,
+  workspaceNavigation,
+  type AcademicStageDraft,
+  type BillingRun,
+  type ClassDefinitionDraft,
+  type ClassDraft,
+  type EnrollmentDraft,
+  type FinanceCellSelection,
+  type FinanceProfileDraft,
+  type FinanceSettingsDraft,
+  type GroupDraft,
+  type MiscellaneousChargeDraft,
+  type PaymentLaunchDraft,
+  type PaymentAlertFilter,
+  type PaymentWorkspaceSection,
+  type ProfileId,
+  type RoomDefinitionDraft,
+  type RoomDraft,
+  type StoredDemoState,
+  type WorkspaceView,
+} from "./school-admin-demo.model";
+import {
+  ClassForm,
+  CrumbButton,
+  EnrollmentForm,
+  FieldLabel,
+  FinanceCell,
+  FinanceCellDetailPanel,
+  FinanceSettingsForm,
+  FlowStep,
+  GroupForm,
+  MetricCard,
+  MiscellaneousChargeForm,
+  PaymentForm,
+  PaymentSettingsSummary,
+  PrimaryButton,
+  ProfileCard,
+  RoomForm,
+  SecondaryButton,
+  StatusBadge,
+  StatusDot,
+  StudentFilters,
+  StudentFinanceForm,
+  SummaryLine,
+  SummaryMini,
+  TextButton,
+} from "./school-admin-demo.components";
 
 export function SchoolAdminDemo() {
   const firstClassId = initialClasses[0]?.id ?? "";
@@ -988,9 +171,17 @@ export function SchoolAdminDemo() {
   const [billingNotice, setBillingNotice] = useState("");
   const [financeSettingsNotice, setFinanceSettingsNotice] = useState("");
   const [financeNotice, setFinanceNotice] = useState("");
+  const [miscellaneousNotice, setMiscellaneousNotice] = useState("");
+  const [selectedPaymentStudentIds, setSelectedPaymentStudentIds] = useState<
+    string[]
+  >([]);
+  const [selectedFinanceCell, setSelectedFinanceCell] =
+    useState<FinanceCellSelection | null>(null);
   const [billingMonthKey, setBillingMonthKey] = useState(
     initialPaymentSettings.startMonth,
   );
+  const [paymentAlertFilter, setPaymentAlertFilter] =
+    useState<PaymentAlertFilter>("all");
   const [financeSettingsDraft, setFinanceSettingsDraft] =
     useState<FinanceSettingsDraft>(() => buildFinanceSettingsDraft(initialPaymentSettings));
   const [academicStageDraft, setAcademicStageDraft] = useState<AcademicStageDraft>({
@@ -1039,6 +230,8 @@ export function SchoolAdminDemo() {
     guardianName: "",
     guardianPhone: "",
     enrollmentType: "new",
+    enrollmentDate: today(),
+    tuitionStartMonth: initialPaymentSettings.startMonth,
     financeStatus: "regular",
     discountPercent: "0",
     exceptionStartMonth: initialPaymentSettings.startMonth,
@@ -1055,108 +248,163 @@ export function SchoolAdminDemo() {
     studentId: firstStudentId,
     category: "tuition",
     monthKey: initialPaymentSettings.startMonth,
+    targetChargeId: "",
     amount: String(initialPaymentSettings.monthlyFee),
+    paidOn: today(),
     method: paymentMethods[0],
     reference: "",
     description: "",
   });
+  const [miscellaneousChargeDraft, setMiscellaneousChargeDraft] =
+    useState<MiscellaneousChargeDraft>({
+      type: "Prova",
+      description: "",
+      amount: "0",
+      dueOn: today(),
+      target: "group",
+    });
 
   useEffect(() => {
-    const storedState = loadStoredState();
+    const loadStateId = window.setTimeout(() => {
+      const storedState = loadStoredState();
 
-    if (!storedState) {
+      if (!storedState) {
+        setStorageReady(true);
+        return;
+      }
+
+      const loadedAcademicStages = storedArray(
+        storedState.academicStages,
+        initialAcademicStages,
+      );
+      const loadedClassDefinitions = storedArray(
+        storedState.classDefinitions,
+        initialClassDefinitions,
+      );
+      const loadedRoomDefinitions = storedArray(
+        storedState.roomDefinitions,
+        initialRoomDefinitions,
+      );
+      const loadedClasses = storedArray(storedState.classes, initialClasses);
+      const loadedRooms = storedArray(storedState.rooms, initialRooms);
+      const loadedGroups = storedArray(storedState.groups, initialGroups);
+      const loadedPaymentSettings =
+        storedState.paymentSettings ?? initialPaymentSettings;
+      const rawPaymentRecords = storedArray(
+        storedState.paymentRecords,
+        initialPaymentRecords,
+      );
+      const loadedBaseStudents = storedArray(storedState.students, initialStudents).map(
+        (student) => {
+          return normalizeStudentForPolicy(student, loadedPaymentSettings);
+        },
+      );
+      const loadedPaymentMonths = getMonthsInRange(
+        loadedPaymentSettings.startMonth,
+        loadedPaymentSettings.endMonth,
+      );
+      const loadedPaymentRecords = loadedBaseStudents.map((student) => {
+        const rawRecord =
+          rawPaymentRecords.find((record) => record.studentId === student.id) ??
+          buildPaymentRecord(student.id);
+
+        return normalizePaymentRecord(
+          rawRecord,
+          student,
+          loadedPaymentMonths,
+          loadedPaymentSettings,
+        );
+      });
+      const loadedStudents = loadedBaseStudents.map((student) => {
+        const paymentRecord =
+          loadedPaymentRecords.find((record) => record.studentId === student.id) ??
+          buildPaymentRecord(student.id);
+        const ledger = buildLedger(
+          student,
+          paymentRecord,
+          loadedPaymentMonths,
+          loadedPaymentSettings,
+        );
+        const registrationStatus: Student["registrationStatus"] =
+          ledger.registrationBalance === 0 ? "paid" : "pending";
+
+        return {
+          ...student,
+          registrationStatus,
+        };
+      });
+      const loadedBillingRuns = storedArray(storedState.billingRuns, []);
+      const loadedFirstClassId = loadedClasses[0]?.id ?? "";
+      const loadedFirstGroupId =
+        loadedGroups.find((group) => group.classId === loadedFirstClassId)?.id ??
+        loadedGroups[0]?.id ??
+        "";
+      const loadedFirstStudent = loadedStudents[0];
+      const loadedFirstRoom = activeRooms(loadedRooms)[0];
+      const loadedFirstStageId = loadedAcademicStages[0]?.id ?? "";
+
+      setAcademicStages(loadedAcademicStages);
+      setClassDefinitions(loadedClassDefinitions);
+      setRoomDefinitions(loadedRoomDefinitions);
+      setClasses(loadedClasses);
+      setRooms(loadedRooms);
+      setGroups(loadedGroups);
+      setStudents(loadedStudents);
+      setPaymentSettings(loadedPaymentSettings);
+      setPaymentRecords(loadedPaymentRecords);
+      setBillingRuns(loadedBillingRuns);
+      setSelectedClassId(loadedFirstClassId);
+      setSelectedGroupId(loadedFirstGroupId);
+      setBillingMonthKey(loadedPaymentSettings.startMonth);
+      setFinanceSettingsDraft(buildFinanceSettingsDraft(loadedPaymentSettings));
+      setClassDefinitionDraft((draft) => ({
+        ...draft,
+        stageId: loadedFirstStageId,
+      }));
+      setClassDraft({
+        definitionId: firstAvailableClassDefinitionId(
+          loadedClasses,
+          loadedClassDefinitions,
+          loadedAcademicStages,
+        ),
+        status: "active",
+      });
+      setRoomDraft({
+        definitionId: firstAvailableRoomDefinitionId(
+          loadedRooms,
+          loadedRoomDefinitions,
+        ),
+        status: "active",
+      });
+      setGroupDraft((draft) => ({
+        ...draft,
+        classId: loadedFirstClassId,
+        roomId: loadedFirstRoom?.id ?? "",
+        capacity: String(loadedFirstRoom?.capacity ?? 35),
+      }));
+      setEnrollmentDraft((draft) => ({
+        ...draft,
+        classId: loadedFirstClassId,
+        groupId: loadedFirstGroupId,
+        tuitionStartMonth: draft.tuitionStartMonth || loadedPaymentSettings.startMonth,
+        exceptionStartMonth: loadedPaymentSettings.startMonth,
+        exceptionEndMonth: loadedPaymentSettings.endMonth,
+      }));
+      setFinanceProfileDraft(
+        buildFinanceProfileDraft(loadedFirstStudent, loadedPaymentSettings),
+      );
+      setPaymentDraft((draft) => ({
+        ...draft,
+        studentId: loadedFirstStudent?.id ?? "",
+        monthKey: loadedPaymentSettings.startMonth,
+        targetChargeId: "",
+        amount: String(loadedPaymentSettings.monthlyFee),
+        paidOn: draft.paidOn || today(),
+      }));
       setStorageReady(true);
-      return;
-    }
+    }, 0);
 
-    const loadedAcademicStages = storedArray(
-      storedState.academicStages,
-      initialAcademicStages,
-    );
-    const loadedClassDefinitions = storedArray(
-      storedState.classDefinitions,
-      initialClassDefinitions,
-    );
-    const loadedRoomDefinitions = storedArray(
-      storedState.roomDefinitions,
-      initialRoomDefinitions,
-    );
-    const loadedClasses = storedArray(storedState.classes, initialClasses);
-    const loadedRooms = storedArray(storedState.rooms, initialRooms);
-    const loadedGroups = storedArray(storedState.groups, initialGroups);
-    const loadedStudents = storedArray(storedState.students, initialStudents);
-    const loadedPaymentSettings =
-      storedState.paymentSettings ?? initialPaymentSettings;
-    const loadedPaymentRecords = storedArray(
-      storedState.paymentRecords,
-      initialPaymentRecords,
-    );
-    const loadedBillingRuns = storedArray(storedState.billingRuns, []);
-    const loadedFirstClassId = loadedClasses[0]?.id ?? "";
-    const loadedFirstGroupId =
-      loadedGroups.find((group) => group.classId === loadedFirstClassId)?.id ??
-      loadedGroups[0]?.id ??
-      "";
-    const loadedFirstStudent = loadedStudents[0];
-    const loadedFirstRoom = activeRooms(loadedRooms)[0];
-    const loadedFirstStageId = loadedAcademicStages[0]?.id ?? "";
-
-    setAcademicStages(loadedAcademicStages);
-    setClassDefinitions(loadedClassDefinitions);
-    setRoomDefinitions(loadedRoomDefinitions);
-    setClasses(loadedClasses);
-    setRooms(loadedRooms);
-    setGroups(loadedGroups);
-    setStudents(loadedStudents);
-    setPaymentSettings(loadedPaymentSettings);
-    setPaymentRecords(loadedPaymentRecords);
-    setBillingRuns(loadedBillingRuns);
-    setSelectedClassId(loadedFirstClassId);
-    setSelectedGroupId(loadedFirstGroupId);
-    setBillingMonthKey(loadedPaymentSettings.startMonth);
-    setFinanceSettingsDraft(buildFinanceSettingsDraft(loadedPaymentSettings));
-    setClassDefinitionDraft((draft) => ({
-      ...draft,
-      stageId: loadedFirstStageId,
-    }));
-    setClassDraft({
-      definitionId: firstAvailableClassDefinitionId(
-        loadedClasses,
-        loadedClassDefinitions,
-        loadedAcademicStages,
-      ),
-      status: "active",
-    });
-    setRoomDraft({
-      definitionId: firstAvailableRoomDefinitionId(
-        loadedRooms,
-        loadedRoomDefinitions,
-      ),
-      status: "active",
-    });
-    setGroupDraft((draft) => ({
-      ...draft,
-      classId: loadedFirstClassId,
-      roomId: loadedFirstRoom?.id ?? "",
-      capacity: String(loadedFirstRoom?.capacity ?? 35),
-    }));
-    setEnrollmentDraft((draft) => ({
-      ...draft,
-      classId: loadedFirstClassId,
-      groupId: loadedFirstGroupId,
-      exceptionStartMonth: loadedPaymentSettings.startMonth,
-      exceptionEndMonth: loadedPaymentSettings.endMonth,
-    }));
-    setFinanceProfileDraft(
-      buildFinanceProfileDraft(loadedFirstStudent, loadedPaymentSettings),
-    );
-    setPaymentDraft((draft) => ({
-      ...draft,
-      studentId: loadedFirstStudent?.id ?? "",
-      monthKey: loadedPaymentSettings.startMonth,
-      amount: String(loadedPaymentSettings.monthlyFee),
-    }));
-    setStorageReady(true);
+    return () => window.clearTimeout(loadStateId);
   }, []);
 
   useEffect(() => {
@@ -1260,9 +508,15 @@ export function SchoolAdminDemo() {
   const allPaymentRows = useMemo(
     () =>
       allStudentsAlphabetically.map((student) => {
-        const record =
+        const rawRecord =
           paymentRecords.find((item) => item.studentId === student.id) ??
           buildPaymentRecord(student.id);
+        const record = normalizePaymentRecord(
+          rawRecord,
+          student,
+          paymentMonths,
+          paymentSettings,
+        );
 
         return {
           student,
@@ -1278,10 +532,35 @@ export function SchoolAdminDemo() {
     [allPaymentRows, currentGroupId],
   );
 
+  const filteredPaymentRows = useMemo(
+    () =>
+      paymentRows.filter((row) =>
+        rowMatchesPaymentAlertFilter(
+          row,
+          paymentAlertFilter,
+          paymentMonths,
+          paymentSettings,
+        ),
+      ),
+    [paymentAlertFilter, paymentMonths, paymentRows, paymentSettings],
+  );
+
   const visiblePaymentRows = useMemo(() => {
     const visibleIds = new Set(visibleStudents.map((student) => student.id));
-    return paymentRows.filter((row) => visibleIds.has(row.student.id));
-  }, [paymentRows, visibleStudents]);
+    return filteredPaymentRows.filter((row) => visibleIds.has(row.student.id));
+  }, [filteredPaymentRows, visibleStudents]);
+  const selectedPaymentStudentIdSet = useMemo(
+    () => new Set(selectedPaymentStudentIds),
+    [selectedPaymentStudentIds],
+  );
+  const selectedPaymentRows = useMemo(
+    () =>
+      paymentRows.filter((row) => selectedPaymentStudentIdSet.has(row.student.id)),
+    [paymentRows, selectedPaymentStudentIdSet],
+  );
+  const selectedFinanceRow = selectedFinanceCell
+    ? allPaymentRows.find((row) => row.student.id === selectedFinanceCell.studentId)
+    : undefined;
 
   const schoolPaymentSummary = useMemo(
     () => summarizePaymentRows(allPaymentRows),
@@ -1290,12 +569,37 @@ export function SchoolAdminDemo() {
   const miscellaneousPaymentRows = useMemo(
     () =>
       allPaymentRows
-        .flatMap((row) =>
-          (row.record.miscellaneousPayments ?? []).map((payment) => ({
-            student: row.student,
-            payment,
-          })),
-        )
+        .flatMap((row) => {
+          return row.record.allocations.flatMap((allocation) => {
+            const charge = row.record.charges.find(
+              (item) => item.id === allocation.chargeId,
+            );
+
+            if (charge?.category !== "miscellaneous") {
+              return [];
+            }
+
+            const payment = row.record.payments.find(
+              (item) => item.id === allocation.paymentId,
+            );
+
+            return [
+              {
+                student: row.student,
+                payment: {
+                  amount: allocation.amount,
+                  paidAt: payment
+                    ? paidOnToIso(payment.paidOn)
+                    : charge.createdAt,
+                  paidDay: payment ? Number(payment.paidOn.slice(8, 10)) : 0,
+                  method: payment?.method,
+                  reference: payment?.reference,
+                  description: charge.description,
+                },
+              },
+            ];
+          });
+        })
         .sort(
           (a, b) =>
             new Date(b.payment.paidAt ?? "").getTime() -
@@ -1316,41 +620,209 @@ export function SchoolAdminDemo() {
   const selectedMonthBillingRun = billingRunsForGroup.find(
     (run) => run.monthKey === billingMonthKey,
   );
-  const selectedMonthExpected = visiblePaymentRows.reduce((total, row) => {
+  const selectedMonthExpected = paymentRows.reduce((total, row) => {
     const month = row.ledger.monthly.find(
       (item) => item.month.key === billingMonthKey,
     );
 
     return total + (month?.due ?? 0);
   }, 0);
-  const selectedMonthDiscount = visiblePaymentRows.reduce((total, row) => {
+  const selectedMonthDiscount = paymentRows.reduce((total, row) => {
     const month = row.ledger.monthly.find(
       (item) => item.month.key === billingMonthKey,
     );
 
     return total + (month?.discount ?? 0);
   }, 0);
-  const selectedMonthPaid = visiblePaymentRows.reduce((total, row) => {
+  const selectedMonthPaid = paymentRows.reduce((total, row) => {
     const month = row.ledger.monthly.find(
       (item) => item.month.key === billingMonthKey,
     );
 
     return total + (month?.paid ?? 0);
   }, 0);
-  const selectedMonthBalance = visiblePaymentRows.reduce((total, row) => {
+  const selectedMonthBalance = paymentRows.reduce((total, row) => {
     const month = row.ledger.monthly.find(
       (item) => item.month.key === billingMonthKey,
     );
 
     return total + (month?.balance ?? 0);
   }, 0);
-  const selectedMonthCarryOut = visiblePaymentRows.reduce((total, row) => {
+  const selectedMonthCarryOut = paymentRows.reduce((total, row) => {
     const month = row.ledger.monthly.find(
       (item) => item.month.key === billingMonthKey,
     );
 
     return total + (month?.carryOut ?? 0);
   }, 0);
+  const dashboardSummary = useMemo(() => {
+    const monthRevenue = allPaymentRows.reduce((total, row) => {
+      const month = row.ledger.monthly.find(
+        (item) => item.month.key === billingMonthKey,
+      );
+
+      return total + (month?.paid ?? 0);
+    }, 0);
+    const totalDebt = allPaymentRows.reduce(
+      (total, row) => total + getStudentDebt(row.ledger, row.record),
+      0,
+    );
+    const overdueRows = allPaymentRows.filter((row) =>
+      rowMatchesPaymentAlertFilter(
+        row,
+        "overdue",
+        paymentMonths,
+        paymentSettings,
+      ),
+    );
+    const firstFineRows = allPaymentRows.filter((row) =>
+      rowMatchesPaymentAlertFilter(
+        row,
+        "first-fine",
+        paymentMonths,
+        paymentSettings,
+      ),
+    );
+    const secondFineRows = allPaymentRows.filter((row) =>
+      rowMatchesPaymentAlertFilter(
+        row,
+        "second-fine",
+        paymentMonths,
+        paymentSettings,
+      ),
+    );
+    const supportedStudents = students.filter(
+      (student) => student.financialProfile.status !== "regular",
+    );
+
+    return {
+      monthRevenue,
+      totalDebt,
+      overdueStudents: overdueRows.length,
+      firstFineStudents: firstFineRows.length,
+      secondFineStudents: secondFineRows.length,
+      supportedStudents: supportedStudents.length,
+    };
+  }, [allPaymentRows, billingMonthKey, paymentMonths, paymentSettings, students]);
+  const paymentAlertCounts = useMemo(
+    () => ({
+      registration: paymentRows.filter((row) =>
+        rowMatchesPaymentAlertFilter(
+          row,
+          "registration",
+          paymentMonths,
+          paymentSettings,
+        ),
+      ).length,
+      overdue: paymentRows.filter((row) =>
+        rowMatchesPaymentAlertFilter(
+          row,
+          "overdue",
+          paymentMonths,
+          paymentSettings,
+        ),
+      ).length,
+      firstFine: paymentRows.filter((row) =>
+        rowMatchesPaymentAlertFilter(
+          row,
+          "first-fine",
+          paymentMonths,
+          paymentSettings,
+        ),
+      ).length,
+      secondFine: paymentRows.filter((row) =>
+        rowMatchesPaymentAlertFilter(
+          row,
+          "second-fine",
+          paymentMonths,
+          paymentSettings,
+        ),
+      ).length,
+      debt: paymentRows.filter((row) =>
+        rowMatchesPaymentAlertFilter(row, "debt", paymentMonths, paymentSettings),
+      ).length,
+      rulesEnding: paymentRows.filter((row) =>
+        rowMatchesPaymentAlertFilter(
+          row,
+          "rules-ending",
+          paymentMonths,
+          paymentSettings,
+        ),
+      ).length,
+    }),
+    [paymentMonths, paymentRows, paymentSettings],
+  );
+  const nearCapacityGroups = groupsWithStats.filter(
+    (group) => group.capacity > 0 && group.studentsTotal >= group.capacity * 0.9,
+  );
+  type PaymentAlertItem = {
+    id: string;
+    title: string;
+    detail: string;
+    count: number;
+    tone: "danger" | "warning" | "info";
+    filter?: PaymentAlertFilter;
+    view?: WorkspaceView;
+  };
+  const paymentAlertItems: PaymentAlertItem[] = [
+    {
+      id: "registration",
+      title: "Inscricoes pendentes",
+      detail: "Alunos com inscrição por liquidar nesta turma.",
+      count: paymentAlertCounts.registration,
+      tone: "warning",
+      filter: "registration",
+    },
+    {
+      id: "overdue",
+      title: "Mensalidades vencidas",
+      detail: "Alunos com mensalidades fora do prazo.",
+      count: paymentAlertCounts.overdue,
+      tone: "danger",
+      filter: "overdue",
+    },
+    {
+      id: "first-fine",
+      title: "1ª multa",
+      detail: "Alunos actualmente em primeira multa.",
+      count: paymentAlertCounts.firstFine,
+      tone: "warning",
+      filter: "first-fine",
+    },
+    {
+      id: "second-fine",
+      title: "2ª multa",
+      detail: "Alunos actualmente em segunda multa.",
+      count: paymentAlertCounts.secondFine,
+      tone: "danger",
+      filter: "second-fine",
+    },
+    {
+      id: "debt",
+      title: "Dívidas acumuladas",
+      detail: "Alunos com valor em falta nesta turma.",
+      count: paymentAlertCounts.debt,
+      tone: "danger",
+      filter: "debt",
+    },
+    {
+      id: "rules-ending",
+      title: "Regras a terminar",
+      detail: "Bolsas, isencoes ou ponderacoes no mes final.",
+      count: paymentAlertCounts.rulesEnding,
+      tone: "info",
+      filter: "rules-ending",
+    },
+    {
+      id: "capacity",
+      title: "Turmas quase cheias",
+      detail: "Turmas da classe actual perto da lotacao.",
+      count: nearCapacityGroups.length,
+      tone: "warning",
+      view: "groups",
+    },
+  ];
+  const paymentAlerts = paymentAlertItems.filter((alert) => alert.count > 0);
   const selectedProfile =
     profiles.find((profile) => profile.id === activeProfile) ?? profiles[1];
 
@@ -1366,6 +838,8 @@ export function SchoolAdminDemo() {
 
     setSelectedClassId(classId);
     setSelectedGroupId(nextGroup?.id ?? "");
+    setSelectedPaymentStudentIds([]);
+    setSelectedFinanceCell(null);
     setGroupDraft((draft) => ({ ...draft, classId }));
     setEnrollmentDraft((draft) => ({
       ...draft,
@@ -1383,11 +857,24 @@ export function SchoolAdminDemo() {
 
     setSelectedClassId(group.classId);
     setSelectedGroupId(group.id);
+    setSelectedPaymentStudentIds([]);
+    setSelectedFinanceCell(null);
     setEnrollmentDraft((draft) => ({
       ...draft,
       classId: group.classId,
       groupId: group.id,
     }));
+  }
+
+  function openPaymentAlert(filter: PaymentAlertFilter) {
+    setStudentSearch("");
+    setPaymentAlertFilter(filter);
+    setActiveView("payments");
+    setActivePaymentSection("entry");
+  }
+
+  function openCapacityAlert() {
+    setActiveView("groups");
   }
 
   function resetAcademicStageDraft() {
@@ -1472,6 +959,8 @@ export function SchoolAdminDemo() {
       exceptionStartMonth: paymentSettings.startMonth,
       exceptionEndMonth: paymentSettings.endMonth,
       exceptionReason: "",
+      enrollmentDate: today(),
+      tuitionStartMonth: paymentSettings.startMonth,
       classId,
       groupId,
     });
@@ -1686,8 +1175,147 @@ export function SchoolAdminDemo() {
     setActivePaymentSection("entry");
 
     if (studentId) {
-      setPaymentDraft((draft) => ({ ...draft, studentId }));
+      const student = students.find((item) => item.id === studentId);
+      const record =
+        paymentRecords.find((item) => item.studentId === studentId) ??
+        buildPaymentRecord(studentId);
+      const ledger = student
+        ? buildLedger(student, record, paymentMonths, paymentSettings)
+        : undefined;
+      const registrationPending = (ledger?.registrationBalance ?? 0) > 0;
+
+      setPaymentDraft((draft) => ({
+        ...draft,
+        studentId,
+        category: registrationPending ? "registration" : draft.category,
+        monthKey: student
+          ? getStudentTuitionStartMonth(student, paymentSettings)
+          : draft.monthKey,
+        amount: registrationPending
+          ? String(ledger?.registrationBalance ?? paymentSettings.inscriptionRenewalFee)
+          : draft.amount,
+        targetChargeId: "",
+        paidOn: today(),
+      }));
     }
+  }
+
+  function openFinanceCell(selection: FinanceCellSelection) {
+    setSelectedFinanceCell(selection);
+  }
+
+  function registerPaymentFromCell(
+    draft: Partial<PaymentLaunchDraft> & {
+      category: PaymentLaunchDraft["category"];
+      studentId: string;
+    },
+  ) {
+    setActiveView("payments");
+    setActivePaymentSection("entry");
+    setSelectedFinanceCell(null);
+    setPaymentDraft((currentDraft) => ({
+      ...currentDraft,
+      studentId: draft.studentId,
+      category: draft.category,
+      monthKey: draft.monthKey ?? currentDraft.monthKey,
+      targetChargeId: draft.targetChargeId ?? "",
+      amount: draft.amount ?? currentDraft.amount,
+      paidOn: today(),
+      reference: "",
+      description: draft.description ?? "",
+    }));
+  }
+
+  function openMiscellaneousChargeForm() {
+    setActiveView("payments");
+    setActivePaymentSection("entry");
+    setSelectedFinanceCell(null);
+    setMiscellaneousNotice("");
+  }
+
+  function togglePaymentStudentSelection(studentId: string) {
+    setSelectedPaymentStudentIds((ids) =>
+      ids.includes(studentId)
+        ? ids.filter((id) => id !== studentId)
+        : [...ids, studentId],
+    );
+  }
+
+  function toggleAllVisiblePaymentStudents() {
+    const visibleIds = visiblePaymentRows.map((row) => row.student.id);
+    const allVisibleSelected =
+      visibleIds.length > 0 &&
+      visibleIds.every((id) => selectedPaymentStudentIdSet.has(id));
+
+    setSelectedPaymentStudentIds((ids) => {
+      if (allVisibleSelected) {
+        return ids.filter((id) => !visibleIds.includes(id));
+      }
+
+      return Array.from(new Set([...ids, ...visibleIds]));
+    });
+  }
+
+  function submitMiscellaneousCharge(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const targetRows =
+      miscellaneousChargeDraft.target === "selected"
+        ? selectedPaymentRows
+        : paymentRows;
+    const amount = parseMoney(miscellaneousChargeDraft.amount);
+
+    if (targetRows.length === 0) {
+      setMiscellaneousNotice("Seleccione alunos ou uma turma com alunos.");
+      return;
+    }
+
+    if (amount <= 0) {
+      setMiscellaneousNotice("Informe o valor da cobrança.");
+      return;
+    }
+
+    const createdAt = nowIso();
+
+    setPaymentRecords((records) => {
+      const nextRecords = [...records];
+
+      targetRows.forEach((row) => {
+        const currentRecord =
+          nextRecords.find((record) => record.studentId === row.student.id) ??
+          buildPaymentRecord(row.student.id);
+        const nextRecord = addMiscellaneousCharge(
+          currentRecord,
+          row.student,
+          miscellaneousChargeDraft,
+          createdAt,
+        );
+        const recordIndex = nextRecords.findIndex(
+          (record) => record.studentId === row.student.id,
+        );
+
+        if (recordIndex >= 0) {
+          nextRecords[recordIndex] = nextRecord;
+          return;
+        }
+
+        nextRecords.push(nextRecord);
+      });
+
+      return nextRecords;
+    });
+    setMiscellaneousNotice(
+      `${targetRows.length} cobranças criadas. Total previsto: ${formatCurrency(
+        targetRows.length * amount,
+      )}.`,
+    );
+    setMiscellaneousChargeDraft((draft) => ({
+      ...draft,
+      description: "",
+      amount: "0",
+      dueOn: today(),
+      target: "group",
+    }));
   }
 
   function submitClass(event: FormEvent<HTMLFormElement>) {
@@ -1773,9 +1401,7 @@ export function SchoolAdminDemo() {
     resetGroupDraft(newGroup.classId);
   }
 
-  function submitEnrollment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
+  function saveEnrollment(openPaymentAfterSave: boolean) {
     const trimmedName = enrollmentDraft.fullName.trim();
     const selectedGroup = groups.find(
       (group) => group.id === enrollmentDraft.groupId,
@@ -1786,6 +1412,22 @@ export function SchoolAdminDemo() {
       return;
     }
 
+    const enrollmentFinanceProfile = buildStudentFinanceProfile(
+      undefined,
+      {
+        studentId: "",
+        status: enrollmentDraft.financeStatus,
+        discountPercent: enrollmentDraft.discountPercent,
+        startMonth: enrollmentDraft.exceptionStartMonth,
+        endMonth: enrollmentDraft.exceptionEndMonth,
+        reason: enrollmentDraft.exceptionReason,
+        authorizedBy:
+          enrollmentDraft.financeStatus === "regular" ? "" : "Secretaria",
+        registeredBy: "Secretaria",
+      },
+      nowIso(),
+    );
+
     const newStudent: Student = {
       id: nextId(students, "ALU"),
       registrationNumber: nextRegistrationNumber(students),
@@ -1793,27 +1435,13 @@ export function SchoolAdminDemo() {
       guardianName: enrollmentDraft.guardianName.trim() || "Por registar",
       guardianPhone: enrollmentDraft.guardianPhone.trim() || "Por registar",
       enrollmentType: enrollmentDraft.enrollmentType,
-      financialProfile: {
-        status: enrollmentDraft.financeStatus,
-        discountPercent:
-          enrollmentDraft.financeStatus === "regular"
-            ? 0
-            : enrollmentDraft.financeStatus === "scholarship"
-              ? 100
-              : clampPercent(parseMoney(enrollmentDraft.discountPercent)),
-        startMonth:
-          enrollmentDraft.financeStatus === "regular"
-            ? undefined
-            : enrollmentDraft.exceptionStartMonth,
-        endMonth:
-          enrollmentDraft.financeStatus === "regular"
-            ? undefined
-            : enrollmentDraft.exceptionEndMonth,
-        reason: enrollmentDraft.exceptionReason.trim() || undefined,
-      },
+      enrollmentDate: enrollmentDraft.enrollmentDate || today(),
+      tuitionStartMonth: enrollmentDraft.tuitionStartMonth || paymentSettings.startMonth,
+      registrationStatus: "pending",
+      financialProfile: enrollmentFinanceProfile,
       classId: selectedGroup.classId,
       groupId: selectedGroup.id,
-      createdAt: today(),
+      createdAt: enrollmentDraft.enrollmentDate || today(),
     };
 
     setStudents((items) => [...items, newStudent]);
@@ -1822,14 +1450,35 @@ export function SchoolAdminDemo() {
       ...draft,
       studentId: newStudent.id,
       category: "registration",
+      monthKey: newStudent.tuitionStartMonth,
+      targetChargeId: "",
       amount: String(paymentSettings.inscriptionRenewalFee),
+      paidOn: today(),
+      reference: "",
+      description: "",
     }));
     setSelectedClassId(newStudent.classId);
     setSelectedGroupId(newStudent.groupId);
-    setEnrollmentNotice(
-      `${newStudent.registrationNumber} criada. O pagamento de inscricao/renovacao ficou pronto para lancamento.`,
-    );
     resetEnrollmentDraft(newStudent.classId, newStudent.groupId);
+
+    if (openPaymentAfterSave) {
+      setActiveView("payments");
+      setActivePaymentSection("entry");
+      return;
+    }
+
+    setEnrollmentNotice(
+      `${newStudent.registrationNumber} guardada. Inscrição pendente para pagamento.`,
+    );
+  }
+
+  function submitEnrollment(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    saveEnrollment(false);
+  }
+
+  function saveEnrollmentAndOpenPayment() {
+    saveEnrollment(true);
   }
 
   function toggleClassStatus(classId: string) {
@@ -1909,6 +1558,7 @@ export function SchoolAdminDemo() {
     setPaymentDraft((draft) => ({
       ...draft,
       monthKey: nextSettings.startMonth,
+      targetChargeId: draft.category === "miscellaneous" ? draft.targetChargeId : "",
       amount:
         draft.category === "tuition"
           ? String(nextSettings.monthlyFee)
@@ -1934,41 +1584,42 @@ export function SchoolAdminDemo() {
       return;
     }
 
-    const status = financeProfileDraft.status;
-    const discountPercent =
-      status === "regular"
-        ? 0
-        : status === "scholarship"
-          ? 100
-          : clampPercent(parseMoney(financeProfileDraft.discountPercent));
+    if (
+      financeProfileDraft.status !== "regular" &&
+      !financeProfileDraft.authorizedBy.trim()
+    ) {
+      setFinanceNotice("Informe quem autorizou esta regra.");
+      return;
+    }
+
+    const nextProfile = buildStudentFinanceProfile(
+      students.find((student) => student.id === financeProfileDraft.studentId)
+        ?.financialProfile,
+      financeProfileDraft,
+      nowIso(),
+    );
 
     setStudents((items) =>
       items.map((student) =>
         student.id === financeProfileDraft.studentId
           ? {
               ...student,
-              financialProfile: {
-                status,
-                discountPercent,
-                startMonth:
-                  status === "regular" ? undefined : financeProfileDraft.startMonth,
-                endMonth:
-                  status === "regular" ? undefined : financeProfileDraft.endMonth,
-                reason: financeProfileDraft.reason.trim() || undefined,
-              },
+              financialProfile: nextProfile,
             }
           : student,
       ),
     );
     setFinanceProfileDraft((draft) => ({
       ...draft,
-      discountPercent: String(discountPercent),
+      discountPercent: String(nextProfile.discountPercent),
+      authorizedBy: nextProfile.authorizedBy ?? "",
+      registeredBy: nextProfile.registeredBy ?? "Secretaria",
     }));
-    setFinanceNotice("Situacao financeira do aluno actualizada.");
+    setFinanceNotice("Regra do aluno guardada com historico.");
   }
 
   function generateMonthlyBilling() {
-    if (!currentClassId || !currentGroupId || visiblePaymentRows.length === 0) {
+    if (!currentClassId || !currentGroupId || paymentRows.length === 0) {
       setBillingNotice("Escolha uma turma com alunos antes de gerar mensalidades.");
       return;
     }
@@ -1980,19 +1631,19 @@ export function SchoolAdminDemo() {
       return;
     }
 
-    const chargedRows = visiblePaymentRows.filter((row) => {
+    const chargedRows = paymentRows.filter((row) => {
       const month = row.ledger.monthly.find(
         (item) => item.month.key === billingMonthKey,
       );
 
       return (month?.due ?? 0) > 0;
     });
-    const exemptedRows = visiblePaymentRows.filter((row) => {
+    const exemptedRows = paymentRows.filter((row) => {
       const month = row.ledger.monthly.find(
         (item) => item.month.key === billingMonthKey,
       );
 
-      return (month?.due ?? 0) === 0;
+      return month?.applicable !== false && (month?.due ?? 0) === 0;
     });
     const newRun: BillingRun = {
       id: nextId(billingRuns, "BILL"),
@@ -2007,6 +1658,30 @@ export function SchoolAdminDemo() {
     };
 
     setBillingRuns((items) => [newRun, ...items]);
+    setPaymentRecords((items) => {
+      const nextItems = [...items];
+
+      [...chargedRows, ...exemptedRows].forEach((row) => {
+        const normalizedRecord = normalizePaymentRecord(
+          row.record,
+          row.student,
+          paymentMonths,
+          paymentSettings,
+        );
+        const recordIndex = nextItems.findIndex(
+          (record) => record.studentId === row.student.id,
+        );
+
+        if (recordIndex >= 0) {
+          nextItems[recordIndex] = normalizedRecord;
+          return;
+        }
+
+        nextItems.push(normalizedRecord);
+      });
+
+      return nextItems;
+    });
     setBillingNotice(
       `${selectedMonth?.label ?? "Mes"} gerado: ${newRun.studentIds.length} alunos cobrados e ${newRun.exemptedStudentIds.length} isentos.`,
     );
@@ -2016,100 +1691,32 @@ export function SchoolAdminDemo() {
     event.preventDefault();
 
     const amount = parseMoney(paymentDraft.amount);
-    const paymentDate = new Date();
-    const paidDay = paymentDate.getDate();
-    const paidAt = paymentDate.toISOString();
-    const paymentDetails: PaymentDetails = {
-      paidDay,
-      paidAt,
-      method: paymentDraft.method,
-      reference: paymentDraft.reference.trim(),
-    };
+    const student = students.find((item) => item.id === paymentDraft.studentId);
 
-    if (!paymentDraft.studentId || amount <= 0) {
+    if (!paymentDraft.studentId || amount <= 0 || !student) {
       return;
     }
 
+    const existingRecord =
+      paymentRecords.find((record) => record.studentId === paymentDraft.studentId) ??
+      buildPaymentRecord(paymentDraft.studentId);
+    const nextRecord = recordStudentPayment({
+      record: existingRecord,
+      student,
+      months: paymentMonths,
+      settings: paymentSettings,
+      category: paymentDraft.category,
+      monthKey: paymentDraft.monthKey,
+      targetChargeId: paymentDraft.targetChargeId,
+      amount,
+      paidOn: paymentDraft.paidOn || today(),
+      recordedAt: nowIso(),
+      method: paymentDraft.method,
+      reference: paymentDraft.reference.trim(),
+      description: paymentDraft.description.trim(),
+    });
+
     setPaymentRecords((items) => {
-      const existingRecord =
-        items.find((record) => record.studentId === paymentDraft.studentId) ??
-        buildPaymentRecord(paymentDraft.studentId);
-      const nextRecord: StudentPaymentRecord = {
-        ...existingRecord,
-        inscriptionRenewal: { ...existingRecord.inscriptionRenewal },
-        monthlyPayments: { ...existingRecord.monthlyPayments },
-        miscellaneousPayments: [
-          ...(existingRecord.miscellaneousPayments ?? []),
-        ],
-      };
-      const student = students.find((item) => item.id === paymentDraft.studentId);
-
-      if (paymentDraft.category === "registration") {
-        const registrationBalance = Math.max(
-          0,
-          paymentSettings.inscriptionRenewalFee -
-            nextRecord.inscriptionRenewal.amount,
-        );
-        const registrationAmount = Math.min(amount, registrationBalance);
-        const surplusAmount = amount - registrationAmount;
-
-        if (registrationAmount > 0) {
-          nextRecord.inscriptionRenewal = {
-            ...nextRecord.inscriptionRenewal,
-            amount: nextRecord.inscriptionRenewal.amount + registrationAmount,
-            ...paymentDetails,
-          };
-        }
-
-        if (surplusAmount > 0) {
-          if (student) {
-            distributeMonthlyPayment(
-              nextRecord,
-              student,
-              paymentSettings.startMonth,
-              surplusAmount,
-              paymentMonths,
-              paymentSettings,
-              advancePaymentDetails(paymentDetails, paymentSettings),
-            );
-          } else {
-            nextRecord.inscriptionRenewal = {
-              ...nextRecord.inscriptionRenewal,
-              amount: nextRecord.inscriptionRenewal.amount + surplusAmount,
-              ...paymentDetails,
-            };
-          }
-        }
-      } else if (paymentDraft.category === "tuition") {
-        if (student) {
-          distributeMonthlyPayment(
-            nextRecord,
-            student,
-            paymentDraft.monthKey,
-            amount,
-            paymentMonths,
-            paymentSettings,
-            paymentDetails,
-          );
-        } else {
-          addMonthlyPayment(
-            nextRecord,
-            paymentDraft.monthKey,
-            amount,
-            paymentDetails,
-          );
-        }
-      } else {
-        nextRecord.miscellaneousPayments = [
-          {
-            amount,
-            ...paymentDetails,
-            description: paymentDraft.description.trim() || "Pagamento diverso",
-          },
-          ...nextRecord.miscellaneousPayments,
-        ];
-      }
-
       if (items.some((record) => record.studentId === paymentDraft.studentId)) {
         return items.map((record) =>
           record.studentId === paymentDraft.studentId ? nextRecord : record,
@@ -2119,6 +1726,20 @@ export function SchoolAdminDemo() {
       return [...items, nextRecord];
     });
 
+    const registrationStatus: Student["registrationStatus"] =
+      buildLedger(student, nextRecord, paymentMonths, paymentSettings)
+        .registrationBalance === 0
+        ? "paid"
+        : "pending";
+
+    setStudents((items) =>
+      items.map((item) =>
+        item.id === paymentDraft.studentId
+          ? { ...item, registrationStatus }
+          : item,
+      ),
+    );
+
     setPaymentDraft((draft) => ({
       ...draft,
       amount:
@@ -2127,6 +1748,8 @@ export function SchoolAdminDemo() {
           : draft.category === "registration"
             ? String(paymentSettings.inscriptionRenewalFee)
             : "0",
+      targetChargeId: "",
+      paidOn: today(),
       reference: "",
       description: draft.category === "miscellaneous" ? "" : draft.description,
     }));
@@ -2136,133 +1759,31 @@ export function SchoolAdminDemo() {
     return renderProfilePortal();
   }
 
-  if (!isOperationalProfile(activeProfile)) {
-    return renderLimitedProfile();
-  }
-
   return renderWorkspace();
 
   function renderProfilePortal() {
     return (
-      <main className="min-h-screen bg-white text-slate-950">
-        <div className="mx-auto max-w-[1400px] px-4 py-5 sm:px-6 lg:px-8">
-          <header className="border-b-2 border-slate-800 pb-4">
-            <div className="flex flex-wrap items-center gap-5">
-              <div className="grid size-20 place-items-center rounded-md border-2 border-[#0b6b2a] bg-white text-center text-sm font-black leading-tight text-[#0b6b2a]">
-                GA
-              </div>
-              <div className="border-l-4 border-[#238343] pl-4">
-                <p className="text-3xl font-black tracking-[0.28em] text-[#0b8a32]">
-                  Gestao Academica
-                </p>
-                <h1 className="mt-1 text-xl font-semibold uppercase text-slate-950">
-                  Sistema de Gestao Academica
-                </h1>
-                <p className="text-base uppercase text-slate-700">
-                  Liceu Sao Silvestre - Maputo, Mocambique
-                </p>
-              </div>
+      <main className="grid min-h-screen bg-[#f7faf8] px-4 py-8 text-slate-950 sm:px-6 lg:px-8">
+        <section className="mx-auto flex w-full max-w-5xl flex-col items-center justify-center gap-10">
+          <div className="flex flex-col items-center text-center">
+            <div className="grid size-28 place-items-center rounded-md border-2 border-[#185c54] bg-white text-2xl font-black text-[#185c54] shadow-sm sm:size-32">
+              {institutionLogoText}
             </div>
+            <h1 className="mt-5 text-4xl font-black text-slate-950 sm:text-5xl">
+              {institutionName}
+            </h1>
+          </div>
 
-            <nav className="mt-5 grid overflow-hidden border-y border-slate-700 text-sm font-semibold uppercase text-slate-700 sm:grid-cols-4">
-              {["Inicio", "Perfis", "Acessos", "Contactos"].map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  className="min-h-12 border-slate-300 px-4 transition-colors hover:bg-slate-100 sm:border-r last:sm:border-r-0"
-                >
-                  {item}
-                </button>
-              ))}
-            </nav>
-          </header>
-
-          <section className="mt-4 border border-slate-200 px-4 py-7 sm:px-6 lg:px-10">
-            <h2 className="text-4xl font-semibold text-slate-950">
-              Bem-vindo a Gestao Academica
-            </h2>
-            <div className="mt-8 flex items-center gap-6">
-              <h3 className="text-2xl font-semibold text-slate-950">Acessos</h3>
-              <div className="h-px flex-1 bg-slate-700" />
-            </div>
-            <p className="mt-3 max-w-3xl text-sm text-slate-600">
-              Cada perfil apresenta apenas os menus e funcoes adequadas a
-              responsabilidade do utilizador.
-            </p>
-
-            <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {profiles.map((profile) => (
-                <ProfileCard
-                  key={profile.id}
-                  profile={profile}
-                  onOpen={() => enterProfile(profile.id)}
-                />
-              ))}
-            </div>
-          </section>
-
-          <footer className="mt-8 flex flex-wrap items-center justify-between gap-3 border-y border-slate-800 py-3 text-sm">
-            <p>Copyright (c) 2026 Gestao Academica</p>
-            <p>Email: secretaria@gestaoacademica.co.mz</p>
-          </footer>
-        </div>
-      </main>
-    );
-  }
-
-  function renderLimitedProfile() {
-    return (
-      <main className="min-h-screen bg-[#f5f7fb] px-4 py-6 text-slate-950 sm:px-6 lg:px-8">
-        <div className="mx-auto max-w-5xl">
-          <button
-            type="button"
-            onClick={() => setActiveProfile(null)}
-            className="rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Voltar aos perfis
-          </button>
-
-          <section className="mt-6 rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="flex flex-wrap items-start gap-4">
-              <div
-                className={cx(
-                  "grid size-14 place-items-center rounded-md text-sm font-black",
-                  selectedProfile.surface,
-                )}
-              >
-                {selectedProfile.glyph}
-              </div>
-              <div>
-                <p className="text-sm font-bold uppercase tracking-[0.16em] text-[#185c54]">
-                  Perfil
-                </p>
-                <h1 className="mt-1 text-3xl font-bold">
-                  {selectedProfile.title}
-                </h1>
-                <p className="mt-2 max-w-2xl text-slate-600">
-                  {selectedProfile.description}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              {selectedProfile.permissions.map((permission) => (
-                <div
-                  key={permission}
-                  className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700"
-                >
-                  {permission}
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-6">
-              <PrimaryButton onClick={() => setActiveProfile(null)}>
-                Voltar aos perfis
-              </PrimaryButton>
-            </div>
-          </section>
-        </div>
+          <div className="grid w-full gap-4 md:grid-cols-2">
+            {profiles.map((profile) => (
+              <ProfileCard
+                key={profile.id}
+                profile={profile}
+                onOpen={() => enterProfile(profile.id)}
+              />
+            ))}
+          </div>
+        </section>
       </main>
     );
   }
@@ -2275,14 +1796,9 @@ export function SchoolAdminDemo() {
       visibleNavigation.find((item) => item.id === activeView) ??
       visibleNavigation[0] ??
       workspaceNavigation[0];
-    const canManageAcademics =
-      selectedProfile.id === "administrador" || selectedProfile.id === "secretaria";
-    const canManagePayments =
-      selectedProfile.id === "administrador" ||
-      selectedProfile.id === "secretaria" ||
-      selectedProfile.id === "caixa";
-    const showAcademicContext =
-      selectedProfile.id === "administrador" || selectedProfile.id === "secretaria";
+    const canManageAcademics = selectedProfile.id === "secretaria";
+    const canManagePayments = selectedProfile.id === "secretaria";
+    const showAcademicContext = selectedProfile.id === "secretaria";
 
     return (
       <main className="min-h-screen bg-[#f4f7f8] text-slate-950">
@@ -2290,11 +1806,11 @@ export function SchoolAdminDemo() {
           <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-4">
               <div className="grid size-12 place-items-center rounded-md bg-[#185c54] text-sm font-black text-white">
-                GA
+                {institutionLogoText}
               </div>
               <div>
                 <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#185c54]">
-                  Gestao Academica
+                  {institutionName}
                 </p>
                 <h1 className="text-xl font-bold">{selectedProfile.title}</h1>
               </div>
@@ -2352,7 +1868,7 @@ export function SchoolAdminDemo() {
             {showAcademicContext && (
               <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
                 <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                  Seleccao actual
+                  Selecção actual
                 </p>
                 <div className="mt-3 grid gap-3 text-sm">
                   <SummaryMini
@@ -2437,7 +1953,6 @@ export function SchoolAdminDemo() {
               {activeView === "enrollments" && renderEnrollments()}
               {activeView === "payments" && renderPayments()}
               {activeView === "reports" && renderReports()}
-              {activeView === "profiles" && renderProfiles()}
             </div>
           </div>
         </div>
@@ -2446,48 +1961,141 @@ export function SchoolAdminDemo() {
   }
 
   function renderOverview() {
-    const canManageAcademics =
-      selectedProfile.id === "administrador" || selectedProfile.id === "secretaria";
-    const canManagePayments =
-      selectedProfile.id === "administrador" ||
-      selectedProfile.id === "secretaria" ||
-      selectedProfile.id === "caixa";
+    const canManageAcademics = selectedProfile.id === "secretaria";
+    const canManagePayments = selectedProfile.id === "secretaria";
 
     return (
       <div className="grid gap-6">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <MetricCard
-            label="Classes"
-            value={classes.length}
-            supporting={`${activeClassesTotal} activas`}
-            accent="border-l-[#178f7f]"
-          />
-          <MetricCard
-            label="Turmas"
-            value={groups.length}
-            supporting={`${activeGroupsTotal} activas`}
-            accent="border-l-[#25965a]"
-          />
-          <MetricCard
-            label="Matriculas"
-            value={students.length}
-            supporting={`${visibleStudents.length} na turma actual`}
-            accent="border-l-[#2867d8]"
-          />
-          <MetricCard
-            label="Salas"
-            value={rooms.length}
-            supporting={`${activeRooms(rooms).length} activas`}
-            accent="border-l-[#d08a19]"
-          />
-        </div>
+        {selectedProfile.id === "director" ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <MetricCard
+              label="Alunos matriculados"
+              value={students.length}
+              supporting="Total registado"
+              accent="border-l-[#2867d8]"
+            />
+            <MetricCard
+              label="Turmas activas"
+              value={activeGroupsTotal}
+              supporting={`${groups.length} turmas no total`}
+              accent="border-l-[#25965a]"
+            />
+            <MetricCard
+              label="Receita do mes"
+              value={formatCurrency(dashboardSummary.monthRevenue)}
+              supporting={monthLabel(billingMonthKey)}
+              accent="border-l-[#185c54]"
+            />
+            <MetricCard
+              label="Divida total"
+              value={formatCurrency(dashboardSummary.totalDebt)}
+              supporting="Inclui multas"
+              accent="border-l-[#d08a19]"
+            />
+            <MetricCard
+              label="Mensalidades atrasadas"
+              value={dashboardSummary.overdueStudents}
+              supporting="Alunos com atraso"
+              accent="border-l-[#d08a19]"
+            />
+            <MetricCard
+              label="1ª multa"
+              value={dashboardSummary.firstFineStudents}
+              supporting="Alunos neste prazo"
+              accent="border-l-[#f59e0b]"
+            />
+            <MetricCard
+              label="2ª multa"
+              value={dashboardSummary.secondFineStudents}
+              supporting="Alunos neste prazo"
+              accent="border-l-[#dc2626]"
+            />
+            <MetricCard
+              label="Bolsas e isencoes"
+              value={dashboardSummary.supportedStudents}
+              supporting="Regras especiais"
+              accent="border-l-[#8b5cf6]"
+            />
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <MetricCard
+              label="Classes"
+              value={classes.length}
+              supporting={`${activeClassesTotal} activas`}
+              accent="border-l-[#178f7f]"
+            />
+            <MetricCard
+              label="Turmas"
+              value={groups.length}
+              supporting={`${activeGroupsTotal} activas`}
+              accent="border-l-[#25965a]"
+            />
+            <MetricCard
+              label="Matriculas"
+              value={students.length}
+              supporting={`${visibleStudents.length} na turma actual`}
+              accent="border-l-[#2867d8]"
+            />
+            <MetricCard
+              label="Salas"
+              value={rooms.length}
+              supporting={`${activeRooms(rooms).length} activas`}
+              accent="border-l-[#d08a19]"
+            />
+          </div>
+        )}
+
+        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 px-5 py-4">
+            <h3 className="text-base font-semibold">Alertas internos</h3>
+            <p className="text-sm text-slate-500">
+              Clique num alerta para abrir a lista correspondente.
+            </p>
+          </div>
+          <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
+            {paymentAlerts.length > 0 ? (
+              paymentAlerts.map((alert) => (
+                <button
+                  key={alert.id}
+                  type="button"
+                  onClick={() =>
+                    alert.filter
+                      ? openPaymentAlert(alert.filter)
+                      : openCapacityAlert()
+                  }
+                  className={cx(
+                    "rounded-lg border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
+                    alert.tone === "danger"
+                      ? "border-rose-200 bg-rose-50 text-rose-900"
+                      : alert.tone === "warning"
+                        ? "border-amber-200 bg-amber-50 text-amber-900"
+                        : "border-sky-200 bg-sky-50 text-sky-900",
+                  )}
+                >
+                  <span className="text-2xl font-bold">{alert.count}</span>
+                  <span className="mt-2 block text-sm font-semibold">
+                    {alert.title}
+                  </span>
+                  <span className="mt-1 block text-xs leading-5 opacity-80">
+                    {alert.detail}
+                  </span>
+                </button>
+              ))
+            ) : (
+              <p className="rounded-md bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
+                Sem alertas para a seleccao actual.
+              </p>
+            )}
+          </div>
+        </section>
 
         <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
           <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
               <div>
                 <h3 className="text-base font-semibold">
-                  {canManageAcademics ? "Academico" : "Caixa"}
+                  {canManageAcademics ? "Académico" : "Consulta"}
                 </h3>
               </div>
               {canManagePayments && (
@@ -2534,6 +2142,13 @@ export function SchoolAdminDemo() {
                     setActiveView("payments");
                     setActivePaymentSection("entry");
                   }}
+                />
+              )}
+              {!canManageAcademics && !canManagePayments && (
+                <FlowStep
+                  number="01"
+                  title="Relatórios"
+                  onClick={() => setActiveView("reports")}
                 />
               )}
             </div>
@@ -2608,14 +2223,20 @@ export function SchoolAdminDemo() {
                         <StatusBadge status={schoolClass.status} />
                       </td>
                       <td className="px-5 py-4">
-                        <TextButton
-                          onClick={() => {
-                            selectClass(schoolClass.id);
-                            setActiveView("groups");
-                          }}
-                        >
-                          Ver turmas
-                        </TextButton>
+                        {canManageAcademics ? (
+                          <TextButton
+                            onClick={() => {
+                              selectClass(schoolClass.id);
+                              setActiveView("groups");
+                            }}
+                          >
+                            Ver turmas
+                          </TextButton>
+                        ) : (
+                          <span className="text-sm font-semibold text-slate-500">
+                            Consulta
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -3374,68 +2995,88 @@ export function SchoolAdminDemo() {
           />
 
           <div className="table-scroll">
-            <table className="w-full min-w-[780px] text-left text-sm">
+            <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-5 py-3 font-semibold">N.</th>
                   <th className="px-5 py-3 font-semibold">Aluno</th>
                   <th className="px-5 py-3 font-semibold">Matricula</th>
+                  <th className="px-5 py-3 font-semibold">Inscrição</th>
                   <th className="px-5 py-3 font-semibold">Encarregado</th>
+                  <th className="px-5 py-3 font-semibold">Mensalidades</th>
                   <th className="px-5 py-3 font-semibold">Financas</th>
-                  <th className="px-5 py-3 font-semibold">Criacao</th>
+                  <th className="px-5 py-3 font-semibold">Matricula em</th>
                   <th className="px-5 py-3 font-semibold">Accoes</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {visibleStudents.length > 0 ? (
-                  visibleStudents.map((student, index) => (
-                    <tr key={student.id} className="hover:bg-slate-50/80">
-                      <td className="px-5 py-4 font-mono text-sm font-semibold">
-                        {String(index + 1).padStart(2, "0")}
-                      </td>
-                      <td className="px-5 py-4">
-                        <span className="block font-semibold">
-                          {student.fullName}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {student.guardianPhone}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 font-mono text-xs text-slate-600">
-                        {student.registrationNumber}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {student.guardianName}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        <span className="block font-semibold">
-                          {financeStatusLabel(student.financialProfile.status)}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {student.financialProfile.status === "regular"
-                            ? "Sem desconto"
-                            : `${student.financialProfile.discountPercent}% / ${monthLabel(student.financialProfile.startMonth)}-${monthLabel(student.financialProfile.endMonth)}`}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {formatDate(student.createdAt)}
-                      </td>
-                      <td className="px-5 py-4">
-                        {selectedProfile.id === "administrador" ? (
-                          <TextButton onClick={() => openPaymentEntry(student.id)}>
-                            Pagamentos
-                          </TextButton>
-                        ) : (
-                          <span className="text-sm font-semibold text-slate-500">
-                            Matriculado
+                  visibleStudents.map((student, index) => {
+                    const paymentRow = allPaymentRows.find(
+                      (row) => row.student.id === student.id,
+                    );
+                    const registrationPaid =
+                      (paymentRow?.ledger.registrationBalance ??
+                        paymentSettings.inscriptionRenewalFee) === 0;
+
+                    return (
+                      <tr key={student.id} className="hover:bg-slate-50/80">
+                        <td className="px-5 py-4 font-mono text-sm font-semibold">
+                          {String(index + 1).padStart(2, "0")}
+                        </td>
+                        <td className="px-5 py-4">
+                          <span className="block font-semibold">
+                            {student.fullName}
                           </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
+                          <span className="text-xs text-slate-500">
+                            {student.guardianPhone}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 font-mono text-xs text-slate-600">
+                          {student.registrationNumber}
+                        </td>
+                        <td className="px-5 py-4">
+                          <StatusDot
+                            paid={registrationPaid}
+                            label={registrationPaid ? "Liquidada" : "Pendente"}
+                          />
+                        </td>
+                        <td className="px-5 py-4 text-slate-700">
+                          {student.guardianName}
+                        </td>
+                        <td className="px-5 py-4 font-semibold text-slate-700">
+                          Desde {monthLabel(getStudentTuitionStartMonth(student, paymentSettings))}
+                        </td>
+                        <td className="px-5 py-4 text-slate-700">
+                          <span className="block font-semibold">
+                            {financeStatusLabel(student.financialProfile.status)}
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            {student.financialProfile.status === "regular"
+                              ? "Sem desconto"
+                              : `${student.financialProfile.discountPercent}% / ${monthLabel(student.financialProfile.startMonth)}-${monthLabel(student.financialProfile.endMonth)}`}
+                          </span>
+                        </td>
+                        <td className="px-5 py-4 text-slate-700">
+                          {formatDate(getStudentEnrollmentDate(student))}
+                        </td>
+                        <td className="px-5 py-4">
+                          {selectedProfile.id === "secretaria" ? (
+                            <TextButton onClick={() => openPaymentEntry(student.id)}>
+                              Pagamentos
+                            </TextButton>
+                          ) : (
+                            <span className="text-sm font-semibold text-slate-500">
+                              Matriculado
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-slate-500">
+                    <td colSpan={9} className="px-5 py-10 text-center text-slate-500">
                       Sem alunos para os filtros seleccionados.
                     </td>
                   </tr>
@@ -3456,6 +3097,7 @@ export function SchoolAdminDemo() {
           }}
           onClassChange={changeEnrollmentClass}
           onReset={() => resetEnrollmentDraft(currentClassId, currentGroupId)}
+          onSaveAndPay={saveEnrollmentAndOpenPayment}
           onSubmit={submitEnrollment}
         />
       </div>
@@ -3476,8 +3118,16 @@ export function SchoolAdminDemo() {
     const currentPaymentSection =
       visiblePaymentSections.find((section) => section.id === activePaymentSection) ??
       visiblePaymentSections[0];
-    const canEditPaymentRules =
-      selectedProfile.id === "administrador" || selectedProfile.id === "caixa";
+    const canEditPaymentRules = selectedProfile.id === "secretaria";
+    const activePaymentFilterLabel: Record<PaymentAlertFilter, string> = {
+      all: "Todos os alunos",
+      registration: "Inscricoes pendentes",
+      overdue: "Mensalidades vencidas",
+      "first-fine": "1ª multa",
+      "second-fine": "2ª multa",
+      debt: "Dívidas acumuladas",
+      "rules-ending": "Regras a terminar",
+    };
 
     return (
       <div className="grid gap-6">
@@ -3536,7 +3186,7 @@ export function SchoolAdminDemo() {
                 <div>
                   <h3 className="text-base font-semibold">Gerar propinas</h3>
                   <p className="text-sm text-slate-500">
-                    Preparacao mensal da cobranca por turma.
+                    Preparação mensal da cobrança por turma.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -3547,11 +3197,15 @@ export function SchoolAdminDemo() {
                       setPaymentDraft((draft) => ({
                         ...draft,
                         monthKey: event.target.value,
+                        targetChargeId:
+                          draft.category === "miscellaneous"
+                            ? draft.targetChargeId
+                            : "",
                       }));
                       setBillingNotice("");
                     }}
                     className={cx(inputClasses(), "w-44")}
-                    aria-label="Mes de mensalidade"
+                    aria-label="Mês de mensalidade"
                   >
                     {paymentMonths.map((month) => (
                       <option key={month.key} value={month.key}>
@@ -3569,7 +3223,7 @@ export function SchoolAdminDemo() {
                 <MetricCard
                   label="Previsto"
                   value={formatCurrency(selectedMonthExpected)}
-                  supporting={`${visiblePaymentRows.length} alunos`}
+                  supporting={`${paymentRows.length} alunos da turma`}
                   accent="border-l-[#2867d8]"
                 />
                 <MetricCard
@@ -3593,7 +3247,7 @@ export function SchoolAdminDemo() {
                 <MetricCard
                   label="Descontos"
                   value={formatCurrency(selectedMonthDiscount)}
-                  supporting={selectedMonthBillingRun ? "Mes gerado" : "Mes por gerar"}
+                  supporting={selectedMonthBillingRun ? "Mês gerado" : "Mês por gerar"}
                   accent="border-l-[#8b5cf6]"
                 />
               </div>
@@ -3605,23 +3259,64 @@ export function SchoolAdminDemo() {
               )}
             </section>
 
+            {selectedProfile.id === "secretaria" && (
+              <MiscellaneousChargeForm
+                disabled={paymentRows.length === 0}
+                draft={miscellaneousChargeDraft}
+                groupStudentCount={paymentRows.length}
+                notice={miscellaneousNotice}
+                selectedCount={selectedPaymentRows.length}
+                onChange={(draft) => {
+                  setMiscellaneousNotice("");
+                  setMiscellaneousChargeDraft(draft);
+                }}
+                onSubmit={submitMiscellaneousCharge}
+              />
+            )}
+
             <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
               <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                   <div>
                     <h3 className="text-base font-semibold">
-                      Inscricao/Renovacao e propinas
+                      Planilha financeira da turma
                     </h3>
                     <p className="text-sm text-slate-500">
                       {currentClass?.name ?? "Sem classe"} /{" "}
-                      {currentGroup?.name ?? "Sem turma"}.
+                      {currentGroup?.name ?? "Sem turma"} - inscrição,
+                      mensalidades, diversos e dívida.
+                    </p>
+                    {paymentAlertFilter !== "all" && (
+                      <p className="mt-2 text-sm font-semibold text-[#185c54]">
+                        Filtro: {activePaymentFilterLabel[paymentAlertFilter]}
+                      </p>
+                    )}
+                    <p className="mt-2 text-sm text-slate-500">
+                      {selectedPaymentRows.length} seleccionados para cobranças
+                      em lote.
                     </p>
                   </div>
-                  <SecondaryButton
-                    onClick={() => setActivePaymentSection("reports")}
-                  >
-                    Ver relatorio
-                  </SecondaryButton>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedPaymentRows.length > 0 && (
+                      <SecondaryButton
+                        onClick={() => setSelectedPaymentStudentIds([])}
+                      >
+                        Limpar selecção
+                      </SecondaryButton>
+                    )}
+                    {paymentAlertFilter !== "all" && (
+                      <SecondaryButton
+                        onClick={() => setPaymentAlertFilter("all")}
+                      >
+                        Limpar filtro
+                      </SecondaryButton>
+                    )}
+                    <SecondaryButton
+                      onClick={() => setActivePaymentSection("reports")}
+                    >
+                      Ver relatorio
+                    </SecondaryButton>
+                  </div>
                 </div>
 
                 <StudentFilters
@@ -3636,32 +3331,69 @@ export function SchoolAdminDemo() {
                 />
 
                 <div className="table-scroll">
-                  <table className="w-full min-w-[1120px] text-left text-sm">
+                  <table className="w-full min-w-[1480px] text-left text-sm">
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                       <tr>
+                        <th className="px-4 py-3 font-semibold">
+                          <input
+                            type="checkbox"
+                            checked={
+                              visiblePaymentRows.length > 0 &&
+                              visiblePaymentRows.every((row) =>
+                                selectedPaymentStudentIdSet.has(row.student.id),
+                              )
+                            }
+                            onChange={toggleAllVisiblePaymentStudents}
+                            aria-label="Seleccionar alunos visíveis"
+                            className="size-4 rounded border-slate-300 text-[#185c54]"
+                          />
+                        </th>
+                        <th className="px-4 py-3 font-semibold">Nº</th>
                         <th className="px-5 py-3 font-semibold">Aluno</th>
-                        <th className="px-5 py-3 font-semibold">Inscricao/Renovacao</th>
-                        <th className="px-5 py-3 font-semibold">Mensalidade</th>
-                        <th className="px-5 py-3 font-semibold">Pago aplicado</th>
-                        <th className="px-5 py-3 font-semibold">Em falta</th>
-                        <th className="px-5 py-3 font-semibold">Sobra p/ mes seg.</th>
-                        <th className="px-5 py-3 font-semibold">Multas</th>
-                        <th className="px-5 py-3 font-semibold">Ultimo pagamento</th>
+                        <th className="px-4 py-3 font-semibold">Inscrição</th>
+                        {paymentMonths.map((month) => (
+                          <th key={month.key} className="px-3 py-3 font-semibold">
+                            {month.shortLabel}
+                          </th>
+                        ))}
+                        <th className="px-4 py-3 font-semibold">Diversos</th>
+                        <th className="px-4 py-3 font-semibold">Dívida</th>
                         <th className="px-5 py-3 font-semibold">Accao</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {visiblePaymentRows.length > 0 ? (
-                        visiblePaymentRows.map((row) => {
-                          const month = row.ledger.monthly.find(
-                            (item) => item.month.key === billingMonthKey,
+                        visiblePaymentRows.map((row, index) => {
+                          const registrationState = getRegistrationCellState(
+                            row.ledger,
+                            paymentSettings,
                           );
+                          const miscellaneousState = getMiscellaneousCellState(
+                            row.record,
+                          );
+                          const debt = getStudentDebt(row.ledger, row.record);
 
                           return (
                             <tr
                               key={row.student.id}
                               className="hover:bg-slate-50/80"
                             >
+                              <td className="px-4 py-4">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedPaymentStudentIdSet.has(
+                                    row.student.id,
+                                  )}
+                                  onChange={() =>
+                                    togglePaymentStudentSelection(row.student.id)
+                                  }
+                                  aria-label={`Seleccionar ${row.student.fullName}`}
+                                  className="size-4 rounded border-slate-300 text-[#185c54]"
+                                />
+                              </td>
+                              <td className="px-4 py-4 font-mono text-sm font-semibold text-slate-600">
+                                {String(index + 1).padStart(3, "0")}
+                              </td>
                               <td className="px-5 py-4">
                                 <span className="block font-semibold">
                                   {row.student.fullName}
@@ -3670,39 +3402,95 @@ export function SchoolAdminDemo() {
                                   {row.student.registrationNumber}
                                 </span>
                               </td>
-                              <td className="px-5 py-4">
-                                <StatusDot
-                                  paid={row.ledger.registrationBalance === 0}
-                                  label={
-                                    row.ledger.registrationBalance === 0
-                                      ? "Liquidada"
-                                      : "Pendente"
+                              <td className="px-4 py-4">
+                                <FinanceCell
+                                  label={registrationState.label}
+                                  onClick={() =>
+                                    openFinanceCell({
+                                      kind: "registration",
+                                      studentId: row.student.id,
+                                    })
                                   }
+                                  supporting={
+                                    row.ledger.registrationBalance > 0
+                                      ? formatCurrency(row.ledger.registrationBalance)
+                                      : registrationState.detail
+                                  }
+                                  tone={registrationState.tone}
+                                  title={`Ver inscrição de ${row.student.fullName}`}
                                 />
                               </td>
-                              <td className="px-5 py-4 font-semibold text-slate-700">
-                                {formatCurrency(month?.due ?? 0)}
+                              {row.ledger.monthly.map((month) => {
+                                const monthState = getMonthCellState(
+                                  month,
+                                  paymentSettings,
+                                );
+                                const installmentNumber =
+                                  getTuitionInstallmentNumber(
+                                    row.student,
+                                    month.month.key,
+                                    paymentMonths,
+                                    paymentSettings,
+                                  );
+                                const monthSupporting = month.applicable
+                                  ? month.due > 0
+                                    ? installmentNumber
+                                      ? `${installmentNumber}ª · ${formatCurrency(month.due)}`
+                                      : formatCurrency(month.due)
+                                    : monthState.detail
+                                  : monthState.detail;
+
+                                return (
+                                  <td key={month.month.key} className="px-3 py-4">
+                                    <FinanceCell
+                                      label={monthState.label}
+                                      onClick={() =>
+                                        openFinanceCell({
+                                          kind: "tuition",
+                                          studentId: row.student.id,
+                                          monthKey: month.month.key,
+                                        })
+                                      }
+                                      supporting={monthSupporting}
+                                      tone={monthState.tone}
+                                      title={`Ver mensalidade de ${month.month.label} de ${row.student.fullName}`}
+                                    />
+                                  </td>
+                                );
+                              })}
+                              <td className="px-4 py-4">
+                                <FinanceCell
+                                  label={miscellaneousState.label}
+                                  onClick={() =>
+                                    openFinanceCell({
+                                      kind: "miscellaneous",
+                                      studentId: row.student.id,
+                                    })
+                                  }
+                                  supporting={miscellaneousState.detail}
+                                  tone={miscellaneousState.tone}
+                                  title={`Ver diversos de ${row.student.fullName}`}
+                                />
                               </td>
-                              <td className="px-5 py-4 font-semibold text-slate-700">
-                                {formatCurrency(month?.paid ?? 0)}
-                              </td>
-                              <td className="px-5 py-4 font-semibold text-slate-700">
-                                {formatCurrency(month?.balance ?? 0)}
-                              </td>
-                              <td className="px-5 py-4 font-semibold text-slate-700">
-                                {formatCurrency(month?.carryOut ?? 0)}
-                              </td>
-                              <td className="px-5 py-4 text-slate-700">
-                                {formatCurrency(month?.fine ?? 0)}
-                              </td>
-                              <td className="px-5 py-4 text-slate-700">
-                                {formatDateTime(month?.entry.paidAt)}
+                              <td className="px-4 py-4">
+                                <FinanceCell
+                                  label={formatCurrency(debt)}
+                                  onClick={() =>
+                                    openFinanceCell({
+                                      kind: "debt",
+                                      studentId: row.student.id,
+                                    })
+                                  }
+                                  supporting={debt > 0 ? "Em dívida" : "Sem dívida"}
+                                  tone={debt > 0 ? "danger" : "paid"}
+                                  title={`Ver dívida de ${row.student.fullName}`}
+                                />
                               </td>
                               <td className="px-5 py-4">
                                 <TextButton
                                   onClick={() => openPaymentEntry(row.student.id)}
                                 >
-                                  Lancar
+                                  Lançar
                                 </TextButton>
                               </td>
                             </tr>
@@ -3711,10 +3499,10 @@ export function SchoolAdminDemo() {
                       ) : (
                         <tr>
                           <td
-                            colSpan={9}
+                            colSpan={paymentMonths.length + 7}
                             className="px-5 py-10 text-center text-slate-500"
                           >
-                            Sem alunos para gerar propinas.
+                            Sem alunos para os filtros seleccionados.
                           </td>
                         </tr>
                       )}
@@ -3738,72 +3526,17 @@ export function SchoolAdminDemo() {
         )}
 
         {currentPaymentSection?.id === "reports" && renderReports()}
-      </div>
-    );
-  }
 
-  function renderProfiles() {
-    return (
-      <div className="grid gap-6">
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-            <div>
-              <h3 className="text-base font-semibold">Perfis e permissoes</h3>
-              <p className="text-sm text-slate-500">
-                Regras recomendadas para separar acessos e responsabilidades.
-              </p>
-            </div>
-            <SecondaryButton onClick={() => setActiveProfile(null)}>
-              Ver portal
-            </SecondaryButton>
-          </div>
-
-          <div className="table-scroll">
-            <table className="w-full min-w-[860px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-5 py-3 font-semibold">Perfil</th>
-                  <th className="px-5 py-3 font-semibold">Funcao</th>
-                  <th className="px-5 py-3 font-semibold">Permissoes</th>
-                  <th className="px-5 py-3 font-semibold">Acesso MVP</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {profiles.map((profile) => (
-                  <tr key={profile.id} className="hover:bg-slate-50/80">
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className={cx(
-                            "grid size-10 place-items-center rounded-md text-xs font-black",
-                            profile.surface,
-                          )}
-                        >
-                          {profile.glyph}
-                        </span>
-                        <span className="font-semibold text-slate-950">
-                          {profile.title}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-slate-700">
-                      {profile.description}
-                    </td>
-                    <td className="px-5 py-4 text-slate-700">
-                      {profile.permissions.join(" / ")}
-                    </td>
-                    <td className="px-5 py-4">
-                      <StatusDot
-                        paid={profile.operational}
-                        label={profile.operational ? "Operacional" : "Preparado"}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        <FinanceCellDetailPanel
+          canManagePayments={selectedProfile.id === "secretaria"}
+          months={paymentMonths}
+          row={selectedFinanceRow}
+          selection={selectedFinanceCell}
+          settings={paymentSettings}
+          onClose={() => setSelectedFinanceCell(null)}
+          onCreateMiscellaneous={openMiscellaneousChargeForm}
+          onRegisterPayment={registerPaymentFromCell}
+        />
       </div>
     );
   }
@@ -3849,12 +3582,14 @@ export function SchoolAdminDemo() {
             <div>
               <h3 className="text-base font-semibold">Mensalidades geradas</h3>
               <p className="text-sm text-slate-500">
-                Historico de geracoes por turma e mes.
+                Histórico de gerações por turma e mês.
               </p>
             </div>
-            <SecondaryButton onClick={() => setActiveView("payments")}>
-              Nova geracao
-            </SecondaryButton>
+            {selectedProfile.id === "secretaria" && (
+              <SecondaryButton onClick={() => setActiveView("payments")}>
+                Nova geracao
+              </SecondaryButton>
+            )}
           </div>
           <div className="table-scroll">
             <table className="w-full min-w-[760px] text-left text-sm">
@@ -3924,21 +3659,11 @@ export function SchoolAdminDemo() {
             <div>
               <h3 className="text-base font-semibold">Pagamentos diversos</h3>
               <p className="text-sm text-slate-500">
-                Recebimentos que nao abatem inscricao nem mensalidades.
+                Recebimentos que não abatem inscrição nem mensalidades.
               </p>
             </div>
-            <SecondaryButton
-              onClick={() => {
-                setActivePaymentSection("entry");
-                setPaymentDraft((draft) => ({
-                  ...draft,
-                  category: "miscellaneous",
-                  amount: "0",
-                  description: "",
-                }));
-              }}
-            >
-              Lancar diverso
+            <SecondaryButton onClick={openMiscellaneousChargeForm}>
+              Nova cobrança
             </SecondaryButton>
           </div>
           <div className="table-scroll">
@@ -3946,10 +3671,10 @@ export function SchoolAdminDemo() {
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-5 py-3 font-semibold">Aluno</th>
-                  <th className="px-5 py-3 font-semibold">Descricao</th>
+                  <th className="px-5 py-3 font-semibold">Descrição</th>
                   <th className="px-5 py-3 font-semibold">Valor</th>
                   <th className="px-5 py-3 font-semibold">Forma</th>
-                  <th className="px-5 py-3 font-semibold">Referencia</th>
+                  <th className="px-5 py-3 font-semibold">Referência</th>
                   <th className="px-5 py-3 font-semibold">Data</th>
                 </tr>
               </thead>
@@ -3999,1523 +3724,4 @@ export function SchoolAdminDemo() {
       </div>
     );
   }
-}
-
-function summarizePaymentRows(rows: StudentLedgerRow[]) {
-  return rows.reduce(
-    (summary, row) => ({
-      expected: summary.expected + row.ledger.totals.expected,
-      discount: summary.discount + row.ledger.totals.discount,
-      paid: summary.paid + row.ledger.totals.paid,
-      balance: summary.balance + row.ledger.totals.balance,
-      fine: summary.fine + row.ledger.totals.fine,
-      carry: summary.carry + row.ledger.totals.carry,
-      miscellaneous: summary.miscellaneous + row.ledger.totals.miscellaneous,
-    }),
-    {
-      expected: 0,
-      discount: 0,
-      paid: 0,
-      balance: 0,
-      fine: 0,
-      carry: 0,
-      miscellaneous: 0,
-    },
-  );
-}
-
-function ProfileCard({
-  profile,
-  onOpen,
-}: {
-  profile: (typeof profiles)[number];
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onOpen()}
-      className={cx(
-        "group flex min-h-44 flex-col items-start rounded-lg border border-slate-200 border-t-4 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md",
-        profile.accent,
-        profile.featured && "md:col-span-2 xl:col-span-1",
-      )}
-    >
-      <span
-        className={cx(
-          "grid size-11 place-items-center rounded-md text-xs font-black",
-          profile.surface,
-        )}
-      >
-        {profile.glyph}
-      </span>
-      <span className="mt-5 text-lg font-black text-slate-950">
-        {profile.title}
-      </span>
-      <span className="mt-2 text-sm text-slate-500">{profile.subtitle}</span>
-      <span className="mt-4 text-sm leading-6 text-slate-600">
-        {profile.description}
-      </span>
-      <span className="mt-auto pt-5 text-sm font-bold text-[#185c54]">
-        Entrar
-      </span>
-    </button>
-  );
-}
-
-function PrimaryButton({
-  children,
-  onClick,
-  type = "button",
-  disabled,
-}: {
-  children: ReactNode;
-  onClick?: () => void;
-  type?: "button" | "submit";
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type={type}
-      onClick={onClick ? () => onClick() : undefined}
-      disabled={disabled}
-      className={cx(buttonBase, "bg-[#185c54] text-white hover:bg-[#124a44]")}
-    >
-      {children}
-    </button>
-  );
-}
-
-function SecondaryButton({
-  children,
-  onClick,
-  type = "button",
-  disabled,
-}: {
-  children: ReactNode;
-  onClick?: () => void;
-  type?: "button" | "submit";
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type={type}
-      onClick={onClick ? () => onClick() : undefined}
-      disabled={disabled}
-      className={cx(
-        buttonBase,
-        "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function TextButton({
-  children,
-  onClick,
-  disabled,
-}: {
-  children: ReactNode;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick ? () => onClick() : undefined}
-      disabled={disabled}
-      className="inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-semibold text-[#185c54] transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
-    >
-      {children}
-    </button>
-  );
-}
-
-function CrumbButton({
-  children,
-  onClick,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onClick()}
-      className="rounded-md bg-slate-100 px-3 py-2 font-semibold text-slate-700 hover:bg-slate-200"
-    >
-      {children}
-    </button>
-  );
-}
-
-function StatusBadge({ status }: { status: EntityStatus }) {
-  return (
-    <span
-      className={cx(
-        "inline-flex min-h-7 items-center rounded-md px-2.5 text-xs font-semibold",
-        status === "active"
-          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-          : "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
-      )}
-    >
-      {statusLabel(status)}
-    </span>
-  );
-}
-
-function StatusDot({ paid, label }: { paid: boolean; label: string }) {
-  return (
-    <span
-      className={cx(
-        "inline-flex min-h-7 items-center rounded-md px-2.5 text-xs font-semibold",
-        paid
-          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-          : "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-      )}
-    >
-      {label}
-    </span>
-  );
-}
-
-function SummaryMini({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <span className="text-slate-500">{label}</span>
-      <p className="font-semibold text-slate-950">{value}</p>
-    </div>
-  );
-}
-
-function SummaryLine({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-md bg-slate-50 px-4 py-3">
-      <span className="text-sm font-semibold text-slate-500">{label}</span>
-      <strong className="text-sm text-slate-950">{value}</strong>
-    </div>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  supporting,
-  accent,
-}: {
-  label: string;
-  value: number | string;
-  supporting: string;
-  accent: string;
-}) {
-  return (
-    <article
-      className={cx(
-        "rounded-lg border border-slate-200 border-l-4 bg-white p-5 shadow-sm",
-        accent,
-      )}
-    >
-      <p className="text-sm font-semibold text-slate-500">{label}</p>
-      <div className="mt-3 grid gap-3">
-        <strong className="text-3xl font-bold text-slate-950">{value}</strong>
-        <span className="w-fit rounded-md bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600">
-          {supporting}
-        </span>
-      </div>
-    </article>
-  );
-}
-
-function FlowStep({
-  number,
-  title,
-  text,
-  onClick,
-}: {
-  number: string;
-  title: string;
-  text?: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onClick()}
-      className="min-h-24 rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-[#88c9bb] hover:bg-[#f0fbf8]"
-    >
-      <span className="font-mono text-sm font-bold text-[#185c54]">
-        {number}
-      </span>
-      <span className="mt-3 block text-base font-bold">{title}</span>
-      {text && (
-        <span className="mt-2 block text-sm leading-6 text-slate-600">{text}</span>
-      )}
-    </button>
-  );
-}
-
-function FieldLabel({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <label className="grid gap-2 text-sm font-semibold text-slate-700">
-      <span>{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function ClassForm({
-  academicYear,
-  availableDefinitions,
-  draft,
-  error,
-  stages,
-  onChange,
-  onReset,
-  onSubmit,
-}: {
-  academicYear: string;
-  availableDefinitions: ClassDefinition[];
-  draft: ClassDraft;
-  error: string;
-  stages: AcademicStageDefinition[];
-  onChange: (draft: ClassDraft) => void;
-  onReset: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  const selectedDefinition =
-    availableDefinitions.find((option) => option.id === draft.definitionId) ??
-    availableDefinitions[0];
-  const groupedDefinitions = activeAcademicStages(stages)
-    .map((stage) => ({
-      stage,
-      definitions: availableDefinitions.filter(
-        (definition) => definition.stageId === stage.id,
-      ),
-    }))
-    .filter((group) => group.definitions.length > 0);
-
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-    >
-      <div>
-        <h3 className="text-base font-semibold">Activar classe</h3>
-      </div>
-
-      <div className="mt-5 grid gap-4">
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200">
-          <span className="font-semibold text-slate-500">Ano lectivo</span>
-          <strong className="mt-1 block font-mono text-slate-950">
-            {academicYear}
-          </strong>
-        </div>
-
-        <FieldLabel label="Classe">
-          <select
-            value={selectedDefinition?.id ?? ""}
-            onChange={(event) =>
-              onChange({ ...draft, definitionId: event.target.value })
-            }
-            className={inputClasses()}
-            disabled={availableDefinitions.length === 0}
-          >
-            {availableDefinitions.length > 0 ? (
-              groupedDefinitions.map(({ stage, definitions }) => (
-                  <optgroup key={stage.id} label={stage.name}>
-                    {definitions.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </optgroup>
-              ))
-            ) : (
-              <option value="">Sem classes</option>
-            )}
-          </select>
-        </FieldLabel>
-
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200">
-          <span className="font-semibold text-slate-500">Nivel de ensino</span>
-          <strong className="mt-1 block text-slate-950">
-            {selectedDefinition
-              ? stageLabel(stages, selectedDefinition.stageId)
-              : "Sem classe disponivel"}
-          </strong>
-        </div>
-
-        <FieldLabel label="Estado">
-          <select
-            value={draft.status}
-            onChange={(event) =>
-              onChange({ ...draft, status: event.target.value as EntityStatus })
-            }
-            className={inputClasses()}
-          >
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </FieldLabel>
-      </div>
-
-      {error && (
-        <p className="mt-4 rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-rose-100">
-          {error}
-        </p>
-      )}
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <PrimaryButton type="submit" disabled={availableDefinitions.length === 0}>
-          Activar classe
-        </PrimaryButton>
-        <SecondaryButton onClick={onReset}>Limpar</SecondaryButton>
-      </div>
-    </form>
-  );
-}
-
-function RoomForm({
-  availableRooms,
-  draft,
-  error,
-  onChange,
-  onReset,
-  onSubmit,
-}: {
-  availableRooms: RoomDefinition[];
-  draft: RoomDraft;
-  error: string;
-  onChange: (draft: RoomDraft) => void;
-  onReset: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  const selectedRoom =
-    availableRooms.find((room) => room.id === draft.definitionId) ??
-    availableRooms[0];
-
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-    >
-      <div>
-        <h3 className="text-base font-semibold">Activar sala</h3>
-      </div>
-
-      <div className="mt-5 grid gap-4">
-        <FieldLabel label="Sala">
-          <select
-            value={selectedRoom?.id ?? ""}
-            onChange={(event) =>
-              onChange({ ...draft, definitionId: event.target.value })
-            }
-            className={inputClasses()}
-            disabled={availableRooms.length === 0}
-          >
-            {availableRooms.length > 0 ? (
-              availableRooms.map((room) => (
-                <option key={room.id} value={room.id}>
-                  {room.name} - {room.block}
-                </option>
-              ))
-            ) : (
-              <option value="">Sem salas</option>
-            )}
-          </select>
-        </FieldLabel>
-
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200">
-          <span className="font-semibold text-slate-500">Dados da sala</span>
-          <strong className="mt-1 block text-slate-950">
-            {selectedRoom
-              ? `${selectedRoom.block} / ${selectedRoom.capacity} lugares`
-              : "Sem sala disponivel"}
-          </strong>
-        </div>
-
-        <FieldLabel label="Estado">
-          <select
-            value={draft.status}
-            onChange={(event) =>
-              onChange({ ...draft, status: event.target.value as EntityStatus })
-            }
-            className={inputClasses()}
-          >
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </FieldLabel>
-      </div>
-
-      {error && (
-        <p className="mt-4 rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-rose-100">
-          {error}
-        </p>
-      )}
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <PrimaryButton type="submit" disabled={availableRooms.length === 0}>
-          Activar sala
-        </PrimaryButton>
-        <SecondaryButton onClick={onReset}>Limpar</SecondaryButton>
-      </div>
-    </form>
-  );
-}
-
-function GroupForm({
-  classes,
-  draft,
-  error,
-  rooms,
-  onChange,
-  onReset,
-  onSubmit,
-}: {
-  classes: SchoolClass[];
-  draft: GroupDraft;
-  error: string;
-  rooms: SchoolRoom[];
-  onChange: (draft: GroupDraft) => void;
-  onReset: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  const selectedRoom = rooms.find((room) => room.id === draft.roomId);
-
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-    >
-      <div>
-        <h3 className="text-base font-semibold">Adicionar turma</h3>
-      </div>
-
-      <div className="mt-5 grid gap-4">
-        <FieldLabel label="Classe associada">
-          <select
-            value={draft.classId}
-            onChange={(event) =>
-              onChange({ ...draft, classId: event.target.value })
-            }
-            className={inputClasses()}
-            disabled={classes.length === 0}
-          >
-            {classes.length > 0 ? (
-              sortClasses(classes).map((schoolClass) => (
-                <option key={schoolClass.id} value={schoolClass.id}>
-                  {schoolClass.name}
-                </option>
-              ))
-            ) : (
-              <option value="">Cadastre a classe primeiro</option>
-            )}
-          </select>
-        </FieldLabel>
-
-        <FieldLabel label="Designacao da turma">
-          <input
-            value={draft.name}
-            onChange={(event) => onChange({ ...draft, name: event.target.value })}
-            className={inputClasses()}
-            placeholder="Ex.: Turma C"
-          />
-        </FieldLabel>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FieldLabel label="Turno">
-            <select
-              value={draft.shift}
-              onChange={(event) =>
-                onChange({ ...draft, shift: event.target.value })
-              }
-              className={inputClasses()}
-            >
-              <option>Manha</option>
-              <option>Tarde</option>
-              <option>Noite</option>
-            </select>
-          </FieldLabel>
-
-          <FieldLabel label="Sala">
-            <select
-              value={draft.roomId}
-              onChange={(event) => {
-                const room = rooms.find((item) => item.id === event.target.value);
-
-                onChange({
-                  ...draft,
-                  roomId: event.target.value,
-                  capacity: String(room?.capacity ?? draft.capacity),
-                });
-              }}
-              className={inputClasses()}
-              disabled={rooms.length === 0}
-            >
-              {rooms.length > 0 ? (
-                rooms.map((room) => (
-                  <option key={room.id} value={room.id}>
-                    {room.name} - {room.block}
-                  </option>
-                ))
-              ) : (
-                <option value="">Sem salas disponiveis</option>
-              )}
-            </select>
-          </FieldLabel>
-        </div>
-
-        <div className="rounded-md bg-slate-50 px-3 py-2 text-sm ring-1 ring-slate-200">
-          <span className="font-semibold text-slate-500">Lotacao da sala</span>
-          <strong className="mt-1 block text-slate-950">
-            {selectedRoom ? `${selectedRoom.capacity} lugares` : "Por seleccionar"}
-          </strong>
-        </div>
-
-        <FieldLabel label="Estado">
-          <select
-            value={draft.status}
-            onChange={(event) =>
-              onChange({ ...draft, status: event.target.value as EntityStatus })
-            }
-            className={inputClasses()}
-          >
-            {statusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </FieldLabel>
-      </div>
-
-      {error && (
-        <p className="mt-4 rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-rose-100">
-          {error}
-        </p>
-      )}
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <PrimaryButton type="submit" disabled={classes.length === 0 || rooms.length === 0}>
-          Adicionar a base
-        </PrimaryButton>
-        <SecondaryButton onClick={onReset}>Limpar</SecondaryButton>
-      </div>
-    </form>
-  );
-}
-
-function EnrollmentForm({
-  classes,
-  draft,
-  groups,
-  notice,
-  onChange,
-  onClassChange,
-  onReset,
-  onSubmit,
-}: {
-  classes: SchoolClass[];
-  draft: EnrollmentDraft;
-  groups: ClassGroup[];
-  notice: string;
-  onChange: (draft: EnrollmentDraft) => void;
-  onClassChange: (classId: string) => void;
-  onReset: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  const hasGroups = groups.length > 0;
-
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-    >
-      <div>
-        <h3 className="text-base font-semibold">Matricula</h3>
-      </div>
-
-      <div className="mt-5 grid gap-4">
-        <FieldLabel label="Situacao financeira">
-          <select
-            value={draft.financeStatus}
-            onChange={(event) => {
-              const status = event.target.value as FinanceStatus;
-              onChange({
-                ...draft,
-                financeStatus: status,
-                discountPercent:
-                  status === "scholarship"
-                    ? "100"
-                    : status === "exception"
-                      ? "100"
-                    : status === "regular"
-                      ? "0"
-                      : draft.discountPercent,
-              });
-            }}
-            className={inputClasses()}
-          >
-            {financeStatusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </FieldLabel>
-
-        {draft.financeStatus !== "regular" && (
-          <div className="grid gap-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <FieldLabel label="Desconto (%)">
-                <input
-                  value={draft.discountPercent}
-                  onChange={(event) =>
-                    onChange({ ...draft, discountPercent: event.target.value })
-                  }
-                  className={inputClasses()}
-                  disabled={draft.financeStatus === "scholarship"}
-                  max="100"
-                  min="0"
-                  type="number"
-                />
-              </FieldLabel>
-              <FieldLabel label="Inicio">
-                <select
-                  value={draft.exceptionStartMonth}
-                  onChange={(event) =>
-                    onChange({
-                      ...draft,
-                      exceptionStartMonth: event.target.value,
-                    })
-                  }
-                  className={inputClasses()}
-                >
-                  {monthOptions.map((month) => (
-                    <option key={month.key} value={month.key}>
-                      {month.label}
-                    </option>
-                  ))}
-                </select>
-              </FieldLabel>
-              <FieldLabel label="Fim">
-                <select
-                  value={draft.exceptionEndMonth}
-                  onChange={(event) =>
-                    onChange({ ...draft, exceptionEndMonth: event.target.value })
-                  }
-                  className={inputClasses()}
-                >
-                  {monthOptions.map((month) => (
-                    <option key={month.key} value={month.key}>
-                      {month.label}
-                    </option>
-                  ))}
-                </select>
-              </FieldLabel>
-            </div>
-            <FieldLabel label="Motivo/autorizacao">
-              <input
-                value={draft.exceptionReason}
-                onChange={(event) =>
-                  onChange({ ...draft, exceptionReason: event.target.value })
-                }
-                className={inputClasses()}
-                placeholder="Ex.: Bolsa social"
-              />
-            </FieldLabel>
-          </div>
-        )}
-
-        <FieldLabel label="Nome completo do aluno">
-          <input
-            value={draft.fullName}
-            onChange={(event) =>
-              onChange({ ...draft, fullName: event.target.value })
-            }
-            className={inputClasses()}
-            placeholder="Ex.: Joao Manuel"
-          />
-        </FieldLabel>
-
-        <FieldLabel label="Encarregado">
-          <input
-            value={draft.guardianName}
-            onChange={(event) =>
-              onChange({ ...draft, guardianName: event.target.value })
-            }
-            className={inputClasses()}
-            placeholder="Nome do encarregado"
-          />
-        </FieldLabel>
-
-        <FieldLabel label="Contacto">
-          <input
-            value={draft.guardianPhone}
-            onChange={(event) =>
-              onChange({ ...draft, guardianPhone: event.target.value })
-            }
-            className={inputClasses()}
-            placeholder="84 000 0000"
-          />
-        </FieldLabel>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FieldLabel label="Classe">
-            <select
-              value={draft.classId}
-              onChange={(event) => onClassChange(event.target.value)}
-              className={inputClasses()}
-              disabled={classes.length === 0}
-            >
-              {classes.length > 0 ? (
-                sortClasses(classes).map((schoolClass) => (
-                  <option key={schoolClass.id} value={schoolClass.id}>
-                    {schoolClass.name}
-                  </option>
-                ))
-              ) : (
-                <option value="">Cadastre a classe primeiro</option>
-              )}
-            </select>
-          </FieldLabel>
-
-          <FieldLabel label="Turma">
-            <select
-              value={draft.groupId}
-              onChange={(event) =>
-                onChange({ ...draft, groupId: event.target.value })
-              }
-              className={inputClasses()}
-              disabled={!hasGroups}
-            >
-              {hasGroups ? (
-                groups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))
-              ) : (
-                <option value="">Sem turmas</option>
-              )}
-            </select>
-          </FieldLabel>
-        </div>
-      </div>
-
-      {notice && (
-        <p className="mt-4 rounded-md bg-teal-50 px-3 py-2 text-sm font-semibold text-[#185c54] ring-1 ring-teal-100">
-          {notice}
-        </p>
-      )}
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <PrimaryButton type="submit" disabled={!hasGroups || classes.length === 0}>
-          Guardar matricula
-        </PrimaryButton>
-        <SecondaryButton onClick={onReset}>Limpar</SecondaryButton>
-      </div>
-    </form>
-  );
-}
-
-function FinanceSettingsForm({
-  draft,
-  notice,
-  onChange,
-  onSubmit,
-}: {
-  draft: FinanceSettingsDraft;
-  notice: string;
-  onChange: (draft: FinanceSettingsDraft) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-    >
-      <div>
-        <h3 className="text-base font-semibold">Dados de pagamentos</h3>
-        <p className="text-sm text-slate-500">
-          Periodo de cobranca, valores e multas por atraso.
-        </p>
-      </div>
-
-      <div className="mt-5 grid gap-4 lg:grid-cols-3">
-        <FieldLabel label="Ano lectivo">
-          <input
-            value={draft.academicYear}
-            onChange={(event) =>
-              onChange({ ...draft, academicYear: event.target.value })
-            }
-            className={inputClasses()}
-            placeholder="2026"
-          />
-        </FieldLabel>
-
-        <FieldLabel label="Inscricao/Renovacao">
-          <input
-            value={draft.inscriptionRenewalFee}
-            onChange={(event) =>
-              onChange({
-                ...draft,
-                inscriptionRenewalFee: event.target.value,
-              })
-            }
-            className={inputClasses()}
-            min="0"
-            type="number"
-          />
-        </FieldLabel>
-
-        <FieldLabel label="Mensalidade base">
-          <input
-            value={draft.monthlyFee}
-            onChange={(event) =>
-              onChange({ ...draft, monthlyFee: event.target.value })
-            }
-            className={inputClasses()}
-            min="0"
-            type="number"
-          />
-        </FieldLabel>
-      </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-4">
-        <FieldLabel label="Inicio">
-          <select
-            value={draft.startMonth}
-            onChange={(event) =>
-              onChange({ ...draft, startMonth: event.target.value })
-            }
-            className={inputClasses()}
-          >
-            {monthOptions.map((month) => (
-              <option key={month.key} value={month.key}>
-                {month.label}
-              </option>
-            ))}
-          </select>
-        </FieldLabel>
-
-        <FieldLabel label="Fim">
-          <select
-            value={draft.endMonth}
-            onChange={(event) =>
-              onChange({ ...draft, endMonth: event.target.value })
-            }
-            className={inputClasses()}
-          >
-            {monthOptions.map((month) => (
-              <option key={month.key} value={month.key}>
-                {month.label}
-              </option>
-            ))}
-          </select>
-        </FieldLabel>
-
-        <FieldLabel label="1a multa apos dia">
-          <input
-            value={draft.firstPenaltyDay}
-            onChange={(event) =>
-              onChange({ ...draft, firstPenaltyDay: event.target.value })
-            }
-            className={inputClasses()}
-            max="31"
-            min="1"
-            type="number"
-          />
-        </FieldLabel>
-
-        <FieldLabel label="Valor da 1a multa">
-          <input
-            value={draft.firstPenaltyAmount}
-            onChange={(event) =>
-              onChange({ ...draft, firstPenaltyAmount: event.target.value })
-            }
-            className={inputClasses()}
-            min="0"
-            type="number"
-          />
-        </FieldLabel>
-      </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
-        <FieldLabel label="2a multa apos dia">
-          <input
-            value={draft.secondPenaltyDay}
-            onChange={(event) =>
-              onChange({ ...draft, secondPenaltyDay: event.target.value })
-            }
-            className={inputClasses()}
-            max="31"
-            min="1"
-            type="number"
-          />
-        </FieldLabel>
-
-        <FieldLabel label="Valor da 2a multa">
-          <input
-            value={draft.secondPenaltyAmount}
-            onChange={(event) =>
-              onChange({ ...draft, secondPenaltyAmount: event.target.value })
-            }
-            className={inputClasses()}
-            min="0"
-            type="number"
-          />
-        </FieldLabel>
-      </div>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <PrimaryButton type="submit">Guardar regras</PrimaryButton>
-      </div>
-
-      {notice && (
-        <p className="mt-4 rounded-md bg-teal-50 px-3 py-2 text-sm font-semibold text-[#185c54] ring-1 ring-teal-100">
-          {notice}
-        </p>
-      )}
-    </form>
-  );
-}
-
-function PaymentSettingsSummary({ settings }: { settings: PaymentSettings }) {
-  return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-      <div>
-        <h3 className="text-base font-semibold">Dados de pagamentos</h3>
-        <p className="text-sm text-slate-500">
-          Valores e prazos.
-        </p>
-      </div>
-
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <SummaryLine label="Ano lectivo" value={settings.academicYear} />
-        <SummaryLine
-          label="Inscricao/Renovacao"
-          value={formatCurrency(settings.inscriptionRenewalFee)}
-        />
-        <SummaryLine
-          label="Mensalidade base"
-          value={formatCurrency(settings.monthlyFee)}
-        />
-        <SummaryLine
-          label="Periodo"
-          value={`${monthLabel(settings.startMonth)} ate ${monthLabel(settings.endMonth)}`}
-        />
-        <SummaryLine
-          label="1a multa"
-          value={`Dia ${settings.firstPenaltyDay} / ${formatCurrency(settings.firstPenaltyAmount)}`}
-        />
-        <SummaryLine
-          label="2a multa"
-          value={`Dia ${settings.secondPenaltyDay} / ${formatCurrency(settings.secondPenaltyAmount)}`}
-        />
-      </div>
-    </section>
-  );
-}
-
-function StudentFinanceForm({
-  draft,
-  notice,
-  students,
-  onChange,
-  onStudentChange,
-  onSubmit,
-}: {
-  draft: FinanceProfileDraft;
-  notice: string;
-  students: Student[];
-  onChange: (draft: FinanceProfileDraft) => void;
-  onStudentChange: (studentId: string) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  const selectedStudent = students.find((student) => student.id === draft.studentId);
-
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-    >
-      <div>
-        <h3 className="text-base font-semibold">Excecoes e bolsas</h3>
-        <p className="text-sm text-slate-500">
-          Aplique isencoes ou descontos por intervalo de meses.
-        </p>
-      </div>
-
-      <div className="mt-5 grid gap-4">
-        <FieldLabel label="Aluno">
-          <select
-            value={draft.studentId}
-            onChange={(event) => onStudentChange(event.target.value)}
-            className={inputClasses()}
-            disabled={students.length === 0}
-          >
-            {students.length > 0 ? (
-              students.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.fullName}
-                </option>
-              ))
-            ) : (
-              <option value="">Sem alunos</option>
-            )}
-          </select>
-        </FieldLabel>
-
-        <FieldLabel label="Situacao">
-          <select
-            value={draft.status}
-            onChange={(event) => {
-              const status = event.target.value as FinanceStatus;
-              onChange({
-                ...draft,
-                status,
-                discountPercent:
-                  status === "scholarship"
-                    ? "100"
-                    : status === "exception"
-                      ? "100"
-                    : status === "regular"
-                      ? "0"
-                      : draft.discountPercent,
-              });
-            }}
-            className={inputClasses()}
-          >
-            {financeStatusOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </FieldLabel>
-
-        <div className="grid gap-4 sm:grid-cols-3">
-          <FieldLabel label="Desconto (%)">
-            <input
-              value={draft.discountPercent}
-              onChange={(event) =>
-                onChange({ ...draft, discountPercent: event.target.value })
-              }
-              className={inputClasses()}
-              disabled={draft.status === "regular" || draft.status === "scholarship"}
-              max="100"
-              min="0"
-              type="number"
-            />
-          </FieldLabel>
-
-          <FieldLabel label="Inicio">
-            <select
-              value={draft.startMonth}
-              onChange={(event) =>
-                onChange({ ...draft, startMonth: event.target.value })
-              }
-              className={inputClasses()}
-              disabled={draft.status === "regular"}
-            >
-              {monthOptions.map((month) => (
-                <option key={month.key} value={month.key}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-          </FieldLabel>
-
-          <FieldLabel label="Fim">
-            <select
-              value={draft.endMonth}
-              onChange={(event) =>
-                onChange({ ...draft, endMonth: event.target.value })
-              }
-              className={inputClasses()}
-              disabled={draft.status === "regular"}
-            >
-              {monthOptions.map((month) => (
-                <option key={month.key} value={month.key}>
-                  {month.label}
-                </option>
-              ))}
-            </select>
-          </FieldLabel>
-        </div>
-
-        <FieldLabel label="Motivo/autorizacao">
-          <input
-            value={draft.reason}
-            onChange={(event) => onChange({ ...draft, reason: event.target.value })}
-            className={inputClasses()}
-            disabled={draft.status === "regular"}
-            placeholder="Ex.: Bolsa integral"
-          />
-        </FieldLabel>
-      </div>
-
-      <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <SummaryLine
-          label="Aluno"
-          value={selectedStudent?.registrationNumber ?? "Sem aluno"}
-        />
-        <SummaryLine
-          label="Regra"
-          value={`${financeStatusLabel(draft.status)} / ${draft.discountPercent || 0}%`}
-        />
-        <SummaryLine
-          label="Intervalo"
-          value={
-            draft.status === "regular"
-              ? "Sem intervalo"
-              : `${monthLabel(draft.startMonth)} ate ${monthLabel(draft.endMonth)}`
-          }
-        />
-      </div>
-
-      {notice && (
-        <p className="mt-4 rounded-md bg-teal-50 px-3 py-2 text-sm font-semibold text-[#185c54] ring-1 ring-teal-100">
-          {notice}
-        </p>
-      )}
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <PrimaryButton type="submit" disabled={!draft.studentId}>
-          Aplicar regra
-        </PrimaryButton>
-      </div>
-    </form>
-  );
-}
-
-function PaymentForm({
-  allStudents,
-  draft,
-  months,
-  selectedRow,
-  selectedStudent,
-  settings,
-  onChange,
-  onSubmit,
-}: {
-  allStudents: Student[];
-  draft: PaymentLaunchDraft;
-  months: MonthOption[];
-  selectedRow?: StudentLedgerRow;
-  selectedStudent?: Student;
-  settings: PaymentSettings;
-  onChange: (draft: PaymentLaunchDraft) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  const selectedMonth = monthByKey(draft.monthKey) ?? months[0];
-  const suggestedMonthlyFee =
-    selectedStudent && selectedMonth
-      ? calculateMonthlyDue(selectedStudent, selectedMonth, settings)
-      : { due: settings.monthlyFee, discount: 0, ruleLabel: "Regular" };
-  const selectedMonthLedger = selectedRow?.ledger.monthly.find(
-    (item) => item.month.key === draft.monthKey,
-  );
-  const receivedAmount = parseMoney(draft.amount);
-  const monthBalance = selectedMonthLedger?.balance ?? suggestedMonthlyFee.due;
-  const appliedToMonth =
-    draft.category === "tuition" ? Math.min(receivedAmount, monthBalance) : 0;
-  const surplusForNextMonths =
-    draft.category === "tuition" ? Math.max(0, receivedAmount - appliedToMonth) : 0;
-  const registrationBalance =
-    selectedRow?.ledger.registrationBalance ?? settings.inscriptionRenewalFee;
-  const appliedToRegistration =
-    draft.category === "registration"
-      ? Math.min(receivedAmount, registrationBalance)
-      : 0;
-  const registrationSurplus =
-    draft.category === "registration"
-      ? Math.max(0, receivedAmount - appliedToRegistration)
-      : 0;
-
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-    >
-      <div>
-        <h3 className="text-base font-semibold">Lancar pagamento</h3>
-        <p className="text-sm text-slate-500">
-          Recebimentos de inscricao/renovacao, mensalidade e pagamentos diversos.
-        </p>
-      </div>
-
-      {draft.category !== "miscellaneous" && (
-        <div className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-100">
-          Qualquer valor recebido acima do saldo devido fica como credito para
-          as mensalidades seguintes.
-        </div>
-      )}
-
-      <div className="mt-5 grid gap-4">
-        <FieldLabel label="Aluno">
-          <select
-            value={draft.studentId}
-            onChange={(event) => {
-              const nextStudent = allStudents.find(
-                (student) => student.id === event.target.value,
-              );
-              const nextFee =
-                nextStudent && selectedMonth
-                  ? calculateMonthlyDue(nextStudent, selectedMonth, settings).due
-                  : settings.monthlyFee;
-
-              onChange({
-                ...draft,
-                studentId: event.target.value,
-                amount: draft.category === "tuition" ? String(nextFee) : draft.amount,
-              });
-            }}
-            className={inputClasses()}
-            disabled={allStudents.length === 0}
-          >
-            {allStudents.length > 0 ? (
-              allStudents.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.fullName}
-                </option>
-              ))
-            ) : (
-              <option value="">Sem alunos</option>
-            )}
-          </select>
-        </FieldLabel>
-
-        <FieldLabel label="Tipo de pagamento">
-          <select
-            value={draft.category}
-            onChange={(event) => {
-              const category = event.target.value as PaymentCategory;
-              onChange({
-                ...draft,
-                category,
-                amount:
-                  category === "tuition"
-                    ? String(suggestedMonthlyFee.due)
-                    : category === "registration"
-                      ? String(settings.inscriptionRenewalFee)
-                      : "0",
-              });
-            }}
-            className={inputClasses()}
-          >
-            {paymentCategories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.label}
-              </option>
-            ))}
-          </select>
-        </FieldLabel>
-
-        <FieldLabel label="Mes da mensalidade">
-          <select
-            value={draft.monthKey}
-            onChange={(event) => {
-              const month = monthByKey(event.target.value) ?? months[0];
-              const nextFee =
-                selectedStudent && month
-                  ? calculateMonthlyDue(selectedStudent, month, settings).due
-                  : settings.monthlyFee;
-
-              onChange({
-                ...draft,
-                monthKey: event.target.value,
-                amount: draft.category === "tuition" ? String(nextFee) : draft.amount,
-              });
-            }}
-            className={inputClasses()}
-            disabled={draft.category !== "tuition"}
-          >
-            {months.map((month) => (
-              <option key={month.key} value={month.key}>
-                {month.label}
-              </option>
-            ))}
-          </select>
-        </FieldLabel>
-
-        {draft.category === "miscellaneous" && (
-          <FieldLabel label="Descricao do pagamento diverso">
-            <input
-              value={draft.description}
-              onChange={(event) =>
-                onChange({ ...draft, description: event.target.value })
-              }
-              className={inputClasses()}
-              placeholder="Ex.: Uniforme, certificado, transporte"
-            />
-          </FieldLabel>
-        )}
-
-        <FieldLabel label="Valor recebido">
-          <input
-            value={draft.amount}
-            onChange={(event) => onChange({ ...draft, amount: event.target.value })}
-            className={inputClasses()}
-            min="0"
-            type="number"
-          />
-        </FieldLabel>
-
-        <FieldLabel label="Forma de pagamento">
-          <select
-            value={draft.method}
-            onChange={(event) => onChange({ ...draft, method: event.target.value })}
-            className={inputClasses()}
-          >
-            {paymentMethods.map((method) => (
-              <option key={method}>{method}</option>
-            ))}
-          </select>
-        </FieldLabel>
-
-        <FieldLabel label="Referencia">
-          <input
-            value={draft.reference}
-            onChange={(event) =>
-              onChange({ ...draft, reference: event.target.value })
-            }
-            className={inputClasses()}
-            placeholder="Opcional"
-          />
-        </FieldLabel>
-      </div>
-
-      <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <SummaryLine label="Aluno" value={selectedStudent?.fullName ?? "Sem aluno"} />
-        {draft.category === "tuition" && (
-          <>
-            <SummaryLine
-              label="Regra"
-              value={`${suggestedMonthlyFee.ruleLabel} / devido ${formatCurrency(suggestedMonthlyFee.due)}`}
-            />
-            <SummaryLine
-              label="Aplicado neste mes"
-              value={formatCurrency(appliedToMonth)}
-            />
-            <SummaryLine
-              label="Sobra para meses seguintes"
-              value={formatCurrency(surplusForNextMonths)}
-            />
-          </>
-        )}
-        {draft.category === "registration" && (
-          <>
-            <SummaryLine
-              label="Aplicado na inscricao"
-              value={formatCurrency(appliedToRegistration)}
-            />
-            <SummaryLine
-              label="Sobra para mensalidades"
-              value={formatCurrency(registrationSurplus)}
-            />
-          </>
-        )}
-        {draft.category === "miscellaneous" && (
-          <SummaryLine
-            label="Pagamento diverso"
-            value={draft.description.trim() || "Descricao por preencher"}
-          />
-        )}
-        <SummaryLine
-          label="Data/hora"
-          value={formatDateTime(new Date().toISOString())}
-        />
-        <SummaryLine label="Valor" value={formatCurrency(parseMoney(draft.amount))} />
-      </div>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <PrimaryButton type="submit" disabled={!draft.studentId || receivedAmount <= 0}>
-          Confirmar pagamento
-        </PrimaryButton>
-      </div>
-    </form>
-  );
-}
-
-function StudentFilters({
-  classes,
-  currentClassId,
-  currentGroupId,
-  groupsForCurrentClass,
-  onClassChange,
-  onGroupChange,
-  onSearchChange,
-  search,
-}: {
-  classes: SchoolClass[];
-  currentClassId: string;
-  currentGroupId: string;
-  groupsForCurrentClass: ClassGroup[];
-  onClassChange: (classId: string) => void;
-  onGroupChange: (groupId: string) => void;
-  onSearchChange: (search: string) => void;
-  search: string;
-}) {
-  return (
-    <div className="grid gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 md:grid-cols-[220px_220px_1fr]">
-      <select
-        value={currentClassId}
-        onChange={(event) => onClassChange(event.target.value)}
-        className={inputClasses()}
-        aria-label="Filtrar por classe"
-        disabled={classes.length === 0}
-      >
-        {classes.length > 0 ? (
-          sortClasses(classes).map((schoolClass) => (
-            <option key={schoolClass.id} value={schoolClass.id}>
-              {schoolClass.name}
-            </option>
-          ))
-        ) : (
-          <option value="">Sem classes</option>
-        )}
-      </select>
-      <select
-        value={currentGroupId}
-        onChange={(event) => onGroupChange(event.target.value)}
-        className={inputClasses()}
-        aria-label="Filtrar por turma"
-        disabled={groupsForCurrentClass.length === 0}
-      >
-        {groupsForCurrentClass.length > 0 ? (
-          groupsForCurrentClass.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.name}
-            </option>
-          ))
-        ) : (
-          <option value="">Sem turmas</option>
-        )}
-      </select>
-      <input
-        value={search}
-        onChange={(event) => onSearchChange(event.target.value)}
-        className={inputClasses()}
-        placeholder="Pesquisar aluno pelo nome"
-        type="search"
-      />
-    </div>
-  );
 }

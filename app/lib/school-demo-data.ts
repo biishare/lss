@@ -2,11 +2,26 @@ export type EntityStatus = "active" | "inactive";
 
 export type EnrollmentType = "new" | "renewal";
 
+export type RegistrationStatus = "pending" | "paid";
+
 export type FinanceStatus =
   | "regular"
   | "scholarship"
   | "partial_scholarship"
-  | "exception";
+  | "exception"
+  | "weighted";
+
+export type StudentFinanceRuleHistoryEntry = {
+  id: string;
+  status: FinanceStatus;
+  discountPercent: number;
+  startMonth?: string;
+  endMonth?: string;
+  reason?: string;
+  authorizedBy: string;
+  registeredBy: string;
+  registeredAt: string;
+};
 
 export type StudentFinancialProfile = {
   status: FinanceStatus;
@@ -14,6 +29,10 @@ export type StudentFinancialProfile = {
   startMonth?: string;
   endMonth?: string;
   reason?: string;
+  authorizedBy?: string;
+  registeredBy?: string;
+  registeredAt?: string;
+  history?: StudentFinanceRuleHistoryEntry[];
 };
 
 export type SchoolClass = {
@@ -75,6 +94,9 @@ export type Student = {
   guardianName: string;
   guardianPhone: string;
   enrollmentType: EnrollmentType;
+  enrollmentDate: string;
+  tuitionStartMonth: string;
+  registrationStatus: RegistrationStatus;
   financialProfile: StudentFinancialProfile;
   classId: string;
   groupId: string;
@@ -108,8 +130,42 @@ export type PaymentEntry = {
   description?: string;
 };
 
+export type ChargeCategory = "registration" | "tuition" | "miscellaneous";
+
+export type Charge = {
+  id: string;
+  studentId: string;
+  category: ChargeCategory;
+  amount: number;
+  description: string;
+  monthKey?: string;
+  dueOn?: string;
+  createdAt: string;
+};
+
+export type Payment = {
+  id: string;
+  studentId: string;
+  amount: number;
+  paidOn: string;
+  recordedAt: string;
+  method: string;
+  reference?: string;
+  observation?: string;
+};
+
+export type PaymentAllocation = {
+  id: string;
+  paymentId: string;
+  chargeId: string;
+  amount: number;
+};
+
 export type StudentPaymentRecord = {
   studentId: string;
+  charges: Charge[];
+  payments: Payment[];
+  allocations: PaymentAllocation[];
   inscriptionRenewal: PaymentEntry;
   monthlyPayments: Record<string, PaymentEntry>;
   miscellaneousPayments: PaymentEntry[];
