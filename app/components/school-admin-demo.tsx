@@ -32,10 +32,12 @@ import {
   availableRoomDefinitions,
   buildFinanceProfileDraft,
   buildFinanceSettingsDraft,
+  buildPaymentLevelRules,
   buildGroupId,
   buildLedger,
   buildPaymentRecord,
   buildStudentFinanceProfile,
+  calculateRegistrationDue,
   currentAcademicYear,
   cx,
   financeStatusLabel,
@@ -45,10 +47,11 @@ import {
   formatDate,
   formatDateTime,
   getMiscellaneousCellState,
+  getConfiguredPaymentMonths,
   getMonthCellState,
-  getMonthsInRange,
   getRegistrationCellState,
   getStudentDebt,
+  getStudentUpcomingBalance,
   getStudentEnrollmentDate,
   getStudentTuitionStartMonth,
   getTuitionInstallmentNumber,
@@ -63,21 +66,26 @@ import {
   nextRoomDefinitionId,
   nextStageDefinitionId,
   normalizePaymentRecord,
+  normalizePaymentSettings,
   normalizeStudentForPolicy,
   normalizeText,
   nowIso,
   paidOnToIso,
   parseMoney,
+  paymentEffectiveDate,
+  paymentRuleForStudent,
   paymentMethods,
   paymentSections,
   profiles,
   recordStudentPayment,
+  repriceOpenCoreCharges,
   rowMatchesPaymentAlertFilter,
   roomById,
   roomLabel,
   sortByName,
   sortClasses,
   sortStudents,
+  stableStudentNumber,
   stageLabel,
   statusOptions,
   storageKey,
@@ -110,7 +118,7 @@ import {
   EnrollmentForm,
   FieldLabel,
   FinanceCell,
-  FinanceCellDetailPanel,
+  FinanceCellDialog,
   FinanceSettingsForm,
   FlowStep,
   GroupForm,
@@ -183,7 +191,9 @@ export function SchoolAdminDemo() {
   const [paymentAlertFilter, setPaymentAlertFilter] =
     useState<PaymentAlertFilter>("all");
   const [financeSettingsDraft, setFinanceSettingsDraft] =
-    useState<FinanceSettingsDraft>(() => buildFinanceSettingsDraft(initialPaymentSettings));
+    useState<FinanceSettingsDraft>(() =>
+      buildFinanceSettingsDraft(initialPaymentSettings, initialAcademicStages),
+    );
   const [academicStageDraft, setAcademicStageDraft] = useState<AcademicStageDraft>({
     name: "",
     status: "active",
@@ -250,9 +260,10 @@ export function SchoolAdminDemo() {
     monthKey: initialPaymentSettings.startMonth,
     targetChargeId: "",
     amount: String(initialPaymentSettings.monthlyFee),
-    paidOn: today(),
+    effectivePaymentDate: today(),
     method: paymentMethods[0],
-    reference: "",
+    allowAdvancePayment: false,
+    recordedBy: "Secretaria",
     description: "",
   });
   const [miscellaneousChargeDraft, setMiscellaneousChargeDraft] =
@@ -288,20 +299,41 @@ export function SchoolAdminDemo() {
       const loadedClasses = storedArray(storedState.classes, initialClasses);
       const loadedRooms = storedArray(storedState.rooms, initialRooms);
       const loadedGroups = storedArray(storedState.groups, initialGroups);
-      const loadedPaymentSettings =
-        storedState.paymentSettings ?? initialPaymentSettings;
+      const loadedPaymentSettings = normalizePaymentSettings(
+        storedState.paymentSettings ?? initialPaymentSettings,
+      );
       const rawPaymentRecords = storedArray(
         storedState.paymentRecords,
         initialPaymentRecords,
       );
-      const loadedBaseStudents = storedArray(storedState.students, initialStudents).map(
-        (student) => {
-          return normalizeStudentForPolicy(student, loadedPaymentSettings);
-        },
-      );
-      const loadedPaymentMonths = getMonthsInRange(
-        loadedPaymentSettings.startMonth,
-        loadedPaymentSettings.endMonth,
+      const loadedBaseStudents = storedArray(
+        storedState.students,
+        initialStudents,
+      ).map((student) => {
+        const classDefinition = loadedClassDefinitions.find(
+          (definition) => definition.id === student.classId,
+        );
+        const schoolClass = loadedClasses.find(
+          (item) => item.id === student.classId,
+        );
+        const levelByName = loadedAcademicStages.find(
+          (level) => level.name === schoolClass?.stage,
+        );
+
+        return normalizeStudentForPolicy(
+          {
+            ...student,
+            educationLevelId:
+              student.educationLevelId ??
+              classDefinition?.stageId ??
+              schoolClass?.stageId ??
+              levelByName?.id,
+          },
+          loadedPaymentSettings,
+        );
+      });
+      const loadedPaymentMonths = getConfiguredPaymentMonths(
+        loadedPaymentSettings,
       );
       const loadedPaymentRecords = loadedBaseStudents.map((student) => {
         const rawRecord =
@@ -356,7 +388,9 @@ export function SchoolAdminDemo() {
       setSelectedClassId(loadedFirstClassId);
       setSelectedGroupId(loadedFirstGroupId);
       setBillingMonthKey(loadedPaymentSettings.startMonth);
-      setFinanceSettingsDraft(buildFinanceSettingsDraft(loadedPaymentSettings));
+      setFinanceSettingsDraft(
+        buildFinanceSettingsDraft(loadedPaymentSettings, loadedAcademicStages),
+      );
       setClassDefinitionDraft((draft) => ({
         ...draft,
         stageId: loadedFirstStageId,
@@ -398,8 +432,10 @@ export function SchoolAdminDemo() {
         studentId: loadedFirstStudent?.id ?? "",
         monthKey: loadedPaymentSettings.startMonth,
         targetChargeId: "",
-        amount: String(loadedPaymentSettings.monthlyFee),
-        paidOn: draft.paidOn || today(),
+        amount: String(
+          paymentRuleForStudent(loadedPaymentSettings, loadedFirstStudent).monthlyFee,
+        ),
+        effectivePaymentDate: draft.effectivePaymentDate || today(),
       }));
       setStorageReady(true);
     }, 0);
@@ -445,6 +481,13 @@ export function SchoolAdminDemo() {
     classes.find((schoolClass) => schoolClass.id === selectedClassId) ??
     classes[0];
   const currentClassId = currentClass?.id ?? "";
+  const currentClassDefinition = classDefinitions.find(
+    (definition) => definition.id === currentClassId,
+  );
+  const currentClassRule = paymentRuleForStudent(paymentSettings, {
+    educationLevelId:
+      currentClass?.stageId ?? currentClassDefinition?.stageId,
+  });
   const groupsForCurrentClass = useMemo(
     () => sortByName(groups.filter((group) => group.classId === currentClassId)),
     [groups, currentClassId],
@@ -454,8 +497,8 @@ export function SchoolAdminDemo() {
     groupsForCurrentClass[0];
   const currentGroupId = currentGroup?.id ?? "";
   const paymentMonths = useMemo(
-    () => getMonthsInRange(paymentSettings.startMonth, paymentSettings.endMonth),
-    [paymentSettings.startMonth, paymentSettings.endMonth],
+    () => getConfiguredPaymentMonths(paymentSettings),
+    [paymentSettings],
   );
 
   const classesWithStats = useMemo(
@@ -566,6 +609,15 @@ export function SchoolAdminDemo() {
     () => summarizePaymentRows(allPaymentRows),
     [allPaymentRows],
   );
+  const schoolUpcomingBalance = useMemo(
+    () =>
+      allPaymentRows.reduce(
+        (total, row) =>
+          total + getStudentUpcomingBalance(row.ledger, row.record),
+        0,
+      ),
+    [allPaymentRows],
+  );
   const miscellaneousPaymentRows = useMemo(
     () =>
       allPaymentRows
@@ -588,13 +640,19 @@ export function SchoolAdminDemo() {
                 student: row.student,
                 payment: {
                   amount: allocation.amount,
+                  effectivePaymentDate: payment
+                    ? paymentEffectiveDate(payment)
+                    : charge.createdAt.slice(0, 10),
                   paidAt: payment
-                    ? paidOnToIso(payment.paidOn)
+                    ? paidOnToIso(paymentEffectiveDate(payment))
                     : charge.createdAt,
-                  paidDay: payment ? Number(payment.paidOn.slice(8, 10)) : 0,
+                  paidDay: payment
+                    ? Number(paymentEffectiveDate(payment).slice(8, 10))
+                    : 0,
                   method: payment?.method,
-                  reference: payment?.reference,
                   description: charge.description,
+                  recordedAt: payment?.recordedAt ?? charge.createdAt,
+                  recordedBy: payment?.recordedBy ?? "Registo antigo",
                 },
               },
             ];
@@ -648,13 +706,10 @@ export function SchoolAdminDemo() {
 
     return total + (month?.balance ?? 0);
   }, 0);
-  const selectedMonthCarryOut = paymentRows.reduce((total, row) => {
-    const month = row.ledger.monthly.find(
-      (item) => item.month.key === billingMonthKey,
-    );
-
-    return total + (month?.carryOut ?? 0);
-  }, 0);
+  const selectedUnallocatedCredit = paymentRows.reduce(
+    (total, row) => total + row.ledger.totals.carry,
+    0,
+  );
   const dashboardSummary = useMemo(() => {
     const monthRevenue = allPaymentRows.reduce((total, row) => {
       const month = row.ledger.monthly.find(
@@ -1182,7 +1237,10 @@ export function SchoolAdminDemo() {
       const ledger = student
         ? buildLedger(student, record, paymentMonths, paymentSettings)
         : undefined;
-      const registrationPending = (ledger?.registrationBalance ?? 0) > 0;
+      const registrationOutstanding =
+        (ledger?.registrationBalance ?? 0) +
+        (ledger?.registrationFine ?? 0);
+      const registrationPending = registrationOutstanding > 0;
 
       setPaymentDraft((draft) => ({
         ...draft,
@@ -1192,10 +1250,11 @@ export function SchoolAdminDemo() {
           ? getStudentTuitionStartMonth(student, paymentSettings)
           : draft.monthKey,
         amount: registrationPending
-          ? String(ledger?.registrationBalance ?? paymentSettings.inscriptionRenewalFee)
+          ? String(registrationOutstanding)
           : draft.amount,
         targetChargeId: "",
-        paidOn: today(),
+        effectivePaymentDate: today(),
+        allowAdvancePayment: false,
       }));
     }
   }
@@ -1220,8 +1279,8 @@ export function SchoolAdminDemo() {
       monthKey: draft.monthKey ?? currentDraft.monthKey,
       targetChargeId: draft.targetChargeId ?? "",
       amount: draft.amount ?? currentDraft.amount,
-      paidOn: today(),
-      reference: "",
+      effectivePaymentDate: today(),
+      allowAdvancePayment: false,
       description: draft.description ?? "",
     }));
   }
@@ -1346,6 +1405,7 @@ export function SchoolAdminDemo() {
       id: selectedDefinition.id,
       name: selectedDefinition.name,
       stage: stageLabel(academicStages, selectedDefinition.stageId),
+      stageId: selectedDefinition.stageId,
       academicYear: currentAcademicYear(),
       status: classDraft.status,
       createdAt: today(),
@@ -1427,6 +1487,13 @@ export function SchoolAdminDemo() {
       },
       nowIso(),
     );
+    const selectedClassDefinition = classDefinitions.find(
+      (definition) => definition.id === selectedGroup.classId,
+    );
+    const educationLevelId = selectedClassDefinition?.stageId;
+    const enrollmentRule = paymentRuleForStudent(paymentSettings, {
+      educationLevelId,
+    });
 
     const newStudent: Student = {
       id: nextId(students, "ALU"),
@@ -1436,13 +1503,16 @@ export function SchoolAdminDemo() {
       guardianPhone: enrollmentDraft.guardianPhone.trim() || "Por registar",
       enrollmentType: enrollmentDraft.enrollmentType,
       enrollmentDate: enrollmentDraft.enrollmentDate || today(),
-      tuitionStartMonth: enrollmentDraft.tuitionStartMonth || paymentSettings.startMonth,
+      tuitionStartMonth: enrollmentDraft.tuitionStartMonth || enrollmentRule.startMonth,
       registrationStatus: "pending",
       financialProfile: enrollmentFinanceProfile,
+      educationLevelId,
       classId: selectedGroup.classId,
       groupId: selectedGroup.id,
       createdAt: enrollmentDraft.enrollmentDate || today(),
     };
+    const registrationDue = calculateRegistrationDue(newStudent, paymentSettings);
+    newStudent.registrationStatus = registrationDue.due === 0 ? "paid" : "pending";
 
     setStudents((items) => [...items, newStudent]);
     setPaymentRecords((items) => [...items, buildPaymentRecord(newStudent.id)]);
@@ -1452,9 +1522,9 @@ export function SchoolAdminDemo() {
       category: "registration",
       monthKey: newStudent.tuitionStartMonth,
       targetChargeId: "",
-      amount: String(paymentSettings.inscriptionRenewalFee),
-      paidOn: today(),
-      reference: "",
+      amount: String(registrationDue.due),
+      effectivePaymentDate: today(),
+      allowAdvancePayment: false,
       description: "",
     }));
     setSelectedClassId(newStudent.classId);
@@ -1532,28 +1602,64 @@ export function SchoolAdminDemo() {
 
   function submitFinanceSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    const nextSettings: PaymentSettings = {
-      academicYear: financeSettingsDraft.academicYear.trim() || "2026",
-      inscriptionRenewalFee: parseMoney(
-        financeSettingsDraft.inscriptionRenewalFee,
+    const updatedAt = nowIso();
+    const version = (paymentSettings.version ?? 1) + 1;
+    const activeLevelIds = new Set(academicStages.map((level) => level.id));
+    const completeLevelDrafts = [
+      ...academicStages.map((level) =>
+        financeSettingsDraft.levelRules.find((rule) => rule.levelId === level.id) ?? {
+          levelId: level.id,
+          levelName: level.name,
+          inscriptionRenewalFee: financeSettingsDraft.inscriptionRenewalFee,
+          monthlyFee: financeSettingsDraft.monthlyFee,
+          startMonth: financeSettingsDraft.startMonth,
+          endMonth: financeSettingsDraft.endMonth,
+          firstPenaltyDay: financeSettingsDraft.firstPenaltyDay,
+          firstPenaltyAmount: financeSettingsDraft.firstPenaltyAmount,
+          secondPenaltyDay: financeSettingsDraft.secondPenaltyDay,
+          secondPenaltyAmount: financeSettingsDraft.secondPenaltyAmount,
+        },
       ),
-      monthlyFee: parseMoney(financeSettingsDraft.monthlyFee),
-      startMonth: financeSettingsDraft.startMonth,
-      endMonth: financeSettingsDraft.endMonth,
-      firstPenaltyDay: Math.max(
-        1,
-        Math.min(31, Number(financeSettingsDraft.firstPenaltyDay) || 1),
+      ...financeSettingsDraft.levelRules.filter(
+        (rule) => !activeLevelIds.has(rule.levelId),
       ),
-      firstPenaltyAmount: parseMoney(financeSettingsDraft.firstPenaltyAmount),
-      secondPenaltyDay: Math.max(
-        1,
-        Math.min(31, Number(financeSettingsDraft.secondPenaltyDay) || 1),
-      ),
-      secondPenaltyAmount: parseMoney(financeSettingsDraft.secondPenaltyAmount),
+    ];
+    const completeDraft: FinanceSettingsDraft = {
+      ...financeSettingsDraft,
+      levelRules: completeLevelDrafts,
     };
 
+    const nextSettings: PaymentSettings = {
+      academicYear: completeDraft.academicYear.trim() || currentAcademicYear(),
+      inscriptionRenewalFee: parseMoney(
+        completeDraft.inscriptionRenewalFee,
+      ),
+      monthlyFee: parseMoney(completeDraft.monthlyFee),
+      startMonth: completeDraft.startMonth,
+      endMonth: completeDraft.endMonth,
+      firstPenaltyDay: Math.max(
+        1,
+        Math.min(31, Number(completeDraft.firstPenaltyDay) || 1),
+      ),
+      firstPenaltyAmount: parseMoney(completeDraft.firstPenaltyAmount),
+      secondPenaltyDay: Math.max(
+        1,
+        Math.min(31, Number(completeDraft.secondPenaltyDay) || 1),
+      ),
+      secondPenaltyAmount: parseMoney(completeDraft.secondPenaltyAmount),
+      levelRules: buildPaymentLevelRules(completeDraft, version, updatedAt),
+      version,
+      updatedAt,
+    };
+    const selectedStudent = students.find(
+      (student) => student.id === paymentDraft.studentId,
+    );
+    const selectedRule = paymentRuleForStudent(nextSettings, selectedStudent);
+
     setPaymentSettings(nextSettings);
+    setFinanceSettingsDraft(
+      buildFinanceSettingsDraft(nextSettings, academicStages),
+    );
     setBillingMonthKey(nextSettings.startMonth);
     setPaymentDraft((draft) => ({
       ...draft,
@@ -1561,9 +1667,9 @@ export function SchoolAdminDemo() {
       targetChargeId: draft.category === "miscellaneous" ? draft.targetChargeId : "",
       amount:
         draft.category === "tuition"
-          ? String(nextSettings.monthlyFee)
+          ? String(selectedRule.monthlyFee)
           : draft.category === "registration"
-            ? String(nextSettings.inscriptionRenewalFee)
+            ? String(selectedRule.inscriptionRenewalFee)
             : draft.amount,
     }));
     setFinanceSettingsNotice("Regras financeiras actualizadas.");
@@ -1598,6 +1704,32 @@ export function SchoolAdminDemo() {
       financeProfileDraft,
       nowIso(),
     );
+    const currentStudent = students.find(
+      (student) => student.id === financeProfileDraft.studentId,
+    );
+    const updatedStudent = currentStudent
+      ? { ...currentStudent, financialProfile: nextProfile }
+      : undefined;
+    const updatedRecord = updatedStudent
+      ? repriceOpenCoreCharges(
+          paymentRecords.find((record) => record.studentId === updatedStudent.id) ??
+            buildPaymentRecord(updatedStudent.id),
+          updatedStudent,
+          paymentMonths,
+          paymentSettings,
+        )
+      : undefined;
+    const updatedRegistrationStatus: Student["registrationStatus"] =
+      updatedStudent && updatedRecord
+        ? buildLedger(
+            updatedStudent,
+            updatedRecord,
+            paymentMonths,
+            paymentSettings,
+          ).registrationBalance === 0
+          ? "paid"
+          : "pending"
+        : "pending";
 
     setStudents((items) =>
       items.map((student) =>
@@ -1605,10 +1737,20 @@ export function SchoolAdminDemo() {
           ? {
               ...student,
               financialProfile: nextProfile,
+              registrationStatus: updatedRegistrationStatus,
             }
           : student,
       ),
     );
+    if (updatedStudent && updatedRecord) {
+      setPaymentRecords((items) =>
+        items.some((record) => record.studentId === updatedStudent.id)
+          ? items.map((record) =>
+              record.studentId === updatedStudent.id ? updatedRecord : record,
+            )
+          : [...items, updatedRecord],
+      );
+    }
     setFinanceProfileDraft((draft) => ({
       ...draft,
       discountPercent: String(nextProfile.discountPercent),
@@ -1652,7 +1794,10 @@ export function SchoolAdminDemo() {
       monthKey: billingMonthKey,
       studentIds: chargedRows.map((row) => row.student.id),
       exemptedStudentIds: exemptedRows.map((row) => row.student.id),
-      amount: paymentSettings.monthlyFee,
+      amount: paymentRuleForStudent(
+        paymentSettings,
+        paymentRows[0]?.student,
+      ).monthlyFee,
       expectedTotal: selectedMonthExpected,
       createdAt: nowIso(),
     };
@@ -1709,10 +1854,11 @@ export function SchoolAdminDemo() {
       monthKey: paymentDraft.monthKey,
       targetChargeId: paymentDraft.targetChargeId,
       amount,
-      paidOn: paymentDraft.paidOn || today(),
+      effectivePaymentDate: paymentDraft.effectivePaymentDate || today(),
       recordedAt: nowIso(),
+      recordedBy: paymentDraft.recordedBy,
       method: paymentDraft.method,
-      reference: paymentDraft.reference.trim(),
+      allowAdvancePayment: paymentDraft.allowAdvancePayment,
       description: paymentDraft.description.trim(),
     });
 
@@ -1744,13 +1890,15 @@ export function SchoolAdminDemo() {
       ...draft,
       amount:
         draft.category === "tuition"
-          ? String(paymentSettings.monthlyFee)
+          ? String(paymentRuleForStudent(paymentSettings, student).monthlyFee)
           : draft.category === "registration"
-            ? String(paymentSettings.inscriptionRenewalFee)
+            ? String(
+                calculateRegistrationDue(student, paymentSettings).due,
+              )
             : "0",
       targetChargeId: "",
-      paidOn: today(),
-      reference: "",
+      effectivePaymentDate: today(),
+      allowAdvancePayment: false,
       description: draft.category === "miscellaneous" ? "" : draft.description,
     }));
   }
@@ -1881,7 +2029,7 @@ export function SchoolAdminDemo() {
                   />
                   <SummaryMini
                     label="Mensalidade"
-                    value={formatCurrency(paymentSettings.monthlyFee)}
+                    value={formatCurrency(currentClassRule.monthlyFee)}
                   />
                 </div>
               </div>
@@ -3011,18 +3159,18 @@ export function SchoolAdminDemo() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {visibleStudents.length > 0 ? (
-                  visibleStudents.map((student, index) => {
+                  visibleStudents.map((student) => {
                     const paymentRow = allPaymentRows.find(
                       (row) => row.student.id === student.id,
                     );
                     const registrationPaid =
                       (paymentRow?.ledger.registrationBalance ??
-                        paymentSettings.inscriptionRenewalFee) === 0;
+                        calculateRegistrationDue(student, paymentSettings).due) === 0;
 
                     return (
                       <tr key={student.id} className="hover:bg-slate-50/80">
                         <td className="px-5 py-4 font-mono text-sm font-semibold">
-                          {String(index + 1).padStart(2, "0")}
+                          {stableStudentNumber(student)}
                         </td>
                         <td className="px-5 py-4">
                           <span className="block font-semibold">
@@ -3153,6 +3301,7 @@ export function SchoolAdminDemo() {
           canEditPaymentRules ? (
             <FinanceSettingsForm
               draft={financeSettingsDraft}
+              levels={activeAcademicStages(academicStages)}
               notice={financeSettingsNotice}
               onChange={(draft) => {
                 setFinanceSettingsNotice("");
@@ -3239,9 +3388,9 @@ export function SchoolAdminDemo() {
                   accent="border-l-[#d08a19]"
                 />
                 <MetricCard
-                  label="Sobra p/ seguinte"
-                  value={formatCurrency(selectedMonthCarryOut)}
-                  supporting="Credito automatico"
+                  label="Crédito não aplicado"
+                  value={formatCurrency(selectedUnallocatedCredit)}
+                  supporting="Antecipação é explícita"
                   accent="border-l-[#0ea5c7]"
                 />
                 <MetricCard
@@ -3363,7 +3512,7 @@ export function SchoolAdminDemo() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {visiblePaymentRows.length > 0 ? (
-                        visiblePaymentRows.map((row, index) => {
+                        visiblePaymentRows.map((row) => {
                           const registrationState = getRegistrationCellState(
                             row.ledger,
                             paymentSettings,
@@ -3372,6 +3521,10 @@ export function SchoolAdminDemo() {
                             row.record,
                           );
                           const debt = getStudentDebt(row.ledger, row.record);
+                          const upcoming = getStudentUpcomingBalance(
+                            row.ledger,
+                            row.record,
+                          );
 
                           return (
                             <tr
@@ -3392,7 +3545,7 @@ export function SchoolAdminDemo() {
                                 />
                               </td>
                               <td className="px-4 py-4 font-mono text-sm font-semibold text-slate-600">
-                                {String(index + 1).padStart(3, "0")}
+                                {stableStudentNumber(row.student)}
                               </td>
                               <td className="px-5 py-4">
                                 <span className="block font-semibold">
@@ -3481,8 +3634,14 @@ export function SchoolAdminDemo() {
                                       studentId: row.student.id,
                                     })
                                   }
-                                  supporting={debt > 0 ? "Em dívida" : "Sem dívida"}
-                                  tone={debt > 0 ? "danger" : "paid"}
+                                  supporting={
+                                    debt > 0
+                                      ? "Dívida vencida"
+                                      : upcoming > 0
+                                        ? `${formatCurrency(upcoming)} a vencer`
+                                        : "Sem dívida"
+                                  }
+                                  tone={debt > 0 ? "danger" : upcoming > 0 ? "info" : "paid"}
                                   title={`Ver dívida de ${row.student.fullName}`}
                                 />
                               </td>
@@ -3527,7 +3686,7 @@ export function SchoolAdminDemo() {
 
         {currentPaymentSection?.id === "reports" && renderReports()}
 
-        <FinanceCellDetailPanel
+        <FinanceCellDialog
           canManagePayments={selectedProfile.id === "secretaria"}
           months={paymentMonths}
           row={selectedFinanceRow}
@@ -3544,7 +3703,7 @@ export function SchoolAdminDemo() {
   function renderReports() {
     return (
       <div className="grid gap-6">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
           <MetricCard
             label="Previsto"
             value={formatCurrency(schoolPaymentSummary.expected)}
@@ -3564,16 +3723,22 @@ export function SchoolAdminDemo() {
             accent="border-l-[#8b5cf6]"
           />
           <MetricCard
-            label="Em falta"
-            value={formatCurrency(schoolPaymentSummary.balance)}
-            supporting="Saldo global"
+            label="Dívida vencida"
+            value={formatCurrency(dashboardSummary.totalDebt)}
+            supporting="Exclui valores futuros"
             accent="border-l-[#d08a19]"
+          />
+          <MetricCard
+            label="A vencer"
+            value={formatCurrency(schoolUpcomingBalance)}
+            supporting="Ainda dentro do prazo"
+            accent="border-l-[#0ea5c7]"
           />
           <MetricCard
             label="Diversos"
             value={formatCurrency(schoolPaymentSummary.miscellaneous)}
             supporting="Pagamentos extras"
-            accent="border-l-[#0ea5c7]"
+            accent="border-l-[#64748b]"
           />
         </div>
 
@@ -3674,8 +3839,8 @@ export function SchoolAdminDemo() {
                   <th className="px-5 py-3 font-semibold">Descrição</th>
                   <th className="px-5 py-3 font-semibold">Valor</th>
                   <th className="px-5 py-3 font-semibold">Forma</th>
-                  <th className="px-5 py-3 font-semibold">Referência</th>
-                  <th className="px-5 py-3 font-semibold">Data</th>
+                  <th className="px-5 py-3 font-semibold">Data efectiva</th>
+                  <th className="px-5 py-3 font-semibold">Registado em</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -3703,10 +3868,10 @@ export function SchoolAdminDemo() {
                         {payment.method ?? "Sem forma"}
                       </td>
                       <td className="px-5 py-4 text-slate-700">
-                        {payment.reference || "Sem referencia"}
+                        {formatDate(payment.effectivePaymentDate)}
                       </td>
                       <td className="px-5 py-4 text-slate-700">
-                        {formatDateTime(payment.paidAt)}
+                        {formatDateTime(payment.recordedAt)} · {payment.recordedBy}
                       </td>
                     </tr>
                   ))

@@ -18,10 +18,32 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans-stack);
+  min-width: 320px;
+}
+
+html,
+body {
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 * {
   box-sizing: border-box;
+}
+
+main,
+section,
+article,
+aside,
+form,
+header,
+nav {
+  min-width: 0;
+}
+
+img,
+svg {
+  max-width: 100%;
 }
 
 button,
@@ -36,6 +58,10 @@ input:focus-visible,
 select:focus-visible {
   outline: 3px solid #99c7ff;
   outline-offset: 2px;
+}
+
+dialog:focus-visible {
+  outline: none;
 }
 
 .table-scroll {
@@ -58,8 +84,17 @@ select:focus-visible {
 
 @media (max-width: 640px) {
   .table-scroll {
-    margin-inline: -1rem;
-    max-width: calc(100% + 2rem);
-    padding-inline: 1rem;
+    margin-inline: 0;
+    max-width: 100%;
+    padding-inline: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
   }
 }

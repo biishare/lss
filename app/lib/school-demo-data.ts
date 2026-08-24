@@ -39,6 +39,7 @@ export type SchoolClass = {
   id: string;
   name: string;
   stage: string;
+  stageId?: string;
   academicYear: string;
   status: EntityStatus;
   createdAt: string;
@@ -98,6 +99,7 @@ export type Student = {
   tuitionStartMonth: string;
   registrationStatus: RegistrationStatus;
   financialProfile: StudentFinancialProfile;
+  educationLevelId?: string;
   classId: string;
   groupId: string;
   createdAt: string;
@@ -109,6 +111,24 @@ export type MonthOption = {
   shortLabel: string;
 };
 
+export type PaymentRuleSnapshot = {
+  academicYear: string;
+  levelId: string;
+  levelName: string;
+  inscriptionRenewalFee: number;
+  monthlyFee: number;
+  startMonth: string;
+  endMonth: string;
+  firstPenaltyDay: number;
+  firstPenaltyAmount: number;
+  secondPenaltyDay: number;
+  secondPenaltyAmount: number;
+  version: number;
+  updatedAt: string;
+};
+
+export type PaymentLevelRule = PaymentRuleSnapshot;
+
 export type PaymentSettings = {
   academicYear: string;
   inscriptionRenewalFee: number;
@@ -119,6 +139,9 @@ export type PaymentSettings = {
   firstPenaltyAmount: number;
   secondPenaltyDay: number;
   secondPenaltyAmount: number;
+  levelRules?: PaymentLevelRule[];
+  version?: number;
+  updatedAt?: string;
 };
 
 export type PaymentEntry = {
@@ -141,14 +164,17 @@ export type Charge = {
   monthKey?: string;
   dueOn?: string;
   createdAt: string;
+  ruleSnapshot?: PaymentRuleSnapshot;
 };
 
 export type Payment = {
   id: string;
   studentId: string;
   amount: number;
+  effectivePaymentDate?: string;
   paidOn: string;
   recordedAt: string;
+  recordedBy?: string;
   method: string;
   reference?: string;
   observation?: string;
@@ -196,6 +222,9 @@ export const initialPaymentSettings: PaymentSettings = {
   firstPenaltyAmount: 100,
   secondPenaltyDay: 20,
   secondPenaltyAmount: 250,
+  levelRules: [],
+  version: 1,
+  updatedAt: "2026-01-01T00:00:00.000Z",
 };
 
 export const initialAcademicStages: AcademicStageDefinition[] = [];

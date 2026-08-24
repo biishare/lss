@@ -1,4 +1,4 @@
-import type { FormEvent, ReactNode } from "react";
+import { useEffect, useId, useRef, type FormEvent, type ReactNode } from "react";
 import {
   monthOptions,
   type AcademicStageDefinition,
@@ -17,8 +17,8 @@ import {
   activeAcademicStages,
   buttonBase,
   calculateMonthlyDue,
+  calculateRegistrationDue,
   cx,
-  dueDateForMonth,
   financeStatusLabel,
   financeStatusOptions,
   firstPenaltyDateForMonth,
@@ -31,12 +31,14 @@ import {
   getMonthCellState,
   getPaymentsForCharges,
   getRegistrationCellState,
+  getStudentUpcomingBalance,
   getStudentTuitionStartMonth,
   getTuitionInstallmentNumber,
   inputClasses,
   monthByKey,
   monthLabel,
   parseMoney,
+  paymentRuleForStudent,
   paymentCategories,
   paymentMethods,
   profiles,
@@ -73,7 +75,7 @@ export function ProfileCard({
       type="button"
       onClick={() => onOpen()}
       className={cx(
-        "group flex min-h-36 flex-col items-start rounded-lg border border-slate-200 border-t-4 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md",
+        "group flex min-h-36 w-full min-w-0 flex-col items-start rounded-lg border border-slate-200 border-t-4 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md",
         profile.accent,
       )}
     >
@@ -235,7 +237,7 @@ export function FinanceCell({
     neutral: "bg-slate-100 text-slate-700 ring-slate-200",
   };
   const classes = cx(
-    "inline-flex min-h-10 min-w-24 flex-col justify-center rounded-md px-2.5 py-1.5 text-left text-xs font-semibold leading-tight ring-1",
+    "inline-flex min-h-10 min-w-20 max-w-28 flex-col justify-center rounded-md px-2.5 py-1.5 text-left text-xs font-semibold leading-tight ring-1",
     onClick &&
       "transition hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#185c54] focus:ring-offset-2",
     toneClasses[tone],
@@ -280,9 +282,11 @@ export function SummaryMini({ label, value }: { label: string; value: string }) 
 
 export function SummaryLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-md bg-slate-50 px-4 py-3">
+    <div className="grid min-w-0 gap-1 rounded-md bg-slate-50 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] sm:items-center sm:gap-4">
       <span className="text-sm font-semibold text-slate-500">{label}</span>
-      <strong className="text-sm text-slate-950">{value}</strong>
+      <strong className="min-w-0 break-words text-sm text-slate-950 sm:text-right">
+        {value}
+      </strong>
     </div>
   );
 }
@@ -301,14 +305,16 @@ export function MetricCard({
   return (
     <article
       className={cx(
-        "rounded-lg border border-slate-200 border-l-4 bg-white p-5 shadow-sm",
+        "min-w-0 rounded-lg border border-slate-200 border-l-4 bg-white p-4 shadow-sm sm:p-5",
         accent,
       )}
     >
       <p className="text-sm font-semibold text-slate-500">{label}</p>
       <div className="mt-3 grid gap-3">
-        <strong className="text-3xl font-bold text-slate-950">{value}</strong>
-        <span className="w-fit rounded-md bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600">
+        <strong className="min-w-0 break-words text-2xl font-bold text-slate-950 sm:text-3xl">
+          {value}
+        </strong>
+        <span className="max-w-full break-words rounded-md bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600 sm:w-fit">
           {supporting}
         </span>
       </div>
@@ -331,7 +337,7 @@ export function FlowStep({
     <button
       type="button"
       onClick={() => onClick()}
-      className="min-h-24 rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-[#88c9bb] hover:bg-[#f0fbf8]"
+      className="min-h-24 min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-[#88c9bb] hover:bg-[#f0fbf8]"
     >
       <span className="font-mono text-sm font-bold text-[#185c54]">
         {number}
@@ -352,7 +358,7 @@ export function FieldLabel({
   children: ReactNode;
 }) {
   return (
-    <label className="grid gap-2 text-sm font-semibold text-slate-700">
+    <label className="grid min-w-0 gap-2 text-sm font-semibold text-slate-700">
       <span>{label}</span>
       {children}
     </label>
@@ -964,24 +970,59 @@ export function EnrollmentForm({
 
 export function FinanceSettingsForm({
   draft,
+  levels,
   notice,
   onChange,
   onSubmit,
 }: {
   draft: FinanceSettingsDraft;
+  levels: AcademicStageDefinition[];
   notice: string;
   onChange: (draft: FinanceSettingsDraft) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const ruleForLevel = (level: AcademicStageDefinition) =>
+    draft.levelRules.find((rule) => rule.levelId === level.id) ?? {
+      levelId: level.id,
+      levelName: level.name,
+      inscriptionRenewalFee: draft.inscriptionRenewalFee,
+      monthlyFee: draft.monthlyFee,
+      startMonth: draft.startMonth,
+      endMonth: draft.endMonth,
+      firstPenaltyDay: draft.firstPenaltyDay,
+      firstPenaltyAmount: draft.firstPenaltyAmount,
+      secondPenaltyDay: draft.secondPenaltyDay,
+      secondPenaltyAmount: draft.secondPenaltyAmount,
+    };
+  const updateLevelRule = (
+    level: AcademicStageDefinition,
+    field: keyof ReturnType<typeof ruleForLevel>,
+    value: string,
+  ) => {
+    const nextRule = {
+      ...ruleForLevel(level),
+      levelName: level.name,
+      [field]: value,
+    };
+
+    onChange({
+      ...draft,
+      levelRules: [
+        ...draft.levelRules.filter((rule) => rule.levelId !== level.id),
+        nextRule,
+      ],
+    });
+  };
+
   return (
     <form
       onSubmit={onSubmit}
       className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
     >
       <div>
-        <h3 className="text-base font-semibold">Dados de pagamentos</h3>
+        <h3 className="text-base font-semibold">Regras de pagamentos</h3>
         <p className="text-sm text-slate-500">
-          Período de cobrança, valores e multas por atraso.
+          A regra geral serve de fallback; os valores abaixo podem variar por nível.
         </p>
       </div>
 
@@ -1111,6 +1152,121 @@ export function FinanceSettingsForm({
         </FieldLabel>
       </div>
 
+      <section className="mt-6 min-w-0 border-t border-slate-200 pt-5">
+        <div>
+          <h4 className="text-sm font-bold text-slate-950">Tabela por nível</h4>
+          <p className="mt-1 text-sm text-slate-500">
+            Cada linha guarda a sua versão e não altera cobranças já geradas.
+          </p>
+        </div>
+
+        {levels.length > 0 ? (
+          <div className="table-scroll mt-4 rounded-lg border border-slate-200">
+            <table className="min-w-[1280px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-3 py-3 font-semibold">Nível</th>
+                  <th className="px-3 py-3 font-semibold">Inscrição</th>
+                  <th className="px-3 py-3 font-semibold">Mensalidade</th>
+                  <th className="px-3 py-3 font-semibold">Início</th>
+                  <th className="px-3 py-3 font-semibold">Fim</th>
+                  <th className="px-3 py-3 font-semibold">1ª após dia</th>
+                  <th className="px-3 py-3 font-semibold">1ª multa</th>
+                  <th className="px-3 py-3 font-semibold">2ª após dia</th>
+                  <th className="px-3 py-3 font-semibold">2ª multa total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {levels.map((level) => {
+                  const rule = ruleForLevel(level);
+                  const compactInput = cx(inputClasses(), "min-w-24 px-2");
+
+                  return (
+                    <tr key={level.id}>
+                      <th className="px-3 py-3 font-semibold text-slate-900">
+                        {level.name}
+                      </th>
+                      <td className="px-2 py-2">
+                        <input
+                          aria-label={`Inscrição de ${level.name}`}
+                          className={compactInput}
+                          min="0"
+                          type="number"
+                          value={rule.inscriptionRenewalFee}
+                          onChange={(event) =>
+                            updateLevelRule(
+                              level,
+                              "inscriptionRenewalFee",
+                              event.target.value,
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="px-2 py-2">
+                        <input
+                          aria-label={`Mensalidade de ${level.name}`}
+                          className={compactInput}
+                          min="0"
+                          type="number"
+                          value={rule.monthlyFee}
+                          onChange={(event) =>
+                            updateLevelRule(level, "monthlyFee", event.target.value)
+                          }
+                        />
+                      </td>
+                      {(["startMonth", "endMonth"] as const).map((field) => (
+                        <td key={field} className="px-2 py-2">
+                          <select
+                            aria-label={`${field === "startMonth" ? "Início" : "Fim"} de ${level.name}`}
+                            className={compactInput}
+                            value={rule[field]}
+                            onChange={(event) =>
+                              updateLevelRule(level, field, event.target.value)
+                            }
+                          >
+                            {monthOptions.map((month) => (
+                              <option key={month.key} value={month.key}>
+                                {month.shortLabel}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      ))}
+                      {(
+                        [
+                          "firstPenaltyDay",
+                          "firstPenaltyAmount",
+                          "secondPenaltyDay",
+                          "secondPenaltyAmount",
+                        ] as const
+                      ).map((field) => (
+                        <td key={field} className="px-2 py-2">
+                          <input
+                            aria-label={`${field} de ${level.name}`}
+                            className={compactInput}
+                            min={field.includes("Day") ? "1" : "0"}
+                            max={field.includes("Day") ? "31" : undefined}
+                            type="number"
+                            value={rule[field]}
+                            onChange={(event) =>
+                              updateLevelRule(level, field, event.target.value)
+                            }
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="mt-4 rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-600">
+            Crie níveis de ensino no catálogo para configurar valores diferentes.
+          </p>
+        )}
+      </section>
+
       <div className="mt-5 flex flex-wrap gap-2">
         <PrimaryButton type="submit">Guardar regras</PrimaryButton>
       </div>
@@ -1125,6 +1281,8 @@ export function FinanceSettingsForm({
 }
 
 export function PaymentSettingsSummary({ settings }: { settings: PaymentSettings }) {
+  const levelRules = settings.levelRules ?? [];
+
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div>
@@ -1154,9 +1312,41 @@ export function PaymentSettingsSummary({ settings }: { settings: PaymentSettings
         />
         <SummaryLine
           label="2a multa"
-          value={`Dia ${settings.secondPenaltyDay} / ${formatCurrency(settings.secondPenaltyAmount)}`}
+          value={`Dia ${settings.secondPenaltyDay} / total ${formatCurrency(settings.secondPenaltyAmount)}`}
         />
+        <SummaryLine label="Versão" value={`v${settings.version ?? 1}`} />
       </div>
+
+      {levelRules.length > 0 && (
+        <div className="table-scroll mt-5 rounded-lg border border-slate-200">
+          <table className="min-w-[760px] text-left text-sm">
+            <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3 font-semibold">Nível</th>
+                <th className="px-4 py-3 font-semibold">Inscrição</th>
+                <th className="px-4 py-3 font-semibold">Mensalidade</th>
+                <th className="px-4 py-3 font-semibold">Período</th>
+                <th className="px-4 py-3 font-semibold">Versão</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {levelRules.map((rule) => (
+                <tr key={`${rule.academicYear}-${rule.levelId}`}>
+                  <td className="px-4 py-3 font-semibold">{rule.levelName}</td>
+                  <td className="px-4 py-3">
+                    {formatCurrency(rule.inscriptionRenewalFee)}
+                  </td>
+                  <td className="px-4 py-3">{formatCurrency(rule.monthlyFee)}</td>
+                  <td className="px-4 py-3">
+                    {monthLabel(rule.startMonth)}–{monthLabel(rule.endMonth)}
+                  </td>
+                  <td className="px-4 py-3">v{rule.version}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </section>
   );
 }
@@ -1418,22 +1608,37 @@ export function PaymentForm({
   onChange: (draft: PaymentLaunchDraft) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const selectedRule = paymentRuleForStudent(settings, selectedStudent);
   const selectedMonth = monthByKey(draft.monthKey) ?? months[0];
+  const selectedMonthNumber = monthOptions.findIndex(
+    (month) => month.key === draft.monthKey,
+  );
+  const selectedMonthPeriod =
+    selectedMonthNumber >= 0
+      ? `${selectedRule.academicYear}-${String(selectedMonthNumber + 1).padStart(2, "0")}`
+      : "";
+  const futureMonthBlocked =
+    draft.category === "tuition" &&
+    selectedMonthPeriod > draft.effectivePaymentDate.slice(0, 7) &&
+    !draft.allowAdvancePayment;
   const suggestedMonthlyFee =
     selectedStudent && selectedMonth
       ? calculateMonthlyDue(selectedStudent, selectedMonth, settings)
-      : { due: settings.monthlyFee, discount: 0, ruleLabel: "Regular" };
+      : { due: selectedRule.monthlyFee, discount: 0, ruleLabel: "Regular" };
   const selectedMonthLedger = selectedRow?.ledger.monthly.find(
     (item) => item.month.key === draft.monthKey,
   );
   const receivedAmount = parseMoney(draft.amount);
-  const monthBalance = selectedMonthLedger?.balance ?? suggestedMonthlyFee.due;
+  const monthBalance = selectedMonthLedger
+    ? selectedMonthLedger.balance + selectedMonthLedger.fine
+    : suggestedMonthlyFee.due;
   const appliedToMonth =
     draft.category === "tuition" ? Math.min(receivedAmount, monthBalance) : 0;
   const surplusForNextMonths =
     draft.category === "tuition" ? Math.max(0, receivedAmount - appliedToMonth) : 0;
-  const registrationBalance =
-    selectedRow?.ledger.registrationBalance ?? settings.inscriptionRenewalFee;
+  const registrationBalance = selectedRow
+    ? selectedRow.ledger.registrationBalance + selectedRow.ledger.registrationFine
+    : selectedRule.inscriptionRenewalFee;
   const appliedToRegistration =
     draft.category === "registration"
       ? Math.min(receivedAmount, registrationBalance)
@@ -1471,9 +1676,9 @@ export function PaymentForm({
       </div>
 
       {draft.category !== "miscellaneous" && (
-        <div className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-100">
-          Qualquer valor recebido acima do saldo devido fica como credito para
-          as mensalidades seguintes.
+        <div className="mt-4 rounded-md bg-sky-50 px-3 py-2 text-sm font-semibold text-sky-900 ring-1 ring-sky-100">
+          O valor liquida primeiro o item seleccionado e a sua multa, depois
+          outras dívidas vencidas. Meses futuros exigem pagamento antecipado.
         </div>
       )}
 
@@ -1488,12 +1693,21 @@ export function PaymentForm({
               const nextFee =
                 nextStudent && selectedMonth
                   ? calculateMonthlyDue(nextStudent, selectedMonth, settings).due
-                  : settings.monthlyFee;
+                  : paymentRuleForStudent(settings, nextStudent).monthlyFee;
+              const nextRegistrationDue = nextStudent
+                ? calculateRegistrationDue(nextStudent, settings).due
+                : paymentRuleForStudent(settings, nextStudent)
+                    .inscriptionRenewalFee;
 
               onChange({
                 ...draft,
                 studentId: event.target.value,
-                amount: draft.category === "tuition" ? String(nextFee) : draft.amount,
+                amount:
+                  draft.category === "tuition"
+                    ? String(nextFee)
+                    : draft.category === "registration"
+                      ? String(nextRegistrationDue)
+                      : draft.amount,
               });
             }}
             className={inputClasses()}
@@ -1520,11 +1734,12 @@ export function PaymentForm({
                 ...draft,
                 category,
                 targetChargeId: "",
+                allowAdvancePayment: false,
                 amount:
                   category === "tuition"
                     ? String(suggestedMonthlyFee.due)
                     : category === "registration"
-                      ? String(settings.inscriptionRenewalFee)
+                      ? String(registrationBalance)
                       : "0",
               });
             }}
@@ -1546,12 +1761,21 @@ export function PaymentForm({
               const nextFee =
                 selectedStudent && month
                   ? calculateMonthlyDue(selectedStudent, month, settings).due
-                  : settings.monthlyFee;
+                  : selectedRule.monthlyFee;
+              const nextLedger = selectedRow?.ledger.monthly.find(
+                (item) => item.month.key === event.target.value,
+              );
+              const nextOutstanding = nextLedger
+                ? nextLedger.balance + nextLedger.fine
+                : nextFee;
 
               onChange({
                 ...draft,
                 monthKey: event.target.value,
-                amount: draft.category === "tuition" ? String(nextFee) : draft.amount,
+                amount:
+                  draft.category === "tuition"
+                    ? String(nextOutstanding)
+                    : draft.amount,
               });
             }}
             className={inputClasses()}
@@ -1628,13 +1852,14 @@ export function PaymentForm({
           />
         </FieldLabel>
 
-        <FieldLabel label="Data do pagamento">
+        <FieldLabel label="Data efectiva do pagamento (no comprovativo)">
           <input
-            value={draft.paidOn}
+            value={draft.effectivePaymentDate}
             onChange={(event) =>
-              onChange({ ...draft, paidOn: event.target.value })
+              onChange({ ...draft, effectivePaymentDate: event.target.value })
             }
             className={inputClasses()}
+            required
             type="date"
           />
         </FieldLabel>
@@ -1651,16 +1876,36 @@ export function PaymentForm({
           </select>
         </FieldLabel>
 
-        <FieldLabel label="Referência">
-          <input
-            value={draft.reference}
-            onChange={(event) =>
-              onChange({ ...draft, reference: event.target.value })
-            }
-            className={inputClasses()}
-            placeholder="Opcional"
-          />
-        </FieldLabel>
+        {draft.category !== "miscellaneous" && (
+          <label className="flex min-w-0 items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <input
+              type="checkbox"
+              checked={draft.allowAdvancePayment}
+              onChange={(event) =>
+                onChange({
+                  ...draft,
+                  allowAdvancePayment: event.target.checked,
+                })
+              }
+              className="mt-0.5 size-4 rounded border-slate-300 text-[#185c54]"
+            />
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-slate-900">
+                Pagamento antecipado
+              </span>
+              <span className="mt-1 block text-xs leading-5 text-slate-500">
+                Autoriza aplicar a sobra em mensalidades futuras. Sem esta opção,
+                a sobra fica como crédito não aplicado.
+              </span>
+            </span>
+          </label>
+        )}
+        {futureMonthBlocked && (
+          <p className="rounded-md bg-amber-50 px-3 py-3 text-sm font-semibold text-amber-900 ring-1 ring-amber-100">
+            Este mês é futuro em relação à data efectiva. Active “Pagamento
+            antecipado” para continuar.
+          </p>
+        )}
       </div>
 
       <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
@@ -1676,7 +1921,11 @@ export function PaymentForm({
               value={formatCurrency(appliedToMonth)}
             />
             <SummaryLine
-              label="Sobra para meses seguintes"
+              label={
+                draft.allowAdvancePayment
+                  ? "Antecipado para meses seguintes"
+                  : "Crédito não aplicado"
+              }
               value={formatCurrency(surplusForNextMonths)}
             />
           </>
@@ -1688,7 +1937,11 @@ export function PaymentForm({
               value={formatCurrency(appliedToRegistration)}
             />
             <SummaryLine
-              label="Sobra para mensalidades"
+              label={
+                draft.allowAdvancePayment
+                  ? "Antecipado para mensalidades"
+                  : "Crédito não aplicado"
+              }
               value={formatCurrency(registrationSurplus)}
             />
           </>
@@ -1705,16 +1958,28 @@ export function PaymentForm({
             />
           </>
         )}
-        <SummaryLine label="Pagamento em" value={formatDate(draft.paidOn)} />
+        <SummaryLine
+          label="Data efectiva"
+          value={formatDate(draft.effectivePaymentDate)}
+        />
         <SummaryLine
           label="Registado em"
           value={formatDateTime(new Date().toISOString())}
         />
+        <SummaryLine label="Registado por" value={draft.recordedBy} />
         <SummaryLine label="Valor" value={formatCurrency(parseMoney(draft.amount))} />
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2">
-        <PrimaryButton type="submit" disabled={!draft.studentId || receivedAmount <= 0}>
+        <PrimaryButton
+          type="submit"
+          disabled={
+            !draft.studentId ||
+            !draft.effectivePaymentDate ||
+            receivedAmount <= 0 ||
+            futureMonthBlocked
+          }
+        >
           Confirmar pagamento
         </PrimaryButton>
       </div>
@@ -1724,9 +1989,9 @@ export function PaymentForm({
 
 function DetailLine({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-3 last:border-b-0">
+    <div className="grid min-w-0 gap-1 border-b border-slate-100 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] sm:gap-4">
       <span className="text-sm font-semibold text-slate-500">{label}</span>
-      <span className="max-w-[65%] text-right text-sm font-semibold text-slate-900">
+      <span className="min-w-0 break-words text-sm font-semibold text-slate-900 sm:text-right">
         {value}
       </span>
     </div>
@@ -1754,12 +2019,12 @@ function HistoryList({ items }: { items: ReturnType<typeof getPaymentsForCharges
               {formatCurrency(item.amount)}
             </strong>
             <span className="text-xs font-semibold text-slate-500">
-              {formatDate(item.paidOn)}
+              Efectivo em {formatDate(item.effectivePaymentDate)}
             </span>
           </div>
-          <p className="mt-1 text-slate-600">
-            {item.method}
-            {item.reference ? ` · ${item.reference}` : ""}
+          <p className="mt-1 text-slate-600">{item.method}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Registado por {item.recordedBy} em {formatDateTime(item.recordedAt)}
           </p>
         </div>
       ))}
@@ -1767,7 +2032,7 @@ function HistoryList({ items }: { items: ReturnType<typeof getPaymentsForCharges
   );
 }
 
-export function FinanceCellDetailPanel({
+export function FinanceCellDialog({
   canManagePayments,
   months,
   onClose,
@@ -1791,6 +2056,44 @@ export function FinanceCellDetailPanel({
   selection: FinanceCellSelection | null;
   settings: PaymentSettings;
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+
+    if (!selection || !row || !dialog) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    returnFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    document.body.style.overflow = "hidden";
+
+    if (!dialog.open) {
+      dialog.showModal();
+    }
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (dialog.open) {
+        dialog.close();
+      }
+      window.requestAnimationFrame(() => returnFocusRef.current?.focus());
+    };
+  }, [row, selection]);
+
+  const closeDialog = () => {
+    if (dialogRef.current?.open) {
+      dialogRef.current.close();
+    }
+    onClose();
+  };
+
   if (!selection || !row) {
     return null;
   }
@@ -1802,6 +2105,9 @@ export function FinanceCellDetailPanel({
       studentId: string;
     },
   ) => {
+    if (dialogRef.current?.open) {
+      dialogRef.current.close();
+    }
     onRegisterPayment(draft);
   };
   let title = "Detalhes";
@@ -1813,6 +2119,7 @@ export function FinanceCellDetailPanel({
   if (selection.kind === "registration") {
     const status = getRegistrationCellState(row.ledger, settings);
     const balance = row.ledger.registrationBalance;
+    const outstanding = balance + row.ledger.registrationFine;
 
     title = "Detalhes da inscrição";
     subtitle = `${student.fullName} · ${student.registrationNumber}`;
@@ -1821,15 +2128,33 @@ export function FinanceCellDetailPanel({
       <>
         <DetailLine label="Estado" value={status.label} />
         <DetailLine
-          label="Valor"
-          value={formatCurrency(settings.inscriptionRenewalFee)}
+          label="Valor normal"
+          value={formatCurrency(
+            row.ledger.registrationDue + row.ledger.registrationDiscount,
+          )}
+        />
+        <DetailLine
+          label="Desconto"
+          value={formatCurrency(row.ledger.registrationDiscount)}
         />
         <DetailLine
           label="Pago"
-          value={formatCurrency(settings.inscriptionRenewalFee - balance)}
+          value={formatCurrency(row.ledger.registrationPaid)}
         />
         <DetailLine label="Saldo" value={formatCurrency(balance)} />
-        <DetailLine label="Multa" value={formatCurrency(row.ledger.registrationFine)} />
+        <DetailLine
+          label="Multa aplicada"
+          value={formatCurrency(row.ledger.registrationAssessedFine)}
+        />
+        <DetailLine
+          label="Multa paga"
+          value={formatCurrency(row.ledger.registrationFinePaid)}
+        />
+        <DetailLine
+          label="Multa por pagar"
+          value={formatCurrency(row.ledger.registrationFine)}
+        />
+        <DetailLine label="Regra" value={row.ledger.registrationRuleLabel} />
         <DetailLine
           label="Matrícula"
           value={formatDate(student.enrollmentDate)}
@@ -1837,14 +2162,14 @@ export function FinanceCellDetailPanel({
       </>
     );
 
-    if (canManagePayments && balance > 0) {
+    if (canManagePayments && outstanding > 0) {
       action = (
         <PrimaryButton
           onClick={() =>
             paymentAction({
               studentId: student.id,
               category: "registration",
-              amount: String(balance),
+              amount: String(outstanding),
               monthKey: getStudentTuitionStartMonth(student, settings),
             })
           }
@@ -1866,6 +2191,7 @@ export function FinanceCellDetailPanel({
       months,
       settings,
     );
+    const paymentRule = paymentRuleForStudent(settings, student);
 
     title = "Detalhes da mensalidade";
     subtitle = `${student.fullName} · ${
@@ -1885,20 +2211,25 @@ export function FinanceCellDetailPanel({
           <DetailLine label="Desconto" value={formatCurrency(month.discount)} />
           <DetailLine label="Valor devido" value={formatCurrency(month.due)} />
           <DetailLine label="Pago" value={formatCurrency(month.paid)} />
-          <DetailLine label="Multa" value={formatCurrency(month.fine)} />
+          <DetailLine
+            label="Multa aplicada"
+            value={formatCurrency(month.assessedFine)}
+          />
+          <DetailLine label="Multa paga" value={formatCurrency(month.finePaid)} />
+          <DetailLine label="Multa por pagar" value={formatCurrency(month.fine)} />
           <DetailLine label="Saldo" value={formatCurrency(month.balance)} />
           <DetailLine label="Regra" value={month.ruleLabel} />
           <DetailLine
             label="Vencimento"
-            value={formatDate(dueDateForMonth(month.month.key, settings))}
+            value={formatDate(month.dueOn)}
           />
           <DetailLine
             label="1ª multa"
-            value={formatDate(firstPenaltyDateForMonth(month.month.key, settings))}
+            value={formatDate(firstPenaltyDateForMonth(month.month.key, paymentRule))}
           />
           <DetailLine
             label="2ª multa"
-            value={formatDate(secondPenaltyDateForMonth(month.month.key, settings))}
+            value={formatDate(secondPenaltyDateForMonth(month.month.key, paymentRule))}
           />
         </>
       ) : (
@@ -1909,7 +2240,11 @@ export function FinanceCellDetailPanel({
       )
     ) : null;
 
-    if (canManagePayments && month?.applicable && month.balance > 0) {
+    if (
+      canManagePayments &&
+      month?.applicable &&
+      month.balance + month.fine > 0
+    ) {
       action = (
         <PrimaryButton
           onClick={() =>
@@ -1917,7 +2252,7 @@ export function FinanceCellDetailPanel({
               studentId: student.id,
               category: "tuition",
               monthKey: month.month.key,
-              amount: String(month.balance),
+              amount: String(month.balance + month.fine),
             })
           }
         >
@@ -1990,7 +2325,14 @@ export function FinanceCellDetailPanel({
           </PrimaryButton>
         )}
         {canManagePayments && (
-          <SecondaryButton onClick={onCreateMiscellaneous}>
+          <SecondaryButton
+            onClick={() => {
+              if (dialogRef.current?.open) {
+                dialogRef.current.close();
+              }
+              onCreateMiscellaneous();
+            }}
+          >
             Nova cobrança diversa
           </SecondaryButton>
         )}
@@ -2001,13 +2343,16 @@ export function FinanceCellDetailPanel({
   if (selection.kind === "debt") {
     const breakdown = getDebtBreakdown(row);
     const total = breakdown.reduce((sum, item) => sum + item.amount, 0);
-    const firstMonthlyDebt = row.ledger.monthly.find((month) => month.balance > 0);
+    const upcoming = getStudentUpcomingBalance(row.ledger, row.record);
+    const firstMonthlyDebt = row.ledger.monthly.find(
+      (month) => month.isOverdue && month.balance + month.fine > 0,
+    );
     const firstMiscCharge = getMiscellaneousCharges(row.record).find(
       (charge) => getChargeBalance(row.record, charge) > 0,
     );
 
     title = "Detalhes da dívida";
-    subtitle = `${student.fullName} · total ${formatCurrency(total)}`;
+    subtitle = `${student.fullName} · dívida vencida ${formatCurrency(total)}`;
     history = getPaymentsForCharges(
       row.record,
       row.record.charges.map((charge) => charge.id),
@@ -2015,6 +2360,9 @@ export function FinanceCellDetailPanel({
     body =
       breakdown.length > 0 ? (
         <div className="grid gap-2">
+          <div className="mb-1 rounded-md bg-sky-50 px-3 py-3 text-sm font-semibold text-sky-800">
+            A vencer: {formatCurrency(upcoming)} (não incluído na dívida)
+          </div>
           {breakdown.map((item) => (
             <div
               key={item.id}
@@ -2031,20 +2379,30 @@ export function FinanceCellDetailPanel({
           ))}
         </div>
       ) : (
-        <p className="rounded-md bg-emerald-50 px-3 py-3 text-sm font-semibold text-emerald-700">
-          Este aluno não tem dívida.
-        </p>
+        <div className="grid gap-2">
+          <p className="rounded-md bg-emerald-50 px-3 py-3 text-sm font-semibold text-emerald-700">
+            Este aluno não tem dívida vencida.
+          </p>
+          <p className="rounded-md bg-sky-50 px-3 py-3 text-sm font-semibold text-sky-800">
+            A vencer: {formatCurrency(upcoming)}.
+          </p>
+        </div>
       );
 
     if (canManagePayments && total > 0) {
       action = (
         <PrimaryButton
           onClick={() => {
-            if (row.ledger.registrationBalance > 0) {
+            if (
+              row.ledger.registrationIsOverdue &&
+              row.ledger.registrationBalance + row.ledger.registrationFine > 0
+            ) {
               paymentAction({
                 studentId: student.id,
                 category: "registration",
-                amount: String(row.ledger.registrationBalance),
+                amount: String(
+                  row.ledger.registrationBalance + row.ledger.registrationFine,
+                ),
                 monthKey: getStudentTuitionStartMonth(student, settings),
               });
               return;
@@ -2055,7 +2413,7 @@ export function FinanceCellDetailPanel({
                 studentId: student.id,
                 category: "tuition",
                 monthKey: firstMonthlyDebt.month.key,
-                amount: String(firstMonthlyDebt.balance),
+                amount: String(firstMonthlyDebt.balance + firstMonthlyDebt.fine),
               });
               return;
             }
@@ -2078,24 +2436,35 @@ export function FinanceCellDetailPanel({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-end bg-slate-950/20 px-0 pt-12 lg:items-stretch lg:justify-end lg:p-0"
-      onClick={onClose}
+    <dialog
+      ref={dialogRef}
+      aria-labelledby={titleId}
+      className="m-auto h-[100dvh] max-h-[100dvh] w-full max-w-none overflow-hidden bg-transparent p-0 backdrop:bg-slate-950/45 sm:h-auto sm:max-h-[90dvh] sm:w-[min(760px,calc(100vw-2rem))] sm:rounded-xl"
+      onCancel={(event) => {
+        event.preventDefault();
+        closeDialog();
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) {
+          closeDialog();
+        }
+      }}
     >
-      <aside
-        className="max-h-[88vh] w-full overflow-y-auto rounded-t-xl bg-white shadow-2xl lg:h-full lg:max-h-none lg:w-[460px] lg:rounded-none"
+      <article
+        className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-white shadow-2xl sm:max-h-[90dvh] sm:rounded-xl"
         onClick={(event) => event.stopPropagation()}
-        aria-label={title}
       >
         <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-lg font-bold text-slate-950">{title}</h3>
+              <h3 id={titleId} className="text-lg font-bold text-slate-950">
+                {title}
+              </h3>
               <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
             </div>
             <button
               type="button"
-              onClick={onClose}
+              onClick={closeDialog}
               className="grid size-10 place-items-center rounded-md border border-slate-200 text-xl font-semibold text-slate-500 hover:bg-slate-50"
               aria-label="Fechar detalhes"
             >
@@ -2104,7 +2473,7 @@ export function FinanceCellDetailPanel({
           </div>
         </div>
 
-        <div className="grid gap-5 px-5 py-5">
+        <div className="grid min-h-0 flex-1 gap-5 overflow-y-auto px-4 py-5 sm:px-5">
           <section>
             <h4 className="text-sm font-bold uppercase text-slate-500">
               Resumo
@@ -2125,8 +2494,8 @@ export function FinanceCellDetailPanel({
             </div>
           </section>
         </div>
-      </aside>
-    </div>
+      </article>
+    </dialog>
   );
 }
 

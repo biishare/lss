@@ -11,6 +11,8 @@ import {
   type Payment,
   type PaymentAllocation,
   type PaymentEntry,
+  type PaymentLevelRule,
+  type PaymentRuleSnapshot,
   type PaymentSettings,
   type RoomDefinition,
   type SchoolClass,
@@ -126,6 +128,20 @@ export type FinanceSettingsDraft = {
   firstPenaltyAmount: string;
   secondPenaltyDay: string;
   secondPenaltyAmount: string;
+  levelRules: FinanceLevelRuleDraft[];
+};
+
+export type FinanceLevelRuleDraft = {
+  levelId: string;
+  levelName: string;
+  inscriptionRenewalFee: string;
+  monthlyFee: string;
+  startMonth: string;
+  endMonth: string;
+  firstPenaltyDay: string;
+  firstPenaltyAmount: string;
+  secondPenaltyDay: string;
+  secondPenaltyAmount: string;
 };
 
 export type FinanceProfileDraft = {
@@ -145,9 +161,10 @@ export type PaymentLaunchDraft = {
   monthKey: string;
   targetChargeId?: string;
   amount: string;
-  paidOn: string;
+  effectivePaymentDate: string;
   method: string;
-  reference: string;
+  allowAdvancePayment: boolean;
+  recordedBy: string;
   description: string;
 };
 
@@ -178,7 +195,13 @@ export type MonthLedger = {
   paid: number;
   balance: number;
   carryOut: number;
+  assessedFine: number;
+  finePaid: number;
   fine: number;
+  fineStage: 0 | 1 | 2;
+  dueOn: string;
+  isOverdue: boolean;
+  isUpcoming: boolean;
 };
 
 export type StudentLedgerRow = {
@@ -197,11 +220,11 @@ export type DebtBreakdownItem = {
 
 export type PaymentHistoryItem = {
   id: string;
-  paidOn: string;
+  effectivePaymentDate: string;
   recordedAt: string;
+  recordedBy: string;
   amount: number;
   method: string;
-  reference?: string;
   observation?: string;
 };
 
@@ -319,7 +342,7 @@ export const financeStatusOptions: Array<{ value: FinanceStatus; label: string }
 ];
 
 export const buttonBase =
-  "inline-flex min-h-10 items-center justify-center rounded-md px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex min-h-10 max-w-full items-center justify-center whitespace-normal rounded-md px-4 text-center text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50";
 
 export const moneyFormatter = new Intl.NumberFormat("pt-MZ", {
   maximumFractionDigits: 0,
@@ -353,6 +376,61 @@ export function currentAcademicYear() {
 
 export function nowIso() {
   return new Date().toISOString();
+}
+
+export function normalizePaymentSettings(
+  settings: PaymentSettings,
+): PaymentSettings {
+  const version = Math.max(1, settings.version ?? 1);
+  const updatedAt = settings.updatedAt ?? `${settings.academicYear}-01-01T00:00:00.000Z`;
+
+  return {
+    ...settings,
+    levelRules: (settings.levelRules ?? []).map((rule) => ({
+      ...rule,
+      academicYear: rule.academicYear || settings.academicYear,
+      version: Math.max(1, rule.version ?? version),
+      updatedAt: rule.updatedAt ?? updatedAt,
+    })),
+    version,
+    updatedAt,
+  };
+}
+
+export function paymentRuleForStudent(
+  settings: PaymentSettings,
+  student?: Pick<Student, "educationLevelId">,
+): PaymentRuleSnapshot {
+  const normalized = normalizePaymentSettings(settings);
+  const levelRule = student?.educationLevelId
+    ? normalized.levelRules?.find(
+        (rule) =>
+          rule.academicYear === normalized.academicYear &&
+          rule.levelId === student.educationLevelId,
+      )
+    : undefined;
+
+  return (
+    levelRule ?? {
+      academicYear: normalized.academicYear,
+      levelId: "general",
+      levelName: "Regra geral",
+      inscriptionRenewalFee: normalized.inscriptionRenewalFee,
+      monthlyFee: normalized.monthlyFee,
+      startMonth: normalized.startMonth,
+      endMonth: normalized.endMonth,
+      firstPenaltyDay: normalized.firstPenaltyDay,
+      firstPenaltyAmount: normalized.firstPenaltyAmount,
+      secondPenaltyDay: normalized.secondPenaltyDay,
+      secondPenaltyAmount: normalized.secondPenaltyAmount,
+      version: normalized.version ?? 1,
+      updatedAt: normalized.updatedAt ?? nowIso(),
+    }
+  );
+}
+
+export function paymentEffectiveDate(payment: Payment) {
+  return payment.effectivePaymentDate ?? payment.paidOn ?? today();
 }
 
 export function formatDate(date: string) {
@@ -427,10 +505,21 @@ export function nextId(items: Array<{ id: string }>, prefix: string) {
 }
 
 export function nextRegistrationNumber(students: Student[]) {
-  return `GA-${new Date().getFullYear()}-${String(students.length + 1).padStart(
-    3,
-    "0",
-  )}`;
+  const nextNumber =
+    students.reduce((maximum, student) => {
+      const suffix = Number(student.registrationNumber.split("-").at(-1));
+      return Number.isFinite(suffix) ? Math.max(maximum, suffix) : maximum;
+    }, 0) + 1;
+
+  return `GA-${new Date().getFullYear()}-${String(nextNumber).padStart(3, "0")}`;
+}
+
+export function stableStudentNumber(student: Student) {
+  const suffix = student.registrationNumber.split("-").at(-1);
+
+  return /^\d+$/.test(suffix ?? "")
+    ? String(Number(suffix)).padStart(3, "0")
+    : student.id.replace(/^ALU-/, "");
 }
 
 export function activeAcademicStages(stages: AcademicStageDefinition[]) {
@@ -665,6 +754,22 @@ export function getMonthsInRange(startMonth: string, endMonth: string) {
   return [...monthOptions.slice(startIndex), ...monthOptions.slice(0, endIndex + 1)];
 }
 
+export function getConfiguredPaymentMonths(settings: PaymentSettings) {
+  const normalized = normalizePaymentSettings(settings);
+  const configuredKeys = new Set(
+    [
+      getMonthsInRange(normalized.startMonth, normalized.endMonth),
+      ...(normalized.levelRules ?? []).map((rule) =>
+        getMonthsInRange(rule.startMonth, rule.endMonth),
+      ),
+    ]
+      .flat()
+      .map((month) => month.key),
+  );
+
+  return monthOptions.filter((month) => configuredKeys.has(month.key));
+}
+
 export function emptyEntry(): PaymentEntry {
   return { amount: 0, paidDay: 0 };
 }
@@ -702,7 +807,7 @@ export function paidOnDay(paidOn: string) {
 export function dateForAcademicMonth(
   monthKey: string,
   day: number,
-  settings: PaymentSettings,
+  settings: PaymentSettings | PaymentRuleSnapshot,
 ) {
   const monthNumber = monthIndex(monthKey) + 1;
   const year = Number(settings.academicYear) || new Date().getFullYear();
@@ -720,27 +825,30 @@ export function dateForAcademicMonth(
   )}`;
 }
 
-export function dueDateForMonth(monthKey: string, settings: PaymentSettings) {
+export function dueDateForMonth(
+  monthKey: string,
+  settings: PaymentSettings | PaymentRuleSnapshot,
+) {
   return dateForAcademicMonth(monthKey, settings.firstPenaltyDay, settings);
 }
 
 export function firstPenaltyDateForMonth(
   monthKey: string,
-  settings: PaymentSettings,
+  settings: PaymentSettings | PaymentRuleSnapshot,
 ) {
   return dateForAcademicMonth(monthKey, settings.firstPenaltyDay + 1, settings);
 }
 
 export function secondPenaltyDateForMonth(
   monthKey: string,
-  settings: PaymentSettings,
+  settings: PaymentSettings | PaymentRuleSnapshot,
 ) {
   return dateForAcademicMonth(monthKey, settings.secondPenaltyDay + 1, settings);
 }
 
 export function assessmentDayForMonth(
   monthKey: string,
-  settings: PaymentSettings,
+  settings: PaymentSettings | PaymentRuleSnapshot,
   assessmentDate = today(),
 ) {
   const [assessmentYear, assessmentMonth] = assessmentDate.split("-");
@@ -850,16 +958,46 @@ export function getChargePaymentEntry(
       (record.payments ?? []).find((payment) => payment.id === allocation.paymentId),
     )
     .filter((payment): payment is Payment => Boolean(payment))
-    .sort((a, b) => a.paidOn.localeCompare(b.paidOn));
+    .sort((a, b) => paymentEffectiveDate(a).localeCompare(paymentEffectiveDate(b)));
   const lastPayment = relatedPayments.at(-1);
+  const effectivePaymentDate = lastPayment
+    ? paymentEffectiveDate(lastPayment)
+    : undefined;
 
   return {
     amount,
-    paidDay: lastPayment ? paidOnDay(lastPayment.paidOn) : 0,
-    paidAt: lastPayment ? paidOnToIso(lastPayment.paidOn) : undefined,
+    paidDay: effectivePaymentDate ? paidOnDay(effectivePaymentDate) : 0,
+    paidAt: effectivePaymentDate ? paidOnToIso(effectivePaymentDate) : undefined,
     method: lastPayment?.method,
     reference: lastPayment?.reference,
     description: lastPayment?.observation,
+  };
+}
+
+export function calculateRegistrationDue(
+  student: Student,
+  settings: PaymentSettings,
+) {
+  const rule = paymentRuleForStudent(settings, student);
+  const profile = normalizeFinanceProfile(student.financialProfile);
+  const discountPercent = financeRuleDiscountPercent(
+    profile.status,
+    profile.discountPercent,
+  );
+  const discount = Math.round(
+    (rule.inscriptionRenewalFee * discountPercent) / 100,
+  );
+
+  return {
+    due: Math.max(0, rule.inscriptionRenewalFee - discount),
+    discount,
+    rule,
+    ruleLabel:
+      profile.status === "scholarship"
+        ? "Bolsa integral"
+        : discountPercent > 0
+          ? `${financeStatusLabel(profile.status)} ${discountPercent}%`
+          : rule.levelName,
   };
 }
 
@@ -872,16 +1010,19 @@ export function ensureCoreCharges(
   const nextRecord = clonePaymentRecord(record);
   const chargesById = new Map(nextRecord.charges.map((charge) => [charge.id, charge]));
   const registrationId = registrationChargeId(student.id);
+  const registrationDue = calculateRegistrationDue(student, settings);
+  const studentRule = paymentRuleForStudent(settings, student);
 
   if (!chargesById.has(registrationId)) {
     nextRecord.charges.push({
       id: registrationId,
       studentId: student.id,
       category: "registration",
-      amount: settings.inscriptionRenewalFee,
+      amount: registrationDue.due,
       description: "Inscrição/Renovação",
       dueOn: getStudentEnrollmentDate(student),
       createdAt: getStudentEnrollmentDate(student),
+      ruleSnapshot: registrationDue.rule,
     });
   }
 
@@ -902,7 +1043,9 @@ export function ensureCoreCharges(
         amount: monthlyDue.due,
         description: `Mensalidade de ${month.label}`,
         monthKey: month.key,
+        dueOn: dueDateForMonth(month.key, studentRule),
         createdAt: today(),
+        ruleSnapshot: studentRule,
       });
     }
   });
@@ -950,8 +1093,10 @@ function migrateLegacyPaymentEntry(
     id: paymentId,
     studentId: record.studentId,
     amount: entry.amount,
+    effectivePaymentDate: paidOn,
     paidOn,
     recordedAt: entry.paidAt ?? paidOnToIso(paidOn),
+    recordedBy: "Migração",
     method: entry.method ?? "Registo antigo",
     reference: entry.reference,
     observation: entry.description,
@@ -1033,6 +1178,50 @@ export function normalizePaymentRecord(
   return nextRecord;
 }
 
+export function repriceOpenCoreCharges(
+  record: StudentPaymentRecord,
+  student: Student,
+  months: MonthOption[],
+  settings: PaymentSettings,
+) {
+  const nextRecord = ensureCoreCharges(record, student, months, settings);
+  const rule = paymentRuleForStudent(settings, student);
+  const registrationPolicy = calculateRegistrationDue(student, settings);
+
+  return {
+    ...nextRecord,
+    charges: nextRecord.charges.map((charge) => {
+      if (charge.category === "miscellaneous") {
+        return charge;
+      }
+
+      const allocated = allocatedAmountForCharge(nextRecord, charge.id);
+
+      if (charge.category === "registration") {
+        return {
+          ...charge,
+          amount: Math.max(allocated, registrationPolicy.due),
+          ruleSnapshot: rule,
+        };
+      }
+
+      const month = months.find((item) => item.key === charge.monthKey);
+
+      if (!month) {
+        return charge;
+      }
+
+      const monthlyPolicy = calculateMonthlyDue(student, month, settings);
+
+      return {
+        ...charge,
+        amount: Math.max(allocated, monthlyPolicy.due),
+        ruleSnapshot: rule,
+      };
+    }),
+  };
+}
+
 export function getStudentEnrollmentDate(student: Student) {
   return student.enrollmentDate ?? student.createdAt ?? today();
 }
@@ -1041,7 +1230,7 @@ export function getStudentTuitionStartMonth(
   student: Student,
   settings: PaymentSettings,
 ) {
-  return student.tuitionStartMonth ?? settings.startMonth;
+  return student.tuitionStartMonth ?? paymentRuleForStudent(settings, student).startMonth;
 }
 
 export function normalizeStudentForPolicy(
@@ -1062,13 +1251,18 @@ export function isTuitionMonthApplicable(
   monthKey: string,
   settings: PaymentSettings,
 ) {
-  const months = getMonthsInRange(settings.startMonth, settings.endMonth);
+  const rule = paymentRuleForStudent(settings, student);
+  const months = getMonthsInRange(rule.startMonth, rule.endMonth);
   const currentIndex = months.findIndex((month) => month.key === monthKey);
   const startIndex = months.findIndex(
     (month) => month.key === getStudentTuitionStartMonth(student, settings),
   );
 
-  if (currentIndex < 0 || startIndex < 0) {
+  if (currentIndex < 0) {
+    return false;
+  }
+
+  if (startIndex < 0) {
     return true;
   }
 
@@ -1080,6 +1274,8 @@ export function calculateMonthlyDue(
   month: MonthOption,
   settings: PaymentSettings,
 ) {
+  const rule = paymentRuleForStudent(settings, student);
+
   if (!isTuitionMonthApplicable(student, month.key, settings)) {
     return {
       due: 0,
@@ -1090,11 +1286,11 @@ export function calculateMonthlyDue(
   }
 
   const profile = student.financialProfile;
-  const baseAmount = settings.monthlyFee;
+  const baseAmount = rule.monthlyFee;
   const inRange = isMonthInRange(
     month.key,
-    profile.startMonth ?? settings.startMonth,
-    profile.endMonth ?? settings.endMonth,
+    profile.startMonth ?? rule.startMonth,
+    profile.endMonth ?? rule.endMonth,
   );
   let discountPercent = 0;
   let ruleLabel = "Regular";
@@ -1132,7 +1328,7 @@ export function calculateMonthlyDue(
 
 export function calculateFine(
   entry: PaymentEntry,
-  settings: PaymentSettings,
+  settings: PaymentSettings | PaymentRuleSnapshot,
   dueAmount: number,
   assessmentDay = paidOnDay(today()),
 ) {
@@ -1153,11 +1349,26 @@ export function calculateFine(
   }
 
   if (effectiveDay > settings.secondPenaltyDay) {
-    return settings.firstPenaltyAmount + settings.secondPenaltyAmount;
+    return settings.secondPenaltyAmount;
   }
 
   if (effectiveDay > settings.firstPenaltyDay) {
     return settings.firstPenaltyAmount;
+  }
+
+  return 0;
+}
+
+export function penaltyStageForDay(
+  day: number,
+  settings: PaymentSettings | PaymentRuleSnapshot,
+): 0 | 1 | 2 {
+  if (day > settings.secondPenaltyDay) {
+    return settings.secondPenaltyAmount > 0 ? 2 : 0;
+  }
+
+  if (day > settings.firstPenaltyDay) {
+    return settings.firstPenaltyAmount > 0 ? 1 : 0;
   }
 
   return 0;
@@ -1254,33 +1465,70 @@ export type RecordStudentPaymentInput = {
   monthKey: string;
   targetChargeId?: string;
   amount: number;
-  paidOn: string;
+  effectivePaymentDate: string;
   recordedAt: string;
+  recordedBy: string;
   method: string;
-  reference: string;
+  allowAdvancePayment?: boolean;
   description: string;
 };
 
-function chargesFromMonth(
-  record: StudentPaymentRecord,
+function chargeRule(
+  charge: Charge,
   student: Student,
-  months: MonthOption[],
-  startMonthKey: string,
+  settings: PaymentSettings,
 ) {
-  const startIndex = months.findIndex((month) => month.key === startMonthKey);
-  const effectiveStartIndex = startIndex >= 0 ? startIndex : 0;
+  return charge.ruleSnapshot ?? paymentRuleForStudent(settings, student);
+}
 
-  return months
-    .slice(effectiveStartIndex)
-    .map((month) =>
-      record.charges.find(
-        (charge) =>
-          charge.category === "tuition" &&
-          charge.studentId === student.id &&
-          charge.monthKey === month.key,
-      ),
-    )
-    .filter((charge): charge is Charge => Boolean(charge));
+export function getChargeOutstandingAtDate(
+  record: StudentPaymentRecord,
+  charge: Charge,
+  student: Student,
+  settings: PaymentSettings,
+  assessmentDate = today(),
+) {
+  const allocated = allocatedAmountForCharge(record, charge.id);
+  const baseBalance = Math.max(0, charge.amount - allocated);
+
+  if (charge.category === "miscellaneous") {
+    return baseBalance;
+  }
+
+  const rule = chargeRule(charge, student, settings);
+  const entry = getChargePaymentEntry(record, charge.id);
+  const assessmentDay =
+    charge.category === "tuition" && charge.monthKey
+      ? assessmentDayForMonth(charge.monthKey, rule, assessmentDate)
+      : paidOnDay(assessmentDate);
+  const assessedFine = calculateFine(entry, rule, charge.amount, assessmentDay);
+  const finePaid = Math.max(0, allocated - charge.amount);
+
+  return baseBalance + Math.max(0, assessedFine - finePaid);
+}
+
+function isFutureTuitionCharge(charge: Charge, effectivePaymentDate: string) {
+  if (charge.category !== "tuition" || !charge.dueOn) {
+    return false;
+  }
+
+  return charge.dueOn.slice(0, 7) > effectivePaymentDate.slice(0, 7);
+}
+
+function isOverdueCharge(charge: Charge, effectivePaymentDate: string) {
+  if (charge.category === "tuition" || charge.category === "miscellaneous") {
+    return Boolean(charge.dueOn && charge.dueOn < effectivePaymentDate);
+  }
+
+  return charge.category === "registration";
+}
+
+function sortChargesByDueDate(charges: Charge[]) {
+  return [...charges].sort((a, b) => {
+    const aDate = a.dueOn ?? a.createdAt;
+    const bDate = b.dueOn ?? b.createdAt;
+    return aDate.localeCompare(bDate) || a.id.localeCompare(b.id);
+  });
 }
 
 export function recordStudentPayment({
@@ -1292,10 +1540,11 @@ export function recordStudentPayment({
   monthKey,
   targetChargeId,
   amount,
-  paidOn,
+  effectivePaymentDate,
   recordedAt,
+  recordedBy,
   method,
-  reference,
+  allowAdvancePayment = false,
   description,
 }: RecordStudentPaymentInput) {
   let nextRecord = normalizePaymentRecord(record, student, months, settings);
@@ -1303,36 +1552,27 @@ export function recordStudentPayment({
     id: nextId(nextRecord.payments, "PAY"),
     studentId: student.id,
     amount,
-    paidOn,
+    effectivePaymentDate,
+    paidOn: effectivePaymentDate,
     recordedAt,
+    recordedBy,
     method,
-    reference,
     observation: description || undefined,
   };
-  const targetCharges: Charge[] = [];
+  let selectedCharge: Charge | undefined;
 
   if (category === "registration") {
-    const registrationCharge = nextRecord.charges.find(
+    selectedCharge = nextRecord.charges.find(
       (charge) => charge.id === registrationChargeId(student.id),
-    );
-
-    if (registrationCharge) {
-      targetCharges.push(registrationCharge);
-    }
-
-    targetCharges.push(
-      ...chargesFromMonth(
-        nextRecord,
-        student,
-        months,
-        getStudentTuitionStartMonth(student, settings),
-      ),
     );
   }
 
   if (category === "tuition") {
-    targetCharges.push(
-      ...chargesFromMonth(nextRecord, student, months, monthKey),
+    selectedCharge = nextRecord.charges.find(
+      (charge) =>
+        charge.category === "tuition" &&
+        charge.studentId === student.id &&
+        charge.monthKey === monthKey,
     );
   }
 
@@ -1347,7 +1587,7 @@ export function recordStudentPayment({
       : undefined;
 
     if (existingCharge) {
-      targetCharges.push(existingCharge);
+      selectedCharge = existingCharge;
     } else {
       const charge: Charge = {
         id: nextId(nextRecord.charges, `CHG-${student.id}-MISC`),
@@ -1362,20 +1602,72 @@ export function recordStudentPayment({
         ...nextRecord,
         charges: [charge, ...nextRecord.charges],
       };
-      targetCharges.push(charge);
+      selectedCharge = charge;
     }
   }
+
+  const otherOverdueCharges = sortChargesByDueDate(
+    nextRecord.charges.filter(
+      (charge) =>
+        charge.id !== selectedCharge?.id &&
+        isOverdueCharge(charge, effectivePaymentDate) &&
+        getChargeOutstandingAtDate(
+          nextRecord,
+          charge,
+          student,
+          settings,
+          effectivePaymentDate,
+        ) > 0,
+    ),
+  );
+  const futureCharges = allowAdvancePayment
+    ? sortChargesByDueDate(
+        nextRecord.charges.filter(
+          (charge) =>
+            charge.id !== selectedCharge?.id &&
+            isFutureTuitionCharge(charge, effectivePaymentDate) &&
+            getChargeOutstandingAtDate(
+              nextRecord,
+              charge,
+              student,
+              settings,
+              effectivePaymentDate,
+            ) > 0,
+        ),
+      )
+    : [];
+  const selectedTargets: Charge[] =
+    selectedCharge &&
+    (!isFutureTuitionCharge(selectedCharge, effectivePaymentDate) ||
+      allowAdvancePayment)
+      ? [selectedCharge]
+      : [];
+  const targetCharges: Charge[] = [
+    ...selectedTargets,
+    ...otherOverdueCharges,
+    ...futureCharges,
+  ];
+  const uniqueTargetCharges = targetCharges.filter(
+    (charge, index, items) =>
+      items.findIndex((item) => item.id === charge.id) === index,
+  );
 
   let remaining = amount;
   const allocations: Array<Omit<PaymentAllocation, "id">> = [];
 
-  targetCharges.forEach((charge) => {
+  uniqueTargetCharges.forEach((charge) => {
     if (remaining <= 0) {
       return;
     }
 
-    const balance = getChargeBalance(nextRecord, charge);
-    const amountForCharge = Math.min(remaining, balance);
+    const outstanding = getChargeOutstandingAtDate(
+      nextRecord,
+      charge,
+      student,
+      settings,
+      effectivePaymentDate,
+    );
+    const amountForCharge = Math.min(remaining, outstanding);
 
     if (amountForCharge <= 0) {
       return;
@@ -1400,6 +1692,8 @@ export function buildLedger(
   assessmentDate = today(),
 ) {
   const normalizedRecord = normalizePaymentRecord(record, student, months, settings);
+  const studentRule = paymentRuleForStudent(settings, student);
+  const registrationPolicy = calculateRegistrationDue(student, settings);
   const registrationCharge =
     normalizedRecord.charges.find(
       (charge) => charge.id === registrationChargeId(student.id),
@@ -1407,10 +1701,22 @@ export function buildLedger(
       id: registrationChargeId(student.id),
       studentId: student.id,
       category: "registration" as const,
-      amount: settings.inscriptionRenewalFee,
+      amount: registrationPolicy.due,
       description: "Inscrição/Renovação",
+      dueOn: getStudentEnrollmentDate(student),
       createdAt: getStudentEnrollmentDate(student),
+      ruleSnapshot: registrationPolicy.rule,
     };
+  const registrationRule = registrationCharge.ruleSnapshot ?? studentRule;
+  const registrationDiscount = Math.max(
+    0,
+    registrationRule.inscriptionRenewalFee - registrationCharge.amount,
+  );
+  const registrationRuleLabel =
+    registrationCharge.amount === 0 &&
+    normalizeFinanceProfile(student.financialProfile).status === "scholarship"
+      ? "Bolsa integral"
+      : `${registrationRule.levelName} · v${registrationRule.version}`;
   const registrationEntry = getChargePaymentEntry(
     normalizedRecord,
     registrationCharge.id,
@@ -1434,14 +1740,43 @@ export function buildLedger(
     0,
     registrationCharge.amount - registrationEntry.amount,
   );
-  let totalBalance = registrationBalance;
-  const registrationFine = calculateFine(
-    registrationEntry,
-    settings,
+  const registrationPaid = Math.min(
     registrationCharge.amount,
-    paidOnDay(assessmentDate),
+    registrationEntry.amount,
   );
+  const registrationAssessmentDay = paidOnDay(assessmentDate);
+  const registrationAssessedFine = calculateFine(
+    registrationEntry,
+    registrationRule,
+    registrationCharge.amount,
+    registrationAssessmentDay,
+  );
+  const registrationFinePaid = Math.min(
+    registrationAssessedFine,
+    Math.max(0, registrationEntry.amount - registrationCharge.amount),
+  );
+  const registrationFine = Math.max(
+    0,
+    registrationAssessedFine - registrationFinePaid,
+  );
+  const registrationFineStage = registrationAssessedFine
+    ? penaltyStageForDay(
+        registrationBalance > 0
+          ? registrationAssessmentDay
+          : registrationEntry.paidDay,
+        registrationRule,
+      )
+    : 0;
+  const registrationDueOn =
+    registrationCharge.dueOn ?? getStudentEnrollmentDate(student);
+  const registrationIsOverdue =
+    registrationBalance > 0 && registrationDueOn < assessmentDate;
+  let totalBalance = registrationBalance;
   let totalFine = registrationFine;
+  let totalOverdue = registrationIsOverdue
+    ? registrationBalance + registrationFine
+    : registrationFine;
+  let totalUpcoming = registrationIsOverdue ? 0 : registrationBalance;
 
   const monthly = months.map((month) => {
     const charge = normalizedRecord.charges.find(
@@ -1452,53 +1787,102 @@ export function buildLedger(
     );
     const monthlyDue = calculateMonthlyDue(student, month, settings);
     const due = charge?.amount ?? monthlyDue.due;
+    const rule = charge?.ruleSnapshot ?? studentRule;
+    const discount = charge
+      ? Math.max(0, rule.monthlyFee - due)
+      : monthlyDue.discount;
+    const ruleLabel = charge
+      ? `${monthlyDue.ruleLabel} · ${rule.levelName} v${rule.version}`
+      : monthlyDue.ruleLabel;
     const entry = charge
       ? getChargePaymentEntry(normalizedRecord, charge.id)
       : emptyEntry();
     const paid = Math.min(due, entry.amount);
     const balance = Math.max(0, due - entry.amount);
-    const carryOut = Math.max(0, entry.amount - due);
-    const fine = calculateFine(
-      entry,
-      settings,
-      due,
-      assessmentDayForMonth(month.key, settings, assessmentDate),
+    const assessmentDay = assessmentDayForMonth(
+      month.key,
+      rule,
+      assessmentDate,
     );
+    const assessedFine = calculateFine(
+      entry,
+      rule,
+      due,
+      assessmentDay,
+    );
+    const finePaid = Math.min(
+      assessedFine,
+      Math.max(0, entry.amount - due),
+    );
+    const fine = Math.max(0, assessedFine - finePaid);
+    const carryOut = Math.max(0, entry.amount - due - assessedFine);
+    const fineStage = assessedFine
+      ? penaltyStageForDay(
+          balance > 0 ? assessmentDay : entry.paidDay,
+          rule,
+        )
+      : 0;
+    const dueOn = charge?.dueOn ?? dueDateForMonth(month.key, rule);
+    const isOverdue = balance > 0 && dueOn < assessmentDate;
+    const isUpcoming = balance > 0 && !isOverdue;
     const item: MonthLedger = {
       month,
       entry,
       applicable: monthlyDue.applicable,
       due,
-      discount: monthlyDue.discount,
-      ruleLabel: monthlyDue.ruleLabel,
+      discount,
+      ruleLabel,
       carryIn: 0,
       paid,
       balance,
       carryOut,
+      assessedFine,
+      finePaid,
       fine,
+      fineStage,
+      dueOn,
+      isOverdue,
+      isUpcoming,
     };
 
     totalBalance += balance;
     totalFine += fine;
+    totalOverdue += isOverdue ? balance + fine : fine;
+    totalUpcoming += isUpcoming ? balance : 0;
 
     return item;
   });
 
   return {
+    registrationDue: registrationCharge.amount,
+    registrationPaid,
+    registrationDiscount,
+    registrationRuleLabel,
     registrationBalance,
+    registrationAssessedFine,
+    registrationFinePaid,
     registrationFine,
+    registrationFineStage,
+    registrationDueOn,
+    registrationIsOverdue,
     registrationCarry: Math.max(
       0,
-      registrationEntry.amount - registrationCharge.amount,
+      registrationEntry.amount -
+        registrationCharge.amount -
+        registrationAssessedFine,
     ),
     monthly,
     totals: {
       expected:
         registrationCharge.amount +
         monthly.reduce((total, item) => total + item.due, 0),
-      discount: monthly.reduce((total, item) => total + item.discount, 0),
+      discount:
+        registrationDiscount +
+        monthly.reduce((total, item) => total + item.discount, 0),
       paid: totalReceived,
       balance: totalBalance,
+      overdue: totalOverdue,
+      upcoming: totalUpcoming,
       fine: totalFine,
       carry: Math.max(0, totalReceived - totalAllocated),
       miscellaneous: miscellaneousPaid,
@@ -1520,12 +1904,12 @@ export type FinanceCellState = {
   tone: FinanceCellTone;
 };
 
-function fineStageLabel(fine: number, settings: PaymentSettings) {
-  if (fine >= settings.firstPenaltyAmount + settings.secondPenaltyAmount) {
+function fineStageLabel(stage: 0 | 1 | 2) {
+  if (stage === 2) {
     return "2ª multa";
   }
 
-  if (fine > 0) {
+  if (stage === 1) {
     return "1ª multa";
   }
 
@@ -1536,18 +1920,43 @@ export function getRegistrationCellState(
   ledger: ReturnType<typeof buildLedger>,
   settings: PaymentSettings,
 ): FinanceCellState {
+  void settings;
+  if (ledger.registrationDue <= 0) {
+    return {
+      label: ledger.registrationRuleLabel.includes("Bolsa") ? "Bolseiro" : "Isento",
+      detail: "Inclui a inscrição",
+      tone: "info",
+    };
+  }
+
   if (ledger.registrationBalance <= 0) {
+    if (ledger.registrationFine > 0) {
+      return {
+        label: "Multa por pagar",
+        detail: formatCurrency(ledger.registrationFine),
+        tone: "danger",
+      };
+    }
+
+    if (ledger.registrationAssessedFine > 0) {
+      return { label: "Pago com multa", detail: "Liquidada", tone: "paid" };
+    }
+
     return { label: "Pago", detail: "Liquidada", tone: "paid" };
   }
 
-  const fineLabel = fineStageLabel(ledger.registrationFine, settings);
+  const fineLabel = fineStageLabel(ledger.registrationFineStage);
 
   if (fineLabel) {
     return { label: fineLabel, detail: "Inscrição em atraso", tone: "danger" };
   }
 
-  if (ledger.registrationBalance < settings.inscriptionRenewalFee) {
+  if (ledger.registrationPaid > 0) {
     return { label: "Parcial", detail: "Falta pagar", tone: "warning" };
+  }
+
+  if (ledger.registrationIsOverdue) {
+    return { label: "Em atraso", detail: "Por pagar", tone: "danger" };
   }
 
   return { label: "Pendente", detail: "Por pagar", tone: "warning" };
@@ -1575,6 +1984,7 @@ export function getMonthCellState(
   month: MonthLedger,
   settings: PaymentSettings,
 ): FinanceCellState {
+  void settings;
   if (!month.applicable) {
     return { label: "—", detail: "Não aplicável", tone: "muted" };
   }
@@ -1589,14 +1999,22 @@ export function getMonthCellState(
     };
   }
 
-  const fineLabel = fineStageLabel(month.fine, settings);
+  const fineLabel = fineStageLabel(month.fineStage);
   const hasReduction = month.discount > 0;
 
   if (month.balance <= 0) {
+    if (month.fine > 0) {
+      return {
+        label: "Multa por pagar",
+        detail: formatCurrency(month.fine),
+        tone: "danger",
+      };
+    }
+
     return {
-      label: fineLabel || (hasReduction ? "Ponderado · Pago" : "Pago"),
+      label: month.assessedFine > 0 ? "Pago com multa" : "Pago",
       detail: "Liquidado",
-      tone: fineLabel ? "warning" : "paid",
+      tone: "paid",
     };
   }
 
@@ -1616,14 +2034,25 @@ export function getMonthCellState(
     };
   }
 
-  if (hasReduction) {
-    return { label: "Ponderado", detail: "Por pagar", tone: "info" };
+  if (month.isUpcoming) {
+    return {
+      label: "A vencer",
+      detail: hasReduction ? month.ruleLabel : formatDate(month.dueOn),
+      tone: "info",
+    };
+  }
+
+  if (month.isOverdue) {
+    return { label: "Em atraso", detail: "Por pagar", tone: "danger" };
   }
 
   return { label: "Pendente", detail: "Por pagar", tone: "warning" };
 }
 
-export function getMiscellaneousSummary(record: StudentPaymentRecord) {
+export function getMiscellaneousSummary(
+  record: StudentPaymentRecord,
+  assessmentDate = today(),
+) {
   const charges = (record.charges ?? []).filter(
     (charge) => charge.category === "miscellaneous",
   );
@@ -1632,12 +2061,19 @@ export function getMiscellaneousSummary(record: StudentPaymentRecord) {
     (sum, charge) => sum + getChargeBalance(record, charge),
     0,
   );
+  const overdueBalance = charges.reduce((sum, charge) => {
+    const chargeBalance = getChargeBalance(record, charge);
+    const isOverdue = Boolean(charge.dueOn && charge.dueOn < assessmentDate);
+    return isOverdue ? sum + chargeBalance : sum;
+  }, 0);
 
   return {
     count: charges.length,
     total,
     paid: Math.max(0, total - balance),
     balance,
+    overdueBalance,
+    upcomingBalance: Math.max(0, balance - overdueBalance),
   };
 }
 
@@ -1677,7 +2113,14 @@ export function getStudentDebt(
   ledger: ReturnType<typeof buildLedger>,
   record: StudentPaymentRecord,
 ) {
-  return ledger.totals.balance + ledger.totals.fine + getMiscellaneousSummary(record).balance;
+  return ledger.totals.overdue + getMiscellaneousSummary(record).overdueBalance;
+}
+
+export function getStudentUpcomingBalance(
+  ledger: ReturnType<typeof buildLedger>,
+  record: StudentPaymentRecord,
+) {
+  return ledger.totals.upcoming + getMiscellaneousSummary(record).upcomingBalance;
 }
 
 export function getPaymentsForCharges(
@@ -1702,16 +2145,17 @@ export function getPaymentsForCharges(
     .filter((payment) => amountByPayment.has(payment.id))
     .map((payment) => ({
       id: payment.id,
-      paidOn: payment.paidOn,
+      effectivePaymentDate: paymentEffectiveDate(payment),
       recordedAt: payment.recordedAt,
+      recordedBy: payment.recordedBy ?? "Registo antigo",
       amount: amountByPayment.get(payment.id) ?? 0,
       method: payment.method,
-      reference: payment.reference,
       observation: payment.observation,
     }))
     .sort(
       (a, b) =>
-        b.paidOn.localeCompare(a.paidOn) || b.recordedAt.localeCompare(a.recordedAt),
+        b.effectivePaymentDate.localeCompare(a.effectivePaymentDate) ||
+        b.recordedAt.localeCompare(a.recordedAt),
     );
 }
 
@@ -1729,7 +2173,7 @@ export function getMiscellaneousCharges(record: StudentPaymentRecord) {
 export function getDebtBreakdown(row: StudentLedgerRow): DebtBreakdownItem[] {
   const items: DebtBreakdownItem[] = [];
 
-  if (row.ledger.registrationBalance > 0) {
+  if (row.ledger.registrationBalance > 0 && row.ledger.registrationIsOverdue) {
     items.push({
       id: `${row.student.id}-registration`,
       label: "Inscrição",
@@ -1750,7 +2194,7 @@ export function getDebtBreakdown(row: StudentLedgerRow): DebtBreakdownItem[] {
   }
 
   row.ledger.monthly.forEach((month, index) => {
-    if (month.balance > 0) {
+    if (month.balance > 0 && month.isOverdue) {
       items.push({
         id: `${row.student.id}-${month.month.key}`,
         label: `Mensalidade de ${month.month.label}`,
@@ -1774,7 +2218,7 @@ export function getDebtBreakdown(row: StudentLedgerRow): DebtBreakdownItem[] {
   getMiscellaneousCharges(row.record).forEach((charge, index) => {
     const balance = getChargeBalance(row.record, charge);
 
-    if (balance <= 0) {
+    if (balance <= 0 || !charge.dueOn || charge.dueOn >= today()) {
       return;
     }
 
@@ -1830,20 +2274,21 @@ export function rowMatchesPaymentAlertFilter(
   }
 
   if (filter === "overdue") {
-    return row.ledger.monthly.some((month) => month.balance > 0 && month.fine > 0);
+    return (
+      row.ledger.registrationIsOverdue ||
+      row.ledger.monthly.some((month) => month.balance > 0 && month.isOverdue)
+    );
   }
 
   if (filter === "first-fine") {
     return row.ledger.monthly.some(
-      (month) => month.balance > 0 && month.fine === settings.firstPenaltyAmount,
+      (month) => month.balance > 0 && month.fineStage === 1,
     );
   }
 
   if (filter === "second-fine") {
     return row.ledger.monthly.some(
-      (month) =>
-        month.balance > 0 &&
-        month.fine >= settings.firstPenaltyAmount + settings.secondPenaltyAmount,
+      (month) => month.balance > 0 && month.fineStage === 2,
     );
   }
 
@@ -1874,18 +2319,82 @@ export function monthLabel(monthKey?: string) {
   return monthByKey(monthKey)?.shortLabel ?? monthKey;
 }
 
-export function buildFinanceSettingsDraft(settings: PaymentSettings): FinanceSettingsDraft {
+export function buildFinanceSettingsDraft(
+  settings: PaymentSettings,
+  levels: AcademicStageDefinition[] = [],
+): FinanceSettingsDraft {
+  const normalized = normalizePaymentSettings(settings);
+  const configuredRules = normalized.levelRules ?? [];
+  const visibleLevels = sortByName(levels);
+  const levelIds = new Set(visibleLevels.map((level) => level.id));
+  const rules = [
+    ...visibleLevels.map((level) => {
+      return (
+        configuredRules.find(
+          (rule) =>
+            rule.levelId === level.id &&
+            rule.academicYear === normalized.academicYear,
+        ) ?? {
+          ...paymentRuleForStudent(normalized),
+          levelId: level.id,
+          levelName: level.name,
+        }
+      );
+    }),
+    ...configuredRules.filter((rule) => !levelIds.has(rule.levelId)),
+  ];
+
   return {
-    academicYear: settings.academicYear,
-    inscriptionRenewalFee: String(settings.inscriptionRenewalFee),
-    monthlyFee: String(settings.monthlyFee),
-    startMonth: settings.startMonth,
-    endMonth: settings.endMonth,
-    firstPenaltyDay: String(settings.firstPenaltyDay),
-    firstPenaltyAmount: String(settings.firstPenaltyAmount),
-    secondPenaltyDay: String(settings.secondPenaltyDay),
-    secondPenaltyAmount: String(settings.secondPenaltyAmount),
+    academicYear: normalized.academicYear,
+    inscriptionRenewalFee: String(normalized.inscriptionRenewalFee),
+    monthlyFee: String(normalized.monthlyFee),
+    startMonth: normalized.startMonth,
+    endMonth: normalized.endMonth,
+    firstPenaltyDay: String(normalized.firstPenaltyDay),
+    firstPenaltyAmount: String(normalized.firstPenaltyAmount),
+    secondPenaltyDay: String(normalized.secondPenaltyDay),
+    secondPenaltyAmount: String(normalized.secondPenaltyAmount),
+    levelRules: rules.map((rule) => ({
+      levelId: rule.levelId,
+      levelName: rule.levelName,
+      inscriptionRenewalFee: String(rule.inscriptionRenewalFee),
+      monthlyFee: String(rule.monthlyFee),
+      startMonth: rule.startMonth,
+      endMonth: rule.endMonth,
+      firstPenaltyDay: String(rule.firstPenaltyDay),
+      firstPenaltyAmount: String(rule.firstPenaltyAmount),
+      secondPenaltyDay: String(rule.secondPenaltyDay),
+      secondPenaltyAmount: String(rule.secondPenaltyAmount),
+    })),
   };
+}
+
+export function buildPaymentLevelRules(
+  draft: FinanceSettingsDraft,
+  version: number,
+  updatedAt: string,
+): PaymentLevelRule[] {
+  return draft.levelRules.map((rule) => ({
+    academicYear: draft.academicYear.trim() || currentAcademicYear(),
+    levelId: rule.levelId,
+    levelName: rule.levelName,
+    inscriptionRenewalFee: parseMoney(rule.inscriptionRenewalFee),
+    monthlyFee: parseMoney(rule.monthlyFee),
+    startMonth: rule.startMonth,
+    endMonth: rule.endMonth,
+    firstPenaltyDay: Math.max(
+      1,
+      Math.min(31, Number(rule.firstPenaltyDay) || 1),
+    ),
+    firstPenaltyAmount: parseMoney(rule.firstPenaltyAmount),
+    secondPenaltyDay: Math.max(
+      1,
+      Math.min(31, Number(rule.secondPenaltyDay) || 1),
+    ),
+    secondPenaltyAmount: parseMoney(rule.secondPenaltyAmount),
+    version,
+    updatedAt,
+  }));
 }
 
 export function buildFinanceProfileDraft(
@@ -1893,13 +2402,14 @@ export function buildFinanceProfileDraft(
   settings: PaymentSettings,
 ): FinanceProfileDraft {
   const profile = student?.financialProfile;
+  const rule = paymentRuleForStudent(settings, student);
 
   return {
     studentId: student?.id ?? "",
     status: profile?.status ?? "regular",
     discountPercent: String(profile?.discountPercent ?? 0),
-    startMonth: profile?.startMonth ?? settings.startMonth,
-    endMonth: profile?.endMonth ?? settings.endMonth,
+    startMonth: profile?.startMonth ?? rule.startMonth,
+    endMonth: profile?.endMonth ?? rule.endMonth,
     reason: profile?.reason ?? "",
     authorizedBy: profile?.authorizedBy ?? "",
     registeredBy: profile?.registeredBy ?? "Secretaria",
@@ -1913,6 +2423,8 @@ export function summarizePaymentRows(rows: StudentLedgerRow[]) {
       discount: summary.discount + row.ledger.totals.discount,
       paid: summary.paid + row.ledger.totals.paid,
       balance: summary.balance + row.ledger.totals.balance,
+      overdue: summary.overdue + row.ledger.totals.overdue,
+      upcoming: summary.upcoming + row.ledger.totals.upcoming,
       fine: summary.fine + row.ledger.totals.fine,
       carry: summary.carry + row.ledger.totals.carry,
       miscellaneous: summary.miscellaneous + row.ledger.totals.miscellaneous,
@@ -1922,6 +2434,8 @@ export function summarizePaymentRows(rows: StudentLedgerRow[]) {
       discount: 0,
       paid: 0,
       balance: 0,
+      overdue: 0,
+      upcoming: 0,
       fine: 0,
       carry: 0,
       miscellaneous: 0,
