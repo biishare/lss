@@ -1,0 +1,178 @@
+[
+  {
+    "file": "phase5-1024x768-payment-preview.png",
+    "width": 1024,
+    "height": 3629,
+    "sampledPixels": 1681,
+    "nonWhitePixels": 628,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-1024x768-rule-dialog.png",
+    "width": 1024,
+    "height": 975,
+    "sampledPixels": 1681,
+    "nonWhitePixels": 792,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-1024x768-rules.png",
+    "width": 1024,
+    "height": 975,
+    "sampledPixels": 1681,
+    "nonWhitePixels": 448,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-1366x768-payment-preview.png",
+    "width": 1366,
+    "height": 2935,
+    "sampledPixels": 1681,
+    "nonWhitePixels": 861,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-1366x768-rule-dialog.png",
+    "width": 1366,
+    "height": 975,
+    "sampledPixels": 1681,
+    "nonWhitePixels": 964,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-1366x768-rules.png",
+    "width": 1366,
+    "height": 975,
+    "sampledPixels": 1681,
+    "nonWhitePixels": 619,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-1440x900-correction-dialog.png",
+    "width": 1440,
+    "height": 2999,
+    "sampledPixels": 1640,
+    "nonWhitePixels": 900,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-1440x900-payment-preview.png",
+    "width": 1440,
+    "height": 2935,
+    "sampledPixels": 1640,
+    "nonWhitePixels": 817,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-1440x900-receipt.png",
+    "width": 1440,
+    "height": 2999,
+    "sampledPixels": 1640,
+    "nonWhitePixels": 1017,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-1440x900-rule-dialog.png",
+    "width": 1440,
+    "height": 975,
+    "sampledPixels": 1640,
+    "nonWhitePixels": 1011,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-1440x900-rules.png",
+    "width": 1440,
+    "height": 975,
+    "sampledPixels": 1640,
+    "nonWhitePixels": 551,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-320x800-payment-preview.png",
+    "width": 320,
+    "height": 6088,
+    "sampledPixels": 1640,
+    "nonWhitePixels": 419,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-320x800-rule-dialog.png",
+    "width": 320,
+    "height": 2618,
+    "sampledPixels": 1640,
+    "nonWhitePixels": 430,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-320x800-rules.png",
+    "width": 320,
+    "height": 2618,
+    "sampledPixels": 1640,
+    "nonWhitePixels": 369,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-390x844-correction-dialog.png",
+    "width": 390,
+    "height": 5928,
+    "sampledPixels": 1804,
+    "nonWhitePixels": 371,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-390x844-payment-preview.png",
+    "width": 390,
+    "height": 5844,
+    "sampledPixels": 1804,
+    "nonWhitePixels": 467,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-390x844-receipt.png",
+    "width": 390,
+    "height": 5928,
+    "sampledPixels": 1804,
+    "nonWhitePixels": 479,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-390x844-rule-dialog.png",
+    "width": 390,
+    "height": 2486,
+    "sampledPixels": 1804,
+    "nonWhitePixels": 465,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-390x844-rules.png",
+    "width": 390,
+    "height": 2486,
+    "sampledPixels": 1804,
+    "nonWhitePixels": 389,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-768x1024-payment-preview.png",
+    "width": 768,
+    "height": 4396,
+    "sampledPixels": 1681,
+    "nonWhitePixels": 437,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-768x1024-rule-dialog.png",
+    "width": 768,
+    "height": 2270,
+    "sampledPixels": 1681,
+    "nonWhitePixels": 601,
+    "nonBlank": true
+  },
+  {
+    "file": "phase5-768x1024-rules.png",
+    "width": 768,
+    "height": 2270,
+    "sampledPixels": 1681,
+    "nonWhitePixels": 344,
+    "nonBlank": true
+  }
+]

@@ -24,6 +24,7 @@ import {
 } from "../lib/school-demo-data";
 import {
   addMiscellaneousCharge,
+  applyStudentPaymentPreview,
   activeAcademicStages,
   activeClassDefinitions,
   activeRoomDefinitions,
@@ -32,10 +33,16 @@ import {
   availableRoomDefinitions,
   buildFinanceProfileDraft,
   buildFinanceSettingsDraft,
+  buildDefaultPaymentRuleVersions,
   buildGroupId,
   buildLedger,
+  buildPaymentReceipt,
+  buildPaymentReceiptFromRecord,
   buildPaymentRecord,
+  buildPaymentRuleDraft,
   buildStudentFinanceProfile,
+  correctStudentPayment,
+  createNextPaymentRuleVersion,
   currentAcademicYear,
   cx,
   financeStatusLabel,
@@ -45,10 +52,12 @@ import {
   formatDate,
   formatDateTime,
   getMiscellaneousCellState,
+  getMiscellaneousSummary,
   getMonthCellState,
   getMonthsInRange,
   getRegistrationCellState,
   getStudentDebt,
+  getStudentDebtTiming,
   getStudentEnrollmentDate,
   getStudentTuitionStartMonth,
   getTuitionInstallmentNumber,
@@ -61,9 +70,11 @@ import {
   nextId,
   nextRegistrationNumber,
   nextRoomDefinitionId,
+  nextStableNumberForGroup,
   nextStageDefinitionId,
   normalizePaymentRecord,
   normalizeStudentForPolicy,
+  normalizeStudentsForEnrollmentPolicy,
   normalizeText,
   nowIso,
   paidOnToIso,
@@ -71,7 +82,7 @@ import {
   paymentMethods,
   paymentSections,
   profiles,
-  recordStudentPayment,
+  previewStudentPayment,
   rowMatchesPaymentAlertFilter,
   roomById,
   roomLabel,
@@ -95,28 +106,46 @@ import {
   type FinanceSettingsDraft,
   type GroupDraft,
   type MiscellaneousChargeDraft,
+  type PaymentCorrectionDraft,
   type PaymentLaunchDraft,
+  type PaymentReceipt,
+  type PaymentRuleDraft,
   type PaymentAlertFilter,
   type PaymentWorkspaceSection,
   type ProfileId,
   type RoomDefinitionDraft,
   type RoomDraft,
+  type StudentLedgerRow,
   type StoredDemoState,
   type WorkspaceView,
 } from "./school-admin-demo.model";
+import {
+  assertCanPerformFinanceAction,
+  type FinanceAction,
+} from "../features/finance/domain/access-control";
+import {
+  createLegacySafetyExport,
+  migrateLegacyStoredState,
+  type LegacySafetyExport,
+} from "../features/finance/domain/migration";
 import {
   ClassForm,
   CrumbButton,
   EnrollmentForm,
   FieldLabel,
   FinanceCell,
-  FinanceCellDetailPanel,
+  FinanceCellDialog,
   FinanceSettingsForm,
   FlowStep,
   GroupForm,
   MetricCard,
   MiscellaneousChargeForm,
+  PageContainer,
+  PaymentCorrectionDialog,
   PaymentForm,
+  PaymentReceiptDialog,
+  PaymentRuleDialog,
+  PaymentRulesTable,
   PaymentSettingsSummary,
   PrimaryButton,
   ProfileCard,
@@ -130,6 +159,42 @@ import {
   SummaryMini,
   TextButton,
 } from "./school-admin-demo.components";
+
+function stableNumberSortValue(stableNumber?: string) {
+  const parsed = Number(stableNumber);
+
+  return Number.isFinite(parsed) ? parsed : Number.MAX_SAFE_INTEGER;
+}
+
+function compareFinanceRows(a: StudentLedgerRow, b: StudentLedgerRow) {
+  const byStableNumber =
+    stableNumberSortValue(a.student.stableNumber) -
+    stableNumberSortValue(b.student.stableNumber);
+
+  if (byStableNumber !== 0) {
+    return byStableNumber;
+  }
+
+  return a.student.fullName.localeCompare(b.student.fullName, "pt-PT");
+}
+
+function stableNumberLabel(student: Student) {
+  return student.stableNumber ?? "Sem numero";
+}
+
+function financeCellAriaLabel({
+  balance,
+  rubric,
+  state,
+  studentName,
+}: {
+  balance: string;
+  rubric: string;
+  state: string;
+  studentName: string;
+}) {
+  return `${rubric}, ${studentName}, ${state}, saldo ${balance}. Abrir detalhe financeiro.`;
+}
 
 export function SchoolAdminDemo() {
   const firstClassId = initialClasses[0]?.id ?? "";
@@ -155,9 +220,20 @@ export function SchoolAdminDemo() {
   const [students, setStudents] = useState<Student[]>(initialStudents);
   const [paymentSettings, setPaymentSettings] =
     useState<PaymentSettings>(initialPaymentSettings);
+  const [paymentRuleVersions, setPaymentRuleVersions] = useState(() =>
+    buildDefaultPaymentRuleVersions(
+      initialStudents,
+      initialClasses,
+      initialPaymentSettings,
+    ),
+  );
   const [paymentRecords, setPaymentRecords] =
     useState<StudentPaymentRecord[]>(initialPaymentRecords);
   const [billingRuns, setBillingRuns] = useState<BillingRun[]>([]);
+  const [migrationValidationTimestamp, setMigrationValidationTimestamp] =
+    useState(() => nowIso());
+  const [legacySafetyExport, setLegacySafetyExport] =
+    useState<LegacySafetyExport | null>(null);
   const [selectedClassId, setSelectedClassId] = useState(firstClassId);
   const [selectedGroupId, setSelectedGroupId] = useState(firstGroupId);
   const [studentSearch, setStudentSearch] = useState("");
@@ -252,9 +328,20 @@ export function SchoolAdminDemo() {
     amount: String(initialPaymentSettings.monthlyFee),
     paidOn: today(),
     method: paymentMethods[0],
-    reference: "",
     description: "",
+    allowFutureAllocation: false,
   });
+  const [paymentRuleDraft, setPaymentRuleDraft] =
+    useState<PaymentRuleDraft | null>(null);
+  const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceipt | null>(null);
+  const [paymentCorrectionTarget, setPaymentCorrectionTarget] =
+    useState<{ studentId: string; paymentId: string } | null>(null);
+  const [paymentCorrectionDraft, setPaymentCorrectionDraft] =
+    useState<PaymentCorrectionDraft>({
+      paymentId: "",
+      amount: "0",
+      reason: "",
+    });
   const [miscellaneousChargeDraft, setMiscellaneousChargeDraft] =
     useState<MiscellaneousChargeDraft>({
       type: "Prova",
@@ -273,6 +360,14 @@ export function SchoolAdminDemo() {
         return;
       }
 
+      const loadedMigrationTimestamp =
+        storedState.financeMigrationPreview?.createdAt ?? nowIso();
+      const loadedSafetyExport =
+        storedState.legacySafetyExport ??
+        createLegacySafetyExport(storedState, {
+          storageKey,
+          migratedAt: loadedMigrationTimestamp,
+        });
       const loadedAcademicStages = storedArray(
         storedState.academicStages,
         initialAcademicStages,
@@ -294,14 +389,21 @@ export function SchoolAdminDemo() {
         storedState.paymentRecords,
         initialPaymentRecords,
       );
-      const loadedBaseStudents = storedArray(storedState.students, initialStudents).map(
-        (student) => {
+      const loadedBaseStudents = normalizeStudentsForEnrollmentPolicy(
+        storedArray(storedState.students, initialStudents).map((student) => {
           return normalizeStudentForPolicy(student, loadedPaymentSettings);
-        },
+        }),
+        loadedPaymentSettings,
       );
       const loadedPaymentMonths = getMonthsInRange(
         loadedPaymentSettings.startMonth,
         loadedPaymentSettings.endMonth,
+      );
+      const loadedPaymentRuleVersions = buildDefaultPaymentRuleVersions(
+        loadedBaseStudents,
+        loadedClasses,
+        loadedPaymentSettings,
+        storedArray(storedState.paymentRuleVersions, []),
       );
       const loadedPaymentRecords = loadedBaseStudents.map((student) => {
         const rawRecord =
@@ -313,6 +415,7 @@ export function SchoolAdminDemo() {
           student,
           loadedPaymentMonths,
           loadedPaymentSettings,
+          loadedPaymentRuleVersions,
         );
       });
       const loadedStudents = loadedBaseStudents.map((student) => {
@@ -324,6 +427,8 @@ export function SchoolAdminDemo() {
           paymentRecord,
           loadedPaymentMonths,
           loadedPaymentSettings,
+          undefined,
+          loadedPaymentRuleVersions,
         );
         const registrationStatus: Student["registrationStatus"] =
           ledger.registrationBalance === 0 ? "paid" : "pending";
@@ -351,8 +456,11 @@ export function SchoolAdminDemo() {
       setGroups(loadedGroups);
       setStudents(loadedStudents);
       setPaymentSettings(loadedPaymentSettings);
+      setPaymentRuleVersions(loadedPaymentRuleVersions);
       setPaymentRecords(loadedPaymentRecords);
       setBillingRuns(loadedBillingRuns);
+      setMigrationValidationTimestamp(loadedMigrationTimestamp);
+      setLegacySafetyExport(loadedSafetyExport);
       setSelectedClassId(loadedFirstClassId);
       setSelectedGroupId(loadedFirstGroupId);
       setBillingMonthKey(loadedPaymentSettings.startMonth);
@@ -400,6 +508,7 @@ export function SchoolAdminDemo() {
         targetChargeId: "",
         amount: String(loadedPaymentSettings.monthlyFee),
         paidOn: draft.paidOn || today(),
+        allowFutureAllocation: false,
       }));
       setStorageReady(true);
     }, 0);
@@ -407,10 +516,42 @@ export function SchoolAdminDemo() {
     return () => window.clearTimeout(loadStateId);
   }, []);
 
+  const effectivePaymentRuleVersions = useMemo(
+    () =>
+      buildDefaultPaymentRuleVersions(
+        students,
+        classes,
+        paymentSettings,
+        paymentRuleVersions,
+      ),
+    [classes, paymentRuleVersions, paymentSettings, students],
+  );
+
   useEffect(() => {
     if (!storageReady) {
       return;
     }
+
+    const migrationResult = migrateLegacyStoredState(
+      {
+        academicStages,
+        classDefinitions,
+        roomDefinitions,
+        classes,
+        rooms,
+        groups,
+        students,
+        paymentSettings,
+        paymentRuleVersions: effectivePaymentRuleVersions,
+        paymentRecords,
+        billingRuns,
+      },
+      {
+        storageKey,
+        migratedAt: migrationValidationTimestamp,
+        recordedBy: "Sistema",
+      },
+    );
 
     window.localStorage.setItem(
       storageKey,
@@ -423,8 +564,12 @@ export function SchoolAdminDemo() {
         groups,
         students,
         paymentSettings,
+        paymentRuleVersions: effectivePaymentRuleVersions,
         paymentRecords,
         billingRuns,
+        financeBook: migrationResult.financeBook,
+        financeMigrationPreview: migrationResult.preview,
+        legacySafetyExport: legacySafetyExport ?? migrationResult.safetyExport,
       } satisfies StoredDemoState),
     );
   }, [
@@ -432,9 +577,12 @@ export function SchoolAdminDemo() {
     billingRuns,
     classDefinitions,
     classes,
+    effectivePaymentRuleVersions,
     groups,
     paymentRecords,
     paymentSettings,
+    legacySafetyExport,
+    migrationValidationTimestamp,
     roomDefinitions,
     rooms,
     storageReady,
@@ -487,6 +635,21 @@ export function SchoolAdminDemo() {
     [groupsForCurrentClass, students],
   );
 
+  const classesById = useMemo(
+    () => new Map(classes.map((schoolClass) => [schoolClass.id, schoolClass])),
+    [classes],
+  );
+  const groupsById = useMemo(
+    () => new Map(groups.map((group) => [group.id, group])),
+    [groups],
+  );
+  const studentContextLabel = (student: Student) => {
+    const schoolClass = classesById.get(student.classId);
+    const group = groupsById.get(student.groupId);
+
+    return `${schoolClass?.name ?? "Sem classe"} / ${group?.name ?? "Sem turma"}`;
+  };
+
   const allStudentsAlphabetically = useMemo(
     () => sortStudents(students),
     [students],
@@ -516,15 +679,29 @@ export function SchoolAdminDemo() {
           student,
           paymentMonths,
           paymentSettings,
+          effectivePaymentRuleVersions,
         );
 
         return {
           student,
           record,
-          ledger: buildLedger(student, record, paymentMonths, paymentSettings),
+          ledger: buildLedger(
+            student,
+            record,
+            paymentMonths,
+            paymentSettings,
+            undefined,
+            effectivePaymentRuleVersions,
+          ),
         };
       }),
-    [allStudentsAlphabetically, paymentMonths, paymentRecords, paymentSettings],
+    [
+      allStudentsAlphabetically,
+      effectivePaymentRuleVersions,
+      paymentMonths,
+      paymentRecords,
+      paymentSettings,
+    ],
   );
 
   const paymentRows = useMemo(
@@ -547,7 +724,10 @@ export function SchoolAdminDemo() {
 
   const visiblePaymentRows = useMemo(() => {
     const visibleIds = new Set(visibleStudents.map((student) => student.id));
-    return filteredPaymentRows.filter((row) => visibleIds.has(row.student.id));
+
+    return filteredPaymentRows
+      .filter((row) => visibleIds.has(row.student.id))
+      .sort(compareFinanceRows);
   }, [filteredPaymentRows, visibleStudents]);
   const selectedPaymentStudentIdSet = useMemo(
     () => new Set(selectedPaymentStudentIds),
@@ -561,6 +741,9 @@ export function SchoolAdminDemo() {
   const selectedFinanceRow = selectedFinanceCell
     ? allPaymentRows.find((row) => row.student.id === selectedFinanceCell.studentId)
     : undefined;
+  const selectedFinanceContextLabel = selectedFinanceRow
+    ? studentContextLabel(selectedFinanceRow.student)
+    : "Sem contexto";
 
   const schoolPaymentSummary = useMemo(
     () => summarizePaymentRows(allPaymentRows),
@@ -589,11 +772,13 @@ export function SchoolAdminDemo() {
                 payment: {
                   amount: allocation.amount,
                   paidAt: payment
-                    ? paidOnToIso(payment.paidOn)
+                    ? paidOnToIso(payment.effectivePaymentDate ?? payment.paidOn)
                     : charge.createdAt,
-                  paidDay: payment ? Number(payment.paidOn.slice(8, 10)) : 0,
+                  paidDay: payment
+                    ? Number((payment.effectivePaymentDate ?? payment.paidOn).slice(8, 10))
+                    : 0,
                   method: payment?.method,
-                  reference: payment?.reference,
+                  recordedAt: payment?.recordedAt,
                   description: charge.description,
                 },
               },
@@ -825,6 +1010,83 @@ export function SchoolAdminDemo() {
   const paymentAlerts = paymentAlertItems.filter((alert) => alert.count > 0);
   const selectedProfile =
     profiles.find((profile) => profile.id === activeProfile) ?? profiles[1];
+  const selectedPaymentStudentForDraft =
+    allStudentsAlphabetically.find(
+      (student) => student.id === paymentDraft.studentId,
+    ) ?? allStudentsAlphabetically[0];
+  const paymentRecordedAtPreview = nowIso();
+  const selectedPaymentPreview = useMemo(() => {
+    const amount = parseMoney(paymentDraft.amount);
+
+    if (!selectedPaymentStudentForDraft || amount <= 0 || !paymentDraft.paidOn) {
+      return undefined;
+    }
+
+    const existingRecord =
+      paymentRecords.find(
+        (record) => record.studentId === selectedPaymentStudentForDraft.id,
+      ) ?? buildPaymentRecord(selectedPaymentStudentForDraft.id);
+
+    return previewStudentPayment({
+      record: existingRecord,
+      student: selectedPaymentStudentForDraft,
+      months: paymentMonths,
+      settings: paymentSettings,
+      paymentRuleVersions: effectivePaymentRuleVersions,
+      category: paymentDraft.category,
+      monthKey: paymentDraft.monthKey,
+      targetChargeId: paymentDraft.targetChargeId,
+      amount,
+      paidOn: paymentDraft.paidOn,
+      effectivePaymentDate: paymentDraft.paidOn,
+      recordedAt: paymentRecordedAtPreview,
+      recordedBy: selectedProfile.title,
+      method: paymentDraft.method,
+      description: paymentDraft.description.trim(),
+      allowFutureAllocation: paymentDraft.allowFutureAllocation,
+    });
+  }, [
+    effectivePaymentRuleVersions,
+    paymentDraft,
+    paymentMonths,
+    paymentRecords,
+    paymentRecordedAtPreview,
+    paymentSettings,
+    selectedPaymentStudentForDraft,
+    selectedProfile.title,
+  ]);
+  const paymentCorrectionRow = paymentCorrectionTarget
+    ? allPaymentRows.find((row) => row.student.id === paymentCorrectionTarget.studentId)
+    : undefined;
+  const paymentCorrectionPayment = paymentCorrectionTarget
+    ? paymentCorrectionRow?.record.payments.find(
+        (payment) => payment.id === paymentCorrectionTarget.paymentId,
+      )
+    : undefined;
+  const paymentCorrectionMaxAmount = paymentCorrectionPayment
+    ? (() => {
+        const allocated =
+          paymentCorrectionRow?.record.allocations
+            .filter((allocation) => allocation.paymentId === paymentCorrectionPayment.id)
+            .reduce((total, allocation) => total + allocation.amount, 0) ?? 0;
+
+        return allocated > 0 ? allocated : paymentCorrectionPayment.amount;
+      })()
+    : 0;
+  const paymentCorrectionRecordedAtPreview = nowIso();
+
+  function guardMutation(
+    action: FinanceAction,
+    onDenied: (message: string) => void = setFinanceNotice,
+  ) {
+    try {
+      assertCanPerformFinanceAction(selectedProfile.id, action);
+      return true;
+    } catch (error) {
+      onDenied(error instanceof Error ? error.message : "Operacao nao autorizada.");
+      return false;
+    }
+  }
 
   function enterProfile(profileId: ProfileId, view?: WorkspaceView) {
     const profile = profiles.find((item) => item.id === profileId);
@@ -979,6 +1241,10 @@ export function SchoolAdminDemo() {
   function submitAcademicStage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!guardMutation("manage-academic-structure", setStageDefinitionError)) {
+      return;
+    }
+
     const trimmedName = academicStageDraft.name.trim();
 
     if (!trimmedName) {
@@ -1013,6 +1279,10 @@ export function SchoolAdminDemo() {
 
   function submitClassDefinition(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!guardMutation("manage-academic-structure", setClassDefinitionError)) {
+      return;
+    }
 
     const trimmedId = classDefinitionDraft.id.trim().replace(/\s+/g, "").toUpperCase();
     const trimmedName = classDefinitionDraft.name.trim();
@@ -1056,6 +1326,10 @@ export function SchoolAdminDemo() {
   function submitRoomDefinition(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!guardMutation("manage-academic-structure", setRoomDefinitionError)) {
+      return;
+    }
+
     const trimmedName = roomDefinitionDraft.name.trim();
     const trimmedBlock = roomDefinitionDraft.block.trim() || "Bloco principal";
     const capacity = Math.max(1, Number(roomDefinitionDraft.capacity) || 35);
@@ -1093,6 +1367,10 @@ export function SchoolAdminDemo() {
   }
 
   function toggleAcademicStageStatus(stageId: string) {
+    if (!guardMutation("manage-academic-structure", setStageDefinitionError)) {
+      return;
+    }
+
     setAcademicStages((items) =>
       items.map((stage) =>
         stage.id === stageId
@@ -1106,6 +1384,10 @@ export function SchoolAdminDemo() {
   }
 
   function toggleClassDefinitionStatus(definitionId: string) {
+    if (!guardMutation("manage-academic-structure", setClassDefinitionError)) {
+      return;
+    }
+
     setClassDefinitions((items) =>
       items.map((definition) =>
         definition.id === definitionId
@@ -1119,6 +1401,10 @@ export function SchoolAdminDemo() {
   }
 
   function toggleRoomDefinitionStatus(definitionId: string) {
+    if (!guardMutation("manage-academic-structure", setRoomDefinitionError)) {
+      return;
+    }
+
     setRoomDefinitions((items) =>
       items.map((definition) =>
         definition.id === definitionId
@@ -1133,6 +1419,10 @@ export function SchoolAdminDemo() {
 
   function submitRoom(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!guardMutation("manage-academic-structure", setRoomError)) {
+      return;
+    }
 
     const selectedDefinition = activeRoomDefinitions(roomDefinitions).find(
       (definition) => definition.id === roomDraft.definitionId,
@@ -1180,7 +1470,14 @@ export function SchoolAdminDemo() {
         paymentRecords.find((item) => item.studentId === studentId) ??
         buildPaymentRecord(studentId);
       const ledger = student
-        ? buildLedger(student, record, paymentMonths, paymentSettings)
+        ? buildLedger(
+            student,
+            record,
+            paymentMonths,
+            paymentSettings,
+            undefined,
+            effectivePaymentRuleVersions,
+          )
         : undefined;
       const registrationPending = (ledger?.registrationBalance ?? 0) > 0;
 
@@ -1196,6 +1493,7 @@ export function SchoolAdminDemo() {
           : draft.amount,
         targetChargeId: "",
         paidOn: today(),
+        allowFutureAllocation: false,
       }));
     }
   }
@@ -1221,8 +1519,8 @@ export function SchoolAdminDemo() {
       targetChargeId: draft.targetChargeId ?? "",
       amount: draft.amount ?? currentDraft.amount,
       paidOn: today(),
-      reference: "",
       description: draft.description ?? "",
+      allowFutureAllocation: draft.allowFutureAllocation ?? false,
     }));
   }
 
@@ -1258,6 +1556,10 @@ export function SchoolAdminDemo() {
 
   function submitMiscellaneousCharge(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!guardMutation("publish-charges", setMiscellaneousNotice)) {
+      return;
+    }
 
     const targetRows =
       miscellaneousChargeDraft.target === "selected"
@@ -1321,6 +1623,10 @@ export function SchoolAdminDemo() {
   function submitClass(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!guardMutation("manage-academic-structure", setClassError)) {
+      return;
+    }
+
     const selectedDefinition = activeClassDefinitions(
       classDefinitions,
       academicStages,
@@ -1347,6 +1653,8 @@ export function SchoolAdminDemo() {
       name: selectedDefinition.name,
       stage: stageLabel(academicStages, selectedDefinition.stageId),
       academicYear: currentAcademicYear(),
+      academicYearId: currentAcademicYear(),
+      educationLevelId: selectedDefinition.stageId,
       status: classDraft.status,
       createdAt: today(),
     };
@@ -1362,6 +1670,10 @@ export function SchoolAdminDemo() {
 
   function submitGroup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!guardMutation("manage-academic-structure", setGroupError)) {
+      return;
+    }
 
     const trimmedName = groupDraft.name.trim();
     const selectedRoom = roomById(rooms, groupDraft.roomId);
@@ -1402,9 +1714,16 @@ export function SchoolAdminDemo() {
   }
 
   function saveEnrollment(openPaymentAfterSave: boolean) {
+    if (!guardMutation("manage-enrollment", setEnrollmentNotice)) {
+      return;
+    }
+
     const trimmedName = enrollmentDraft.fullName.trim();
     const selectedGroup = groups.find(
       (group) => group.id === enrollmentDraft.groupId,
+    );
+    const selectedClass = classes.find(
+      (schoolClass) => schoolClass.id === selectedGroup?.classId,
     );
 
     if (!trimmedName || !selectedGroup) {
@@ -1427,9 +1746,25 @@ export function SchoolAdminDemo() {
       },
       nowIso(),
     );
+    const newStudentId = nextId(students, "ALU");
+    const academicYearId =
+      selectedClass?.academicYearId ??
+      selectedClass?.academicYear ??
+      paymentSettings.academicYear;
+    const educationLevelId =
+      selectedClass?.educationLevelId ?? selectedClass?.stage ?? selectedGroup.classId;
 
-    const newStudent: Student = {
-      id: nextId(students, "ALU"),
+    const provisionalStudent: Student = {
+      id: newStudentId,
+      enrollmentId: `ENR-${academicYearId}-${newStudentId}`,
+      academicYearId,
+      educationLevelId,
+      stableNumber: nextStableNumberForGroup(
+        students,
+        selectedGroup.id,
+        paymentSettings,
+        academicYearId,
+      ),
       registrationNumber: nextRegistrationNumber(students),
       fullName: trimmedName,
       guardianName: enrollmentDraft.guardianName.trim() || "Por registar",
@@ -1443,32 +1778,59 @@ export function SchoolAdminDemo() {
       groupId: selectedGroup.id,
       createdAt: enrollmentDraft.enrollmentDate || today(),
     };
+    const initialRecord = normalizePaymentRecord(
+      buildPaymentRecord(provisionalStudent.id),
+      provisionalStudent,
+      paymentMonths,
+      paymentSettings,
+      effectivePaymentRuleVersions,
+      provisionalStudent.enrollmentDate,
+    );
+    const initialLedger = buildLedger(
+      provisionalStudent,
+      initialRecord,
+      paymentMonths,
+      paymentSettings,
+      provisionalStudent.enrollmentDate,
+      effectivePaymentRuleVersions,
+    );
+    const registrationBalance =
+      initialLedger.registrationBalance + initialLedger.registrationPenaltyBalance;
+    const newStudent: Student = {
+      ...provisionalStudent,
+      registrationStatus: registrationBalance <= 0 ? "paid" : "pending",
+    };
 
     setStudents((items) => [...items, newStudent]);
-    setPaymentRecords((items) => [...items, buildPaymentRecord(newStudent.id)]);
+    setPaymentRecords((items) => [...items, initialLedger.normalizedRecord]);
     setPaymentDraft((draft) => ({
       ...draft,
       studentId: newStudent.id,
       category: "registration",
       monthKey: newStudent.tuitionStartMonth,
       targetChargeId: "",
-      amount: String(paymentSettings.inscriptionRenewalFee),
+      amount: String(registrationBalance),
       paidOn: today(),
-      reference: "",
       description: "",
+      allowFutureAllocation: false,
     }));
     setSelectedClassId(newStudent.classId);
     setSelectedGroupId(newStudent.groupId);
     resetEnrollmentDraft(newStudent.classId, newStudent.groupId);
 
-    if (openPaymentAfterSave) {
+    if (openPaymentAfterSave && registrationBalance > 0) {
       setActiveView("payments");
       setActivePaymentSection("entry");
+      setBillingNotice(
+        `${newStudent.registrationNumber} pronta para pagamento de inscricao: ${formatCurrency(registrationBalance)}.`,
+      );
       return;
     }
 
     setEnrollmentNotice(
-      `${newStudent.registrationNumber} guardada. Inscrição pendente para pagamento.`,
+      registrationBalance > 0
+        ? `${newStudent.registrationNumber} guardada. Inscricao pendente para pagamento.`
+        : `${newStudent.registrationNumber} guardada. Inscricao sem valor exigivel.`,
     );
   }
 
@@ -1482,6 +1844,10 @@ export function SchoolAdminDemo() {
   }
 
   function toggleClassStatus(classId: string) {
+    if (!guardMutation("manage-academic-structure", setClassError)) {
+      return;
+    }
+
     setClasses((items) =>
       items.map((schoolClass) =>
         schoolClass.id === classId
@@ -1495,6 +1861,10 @@ export function SchoolAdminDemo() {
   }
 
   function toggleGroupStatus(groupId: string) {
+    if (!guardMutation("manage-academic-structure", setGroupError)) {
+      return;
+    }
+
     setGroups((items) =>
       items.map((group) =>
         group.id === groupId
@@ -1508,6 +1878,10 @@ export function SchoolAdminDemo() {
   }
 
   function toggleRoomStatus(roomId: string) {
+    if (!guardMutation("manage-academic-structure", setRoomError)) {
+      return;
+    }
+
     setRooms((items) =>
       items.map((room) =>
         room.id === roomId
@@ -1533,6 +1907,10 @@ export function SchoolAdminDemo() {
   function submitFinanceSettings(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!guardMutation("manage-payment-rules", setFinanceSettingsNotice)) {
+      return;
+    }
+
     const nextSettings: PaymentSettings = {
       academicYear: financeSettingsDraft.academicYear.trim() || "2026",
       inscriptionRenewalFee: parseMoney(
@@ -1554,6 +1932,14 @@ export function SchoolAdminDemo() {
     };
 
     setPaymentSettings(nextSettings);
+    setPaymentRuleVersions(
+      buildDefaultPaymentRuleVersions(
+        students,
+        classes,
+        nextSettings,
+        paymentRuleVersions,
+      ),
+    );
     setBillingMonthKey(nextSettings.startMonth);
     setPaymentDraft((draft) => ({
       ...draft,
@@ -1566,7 +1952,64 @@ export function SchoolAdminDemo() {
             ? String(nextSettings.inscriptionRenewalFee)
             : draft.amount,
     }));
-    setFinanceSettingsNotice("Regras financeiras actualizadas.");
+    setFinanceSettingsNotice(
+      "Parametros padrao actualizados; regras por nivel mantem versoes historicas.",
+    );
+  }
+
+  function openPaymentRuleDialog(ruleId: string) {
+    if (!guardMutation("manage-payment-rules", setFinanceSettingsNotice)) {
+      return;
+    }
+
+    const rule = effectivePaymentRuleVersions.find((item) => item.id === ruleId);
+
+    if (!rule) {
+      setFinanceSettingsNotice("Regra financeira nao encontrada.");
+      return;
+    }
+
+    setFinanceSettingsNotice("");
+    setPaymentRuleDraft(buildPaymentRuleDraft(rule));
+  }
+
+  function submitPaymentRule(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!paymentRuleDraft) {
+      return;
+    }
+
+    if (!guardMutation("manage-payment-rules", setFinanceSettingsNotice)) {
+      return;
+    }
+
+    setPaymentRuleVersions(
+      createNextPaymentRuleVersion(
+        effectivePaymentRuleVersions,
+        paymentRuleDraft,
+        today(),
+      ),
+    );
+    setPaymentRuleDraft(null);
+    setFinanceSettingsNotice("Nova versao de regra financeira guardada.");
+  }
+
+  function paymentRuleLevelLabel(rule: { educationLevelId: string }) {
+    const stage = academicStages.find((item) => item.id === rule.educationLevelId);
+    const classForLevel = classes.find(
+      (schoolClass) => schoolClass.educationLevelId === rule.educationLevelId,
+    );
+    const definitionForStage = classDefinitions.find(
+      (definition) => definition.stageId === rule.educationLevelId,
+    );
+
+    return (
+      stage?.name ??
+      classForLevel?.stage ??
+      definitionForStage?.name ??
+      (rule.educationLevelId === "default" ? "Padrao" : rule.educationLevelId)
+    );
   }
 
   function selectFinanceStudent(studentId: string) {
@@ -1578,6 +2021,10 @@ export function SchoolAdminDemo() {
 
   function submitFinanceProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!guardMutation("manage-financial-aid", setFinanceNotice)) {
+      return;
+    }
 
     if (!financeProfileDraft.studentId) {
       setFinanceNotice("Seleccione um aluno para aplicar a regra.");
@@ -1619,6 +2066,10 @@ export function SchoolAdminDemo() {
   }
 
   function generateMonthlyBilling() {
+    if (!guardMutation("publish-charges", setBillingNotice)) {
+      return;
+    }
+
     if (!currentClassId || !currentGroupId || paymentRows.length === 0) {
       setBillingNotice("Escolha uma turma com alunos antes de gerar mensalidades.");
       return;
@@ -1667,6 +2118,7 @@ export function SchoolAdminDemo() {
           row.student,
           paymentMonths,
           paymentSettings,
+          effectivePaymentRuleVersions,
         );
         const recordIndex = nextItems.findIndex(
           (record) => record.studentId === row.student.id,
@@ -1687,34 +2139,140 @@ export function SchoolAdminDemo() {
     );
   }
 
+  function showPaymentReceipt(studentId: string, paymentId: string) {
+    const row = allPaymentRows.find((item) => item.student.id === studentId);
+    const receipt = row
+      ? buildPaymentReceiptFromRecord(row.student, row.record, paymentId)
+      : undefined;
+
+    if (!receipt) {
+      setBillingNotice("Recibo indisponivel para este pagamento.");
+      return;
+    }
+
+    setPaymentReceipt(receipt);
+  }
+
+  function openPaymentCorrection(studentId: string, paymentId: string) {
+    if (!guardMutation("correct-payment", setBillingNotice)) {
+      return;
+    }
+
+    const row = allPaymentRows.find((item) => item.student.id === studentId);
+    const payment = row?.record.payments.find((item) => item.id === paymentId);
+
+    if (!row || !payment) {
+      setBillingNotice("Pagamento nao encontrado para correcao.");
+      return;
+    }
+
+    const allocated = row.record.allocations
+      .filter((allocation) => allocation.paymentId === payment.id)
+      .reduce((total, allocation) => total + allocation.amount, 0);
+    const maxAmount = allocated > 0 ? allocated : payment.amount;
+
+    setSelectedFinanceCell(null);
+    setPaymentCorrectionTarget({ studentId, paymentId });
+    setPaymentCorrectionDraft({
+      paymentId,
+      amount: String(maxAmount),
+      reason: "",
+    });
+  }
+
+  function submitPaymentCorrection(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!paymentCorrectionTarget) {
+      return;
+    }
+
+    if (!guardMutation("correct-payment", setBillingNotice)) {
+      return;
+    }
+
+    const row = allPaymentRows.find(
+      (item) => item.student.id === paymentCorrectionTarget.studentId,
+    );
+
+    if (!row) {
+      setBillingNotice("Pagamento nao encontrado para correcao.");
+      return;
+    }
+
+    const result = correctStudentPayment({
+      record: row.record,
+      student: row.student,
+      paymentId: paymentCorrectionTarget.paymentId,
+      amount: parseMoney(paymentCorrectionDraft.amount),
+      reason: paymentCorrectionDraft.reason,
+      recordedAt: nowIso(),
+      recordedBy: selectedProfile.title,
+    });
+
+    if (!result.correction) {
+      setBillingNotice("Informe um motivo e um valor valido para corrigir.");
+      return;
+    }
+
+    setPaymentRecords((items) =>
+      items.some((record) => record.studentId === row.student.id)
+        ? items.map((record) =>
+            record.studentId === row.student.id ? result.record : record,
+          )
+        : [...items, result.record],
+    );
+    setPaymentCorrectionTarget(null);
+    setPaymentCorrectionDraft({ paymentId: "", amount: "0", reason: "" });
+    setBillingNotice(
+      `Correcao ${result.correction.id} registada com ajuste de ${formatCurrency(result.correction.amount)}.`,
+    );
+  }
+
   function launchPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
+    if (!guardMutation("record-payment", setBillingNotice)) {
+      return;
+    }
+
     const amount = parseMoney(paymentDraft.amount);
     const student = students.find((item) => item.id === paymentDraft.studentId);
+    const paidOn = paymentDraft.paidOn || today();
 
     if (!paymentDraft.studentId || amount <= 0 || !student) {
+      return;
+    }
+
+    if (paidOn > today()) {
+      setBillingNotice("A data efectiva do pagamento nao pode estar no futuro.");
       return;
     }
 
     const existingRecord =
       paymentRecords.find((record) => record.studentId === paymentDraft.studentId) ??
       buildPaymentRecord(paymentDraft.studentId);
-    const nextRecord = recordStudentPayment({
+    const recordedAt = nowIso();
+    const preview = previewStudentPayment({
       record: existingRecord,
       student,
       months: paymentMonths,
       settings: paymentSettings,
+      paymentRuleVersions: effectivePaymentRuleVersions,
       category: paymentDraft.category,
       monthKey: paymentDraft.monthKey,
       targetChargeId: paymentDraft.targetChargeId,
       amount,
-      paidOn: paymentDraft.paidOn || today(),
-      recordedAt: nowIso(),
+      paidOn,
+      effectivePaymentDate: paidOn,
+      recordedAt,
+      recordedBy: selectedProfile.title,
       method: paymentDraft.method,
-      reference: paymentDraft.reference.trim(),
       description: paymentDraft.description.trim(),
+      allowFutureAllocation: paymentDraft.allowFutureAllocation,
     });
+    const nextRecord = applyStudentPaymentPreview(preview);
+    const receipt = buildPaymentReceipt(student, preview);
 
     setPaymentRecords((items) => {
       if (items.some((record) => record.studentId === paymentDraft.studentId)) {
@@ -1727,8 +2285,14 @@ export function SchoolAdminDemo() {
     });
 
     const registrationStatus: Student["registrationStatus"] =
-      buildLedger(student, nextRecord, paymentMonths, paymentSettings)
-        .registrationBalance === 0
+      buildLedger(
+        student,
+        nextRecord,
+        paymentMonths,
+        paymentSettings,
+        undefined,
+        effectivePaymentRuleVersions,
+      ).registrationBalance === 0
         ? "paid"
         : "pending";
 
@@ -1740,6 +2304,10 @@ export function SchoolAdminDemo() {
       ),
     );
 
+    setPaymentReceipt(receipt);
+    setBillingNotice(
+      `Pagamento ${preview.payment.id} registado. Recibo ${receipt.id} disponivel.`,
+    );
     setPaymentDraft((draft) => ({
       ...draft,
       amount:
@@ -1750,11 +2318,10 @@ export function SchoolAdminDemo() {
             : "0",
       targetChargeId: "",
       paidOn: today(),
-      reference: "",
       description: draft.category === "miscellaneous" ? "" : draft.description,
+      allowFutureAllocation: false,
     }));
   }
-
   if (!activeProfile) {
     return renderProfilePortal();
   }
@@ -1763,8 +2330,8 @@ export function SchoolAdminDemo() {
 
   function renderProfilePortal() {
     return (
-      <main className="grid min-h-screen bg-[#f7faf8] px-4 py-8 text-slate-950 sm:px-6 lg:px-8">
-        <section className="mx-auto flex w-full max-w-5xl flex-col items-center justify-center gap-10">
+      <main className="grid min-h-screen overflow-x-clip bg-[var(--lss-color-primary-soft)] py-8 text-slate-950">
+        <PageContainer className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-10">
           <div className="flex flex-col items-center text-center">
             <div className="grid size-28 place-items-center rounded-md border-2 border-[#185c54] bg-white text-2xl font-black text-[#185c54] shadow-sm sm:size-32">
               {institutionLogoText}
@@ -1783,7 +2350,7 @@ export function SchoolAdminDemo() {
               />
             ))}
           </div>
-        </section>
+        </PageContainer>
       </main>
     );
   }
@@ -1801,32 +2368,34 @@ export function SchoolAdminDemo() {
     const showAcademicContext = selectedProfile.id === "secretaria";
 
     return (
-      <main className="min-h-screen bg-[#f4f7f8] text-slate-950">
+      <main className="min-h-screen overflow-x-clip bg-[#f4f7f8] text-slate-950">
         <div className="border-b border-slate-200 bg-white">
-          <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-4">
-              <div className="grid size-12 place-items-center rounded-md bg-[#185c54] text-sm font-black text-white">
+          <PageContainer className="flex flex-wrap items-center justify-between gap-4 py-4">
+            <div className="flex min-w-0 items-center gap-4">
+              <div className="grid size-12 shrink-0 place-items-center rounded-md bg-[#185c54] text-sm font-black text-white">
                 {institutionLogoText}
               </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#185c54]">
+              <div className="min-w-0 overflow-x-clip">
+                <p className="break-words text-xs font-bold uppercase tracking-[0.18em] text-[#185c54]">
                   {institutionName}
                 </p>
-                <h1 className="text-xl font-bold">{selectedProfile.title}</h1>
+                <h1 className="break-words text-xl font-bold">
+                  {selectedProfile.title}
+                </h1>
               </div>
             </div>
             <button
               type="button"
               onClick={() => setActiveProfile(null)}
-              className="rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="min-h-11 rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
             >
               Sair
             </button>
-          </div>
+          </PageContainer>
         </div>
 
-        <div className="mx-auto grid min-h-[calc(100vh-81px)] max-w-[1500px] lg:grid-cols-[280px_1fr]">
-          <aside className="border-b border-slate-200 bg-white px-4 py-5 lg:sticky lg:top-0 lg:h-[calc(100vh-81px)] lg:self-start lg:overflow-y-auto lg:border-b-0 lg:border-r">
+        <div className="lss-shell-grid mx-auto max-w-[var(--lss-page-max)]">
+          <aside className="min-w-0 border-b border-slate-200 bg-white px-4 py-5 lg:sticky lg:top-0 lg:h-[calc(100vh-81px)] lg:self-start lg:overflow-y-auto lg:border-b-0 lg:border-r">
             <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
               <div
                 className={cx(
@@ -1888,7 +2457,7 @@ export function SchoolAdminDemo() {
             )}
           </aside>
 
-          <div className="min-w-0">
+          <div className="min-w-0 overflow-x-clip">
             <header className="border-b border-slate-200 bg-white px-4 py-5 sm:px-6 lg:px-8">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
@@ -1944,7 +2513,7 @@ export function SchoolAdminDemo() {
               )}
             </header>
 
-            <div className="px-4 py-6 sm:px-6 lg:px-8">
+            <div className="min-w-0 px-4 py-6 sm:px-6 lg:px-8">
               {activeView === "overview" && renderOverview()}
               {activeView === "catalog" && renderCatalog()}
               {activeView === "classes" && renderClasses()}
@@ -1967,7 +2536,7 @@ export function SchoolAdminDemo() {
     return (
       <div className="grid gap-6">
         {selectedProfile.id === "director" ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="lss-card-grid">
             <MetricCard
               label="Alunos matriculados"
               value={students.length}
@@ -2018,7 +2587,7 @@ export function SchoolAdminDemo() {
             />
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <div className="lss-card-grid">
             <MetricCard
               label="Classes"
               value={classes.length}
@@ -2046,7 +2615,7 @@ export function SchoolAdminDemo() {
           </div>
         )}
 
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 px-5 py-4">
             <h3 className="text-base font-semibold">Alertas internos</h3>
             <p className="text-sm text-slate-500">
@@ -2090,8 +2659,8 @@ export function SchoolAdminDemo() {
           </div>
         </section>
 
-        <div className="grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="lss-split-grid">
+          <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
               <div>
                 <h3 className="text-base font-semibold">
@@ -2154,7 +2723,7 @@ export function SchoolAdminDemo() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-5 py-4">
               <h3 className="text-base font-semibold">Salas</h3>
             </div>
@@ -2176,7 +2745,7 @@ export function SchoolAdminDemo() {
           </section>
         </div>
 
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
               <h3 className="text-base font-semibold">Mapa escolar</h3>
@@ -2187,7 +2756,7 @@ export function SchoolAdminDemo() {
               </SecondaryButton>
             )}
           </div>
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
             <table className="w-full min-w-[920px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -2263,7 +2832,7 @@ export function SchoolAdminDemo() {
 
     return (
       <div className="grid gap-6">
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="lss-card-grid">
           <MetricCard
             label="Niveis"
             value={academicStages.length}
@@ -2284,16 +2853,16 @@ export function SchoolAdminDemo() {
           />
         </div>
 
-        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="lss-responsive-card">
           <h3 className="text-base font-semibold">Parametros academicos</h3>
         </section>
 
-        <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="lss-split-grid">
+          <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-5 py-4">
               <h3 className="text-base font-semibold">Niveis de ensino</h3>
             </div>
-            <div className="table-scroll">
+            <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
               <table className="w-full min-w-[620px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
@@ -2337,7 +2906,7 @@ export function SchoolAdminDemo() {
 
           <form
             onSubmit={submitAcademicStage}
-            className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+            className="lss-responsive-card"
           >
             <div>
               <h3 className="text-base font-semibold">Definir nivel</h3>
@@ -2390,12 +2959,12 @@ export function SchoolAdminDemo() {
           </form>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="lss-split-grid">
+          <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-5 py-4">
               <h3 className="text-base font-semibold">Classes por nivel</h3>
             </div>
-            <div className="table-scroll">
+            <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
               <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
@@ -2445,7 +3014,7 @@ export function SchoolAdminDemo() {
 
           <form
             onSubmit={submitClassDefinition}
-            className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+            className="lss-responsive-card"
           >
             <div>
               <h3 className="text-base font-semibold">Definir classe</h3>
@@ -2537,12 +3106,12 @@ export function SchoolAdminDemo() {
           </form>
         </div>
 
-        <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-          <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="lss-split-grid">
+          <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             <div className="border-b border-slate-200 px-5 py-4">
               <h3 className="text-base font-semibold">Salas da instituicao</h3>
             </div>
-            <div className="table-scroll">
+            <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
               <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                   <tr>
@@ -2592,7 +3161,7 @@ export function SchoolAdminDemo() {
 
           <form
             onSubmit={submitRoomDefinition}
-            className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+            className="lss-responsive-card"
           >
             <div>
               <h3 className="text-base font-semibold">Definir sala</h3>
@@ -2677,14 +3246,14 @@ export function SchoolAdminDemo() {
 
   function renderClasses() {
     return (
-      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="lss-split-grid">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
               <h3 className="text-base font-semibold">Classes</h3>
             </div>
           </div>
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
             <table className="w-full min-w-[860px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -2783,14 +3352,14 @@ export function SchoolAdminDemo() {
 
   function renderRooms() {
     return (
-      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="lss-split-grid">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
               <h3 className="text-base font-semibold">Salas</h3>
             </div>
           </div>
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -2849,8 +3418,8 @@ export function SchoolAdminDemo() {
 
   function renderGroups() {
     return (
-      <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="lss-split-grid">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
               <h3 className="text-base font-semibold">Turmas</h3>
@@ -2876,7 +3445,7 @@ export function SchoolAdminDemo() {
               )}
             </select>
           </div>
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
             <table className="w-full min-w-[820px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -2968,8 +3537,8 @@ export function SchoolAdminDemo() {
     );
 
     return (
-      <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="lss-split-grid">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
               <h3 className="text-base font-semibold">Matriculas</h3>
@@ -2994,7 +3563,7 @@ export function SchoolAdminDemo() {
             search={studentSearch}
           />
 
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
             <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -3131,7 +3700,7 @@ export function SchoolAdminDemo() {
 
     return (
       <div className="grid gap-6">
-        <nav className="flex gap-2 overflow-x-auto pb-1">
+        <nav className="flex flex-wrap gap-2 pb-1">
           {visiblePaymentSections.map((section) => (
             <button
               key={section.id}
@@ -3151,15 +3720,22 @@ export function SchoolAdminDemo() {
 
         {currentPaymentSection?.id === "settings" && (
           canEditPaymentRules ? (
-            <FinanceSettingsForm
-              draft={financeSettingsDraft}
-              notice={financeSettingsNotice}
-              onChange={(draft) => {
-                setFinanceSettingsNotice("");
-                setFinanceSettingsDraft(draft);
-              }}
-              onSubmit={submitFinanceSettings}
-            />
+            <div className="grid gap-6">
+              <FinanceSettingsForm
+                draft={financeSettingsDraft}
+                notice={financeSettingsNotice}
+                onChange={(draft) => {
+                  setFinanceSettingsNotice("");
+                  setFinanceSettingsDraft(draft);
+                }}
+                onSubmit={submitFinanceSettings}
+              />
+              <PaymentRulesTable
+                rules={effectivePaymentRuleVersions}
+                levelLabel={paymentRuleLevelLabel}
+                onEdit={(rule) => openPaymentRuleDialog(rule.id)}
+              />
+            </div>
           ) : (
             <PaymentSettingsSummary settings={paymentSettings} />
           )
@@ -3181,7 +3757,7 @@ export function SchoolAdminDemo() {
 
         {currentPaymentSection?.id === "entry" && (
           <div className="grid gap-6">
-            <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
                 <div>
                   <h3 className="text-base font-semibold">Gerar propinas</h3>
@@ -3213,9 +3789,11 @@ export function SchoolAdminDemo() {
                       </option>
                     ))}
                   </select>
-                  <PrimaryButton onClick={generateMonthlyBilling}>
-                    Gerar propinas
-                  </PrimaryButton>
+                  {selectedProfile.id === "secretaria" && (
+                    <PrimaryButton onClick={generateMonthlyBilling}>
+                      Gerar propinas
+                    </PrimaryButton>
+                  )}
                 </div>
               </div>
 
@@ -3274,8 +3852,8 @@ export function SchoolAdminDemo() {
               />
             )}
 
-            <div className="grid gap-6 xl:grid-cols-[1fr_400px]">
-              <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="lss-split-grid">
+              <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                   <div>
                     <h3 className="text-base font-semibold">
@@ -3330,11 +3908,11 @@ export function SchoolAdminDemo() {
                   search={studentSearch}
                 />
 
-                <div className="table-scroll">
-                  <table className="w-full min-w-[1480px] text-left text-sm">
+                <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
+                                    <table className="lss-finance-table w-full min-w-[1720px] text-left text-sm">
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                       <tr>
-                        <th className="px-4 py-3 font-semibold">
+                        <th className="finance-sticky-select px-4 py-3 font-semibold">
                           <input
                             type="checkbox"
                             checked={
@@ -3345,11 +3923,12 @@ export function SchoolAdminDemo() {
                             }
                             onChange={toggleAllVisiblePaymentStudents}
                             aria-label="Seleccionar alunos visíveis"
-                            className="size-4 rounded border-slate-300 text-[#185c54]"
+                            className="size-5 rounded border-slate-300 text-[#185c54]"
                           />
                         </th>
-                        <th className="px-4 py-3 font-semibold">Nº</th>
-                        <th className="px-5 py-3 font-semibold">Aluno</th>
+                        <th className="finance-sticky-number px-4 py-3 font-semibold">Nº</th>
+                        <th className="finance-sticky-student px-5 py-3 font-semibold">Aluno</th>
+                        <th className="px-4 py-3 font-semibold">Nível/Turma</th>
                         <th className="px-4 py-3 font-semibold">Inscrição</th>
                         {paymentMonths.map((month) => (
                           <th key={month.key} className="px-3 py-3 font-semibold">
@@ -3357,28 +3936,37 @@ export function SchoolAdminDemo() {
                           </th>
                         ))}
                         <th className="px-4 py-3 font-semibold">Diversos</th>
-                        <th className="px-4 py-3 font-semibold">Dívida</th>
-                        <th className="px-5 py-3 font-semibold">Accao</th>
+                        <th className="px-4 py-3 font-semibold">Dívida vencida</th>
+                        <th className="px-4 py-3 font-semibold">A vencer</th>
+                        <th className="px-4 py-3 font-semibold">Total geral</th>
+                        <th className="px-5 py-3 font-semibold">Acção</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {visiblePaymentRows.length > 0 ? (
-                        visiblePaymentRows.map((row, index) => {
+                        visiblePaymentRows.map((row) => {
+                          const stableNumber = stableNumberLabel(row.student);
+                          const studentContext = studentContextLabel(row.student);
                           const registrationState = getRegistrationCellState(
                             row.ledger,
                             paymentSettings,
                           );
+                          const registrationBalance =
+                            row.ledger.registrationBalance +
+                            row.ledger.registrationPenaltyBalance;
                           const miscellaneousState = getMiscellaneousCellState(
                             row.record,
                           );
+                          const miscellaneousSummary = getMiscellaneousSummary(row.record);
                           const debt = getStudentDebt(row.ledger, row.record);
+                          const debtTiming = getStudentDebtTiming(row.ledger, row.record);
 
                           return (
                             <tr
                               key={row.student.id}
-                              className="hover:bg-slate-50/80"
+                              className="group hover:bg-slate-50/80"
                             >
-                              <td className="px-4 py-4">
+                              <td className="finance-sticky-select bg-white px-4 py-4 group-hover:bg-slate-50/80">
                                 <input
                                   type="checkbox"
                                   checked={selectedPaymentStudentIdSet.has(
@@ -3388,18 +3976,26 @@ export function SchoolAdminDemo() {
                                     togglePaymentStudentSelection(row.student.id)
                                   }
                                   aria-label={`Seleccionar ${row.student.fullName}`}
-                                  className="size-4 rounded border-slate-300 text-[#185c54]"
+                                  className="size-5 rounded border-slate-300 text-[#185c54]"
                                 />
                               </td>
-                              <td className="px-4 py-4 font-mono text-sm font-semibold text-slate-600">
-                                {String(index + 1).padStart(3, "0")}
+                              <td className="finance-sticky-number bg-white px-4 py-4 font-mono text-sm font-semibold text-slate-600 group-hover:bg-slate-50/80">
+                                {stableNumber}
                               </td>
-                              <td className="px-5 py-4">
-                                <span className="block font-semibold">
+                              <td className="finance-sticky-student bg-white px-5 py-4 group-hover:bg-slate-50/80">
+                                <span className="block break-words font-semibold text-slate-950">
                                   {row.student.fullName}
                                 </span>
-                                <span className="text-xs text-slate-500">
+                                <span className="mt-1 block break-words text-xs text-slate-500">
                                   {row.student.registrationNumber}
+                                </span>
+                              </td>
+                              <td className="finance-context-cell px-4 py-4 text-sm text-slate-600">
+                                <span className="block break-words font-semibold text-slate-700">
+                                  {studentContext}
+                                </span>
+                                <span className="mt-1 block text-xs text-slate-500">
+                                  {paymentSettings.academicYear}
                                 </span>
                               </td>
                               <td className="px-4 py-4">
@@ -3412,12 +4008,18 @@ export function SchoolAdminDemo() {
                                     })
                                   }
                                   supporting={
-                                    row.ledger.registrationBalance > 0
-                                      ? formatCurrency(row.ledger.registrationBalance)
+                                    registrationBalance > 0
+                                      ? formatCurrency(registrationBalance)
                                       : registrationState.detail
                                   }
+                                  symbol={registrationState.symbol}
                                   tone={registrationState.tone}
-                                  title={`Ver inscrição de ${row.student.fullName}`}
+                                  title={financeCellAriaLabel({
+                                    rubric: "Inscrição",
+                                    studentName: row.student.fullName,
+                                    state: registrationState.label,
+                                    balance: formatCurrency(registrationBalance),
+                                  })}
                                 />
                               </td>
                               {row.ledger.monthly.map((month) => {
@@ -3432,11 +4034,12 @@ export function SchoolAdminDemo() {
                                     paymentMonths,
                                     paymentSettings,
                                   );
+                                const monthBalance = month.balance + month.fineBalance;
                                 const monthSupporting = month.applicable
-                                  ? month.due > 0
+                                  ? monthBalance > 0
                                     ? installmentNumber
-                                      ? `${installmentNumber}ª · ${formatCurrency(month.due)}`
-                                      : formatCurrency(month.due)
+                                      ? `${installmentNumber}ª / ${formatCurrency(monthBalance)}`
+                                      : formatCurrency(monthBalance)
                                     : monthState.detail
                                   : monthState.detail;
 
@@ -3452,8 +4055,18 @@ export function SchoolAdminDemo() {
                                         })
                                       }
                                       supporting={monthSupporting}
+                                      symbol={monthState.symbol}
                                       tone={monthState.tone}
-                                      title={`Ver mensalidade de ${month.month.label} de ${row.student.fullName}`}
+                                      title={financeCellAriaLabel({
+                                        rubric: `${month.month.label}${
+                                          installmentNumber
+                                            ? `, ${installmentNumber}ª mensalidade`
+                                            : ""
+                                        }`,
+                                        studentName: row.student.fullName,
+                                        state: monthState.label,
+                                        balance: formatCurrency(monthBalance),
+                                      })}
                                     />
                                   </td>
                                 );
@@ -3468,8 +4081,54 @@ export function SchoolAdminDemo() {
                                     })
                                   }
                                   supporting={miscellaneousState.detail}
+                                  symbol={miscellaneousState.symbol}
                                   tone={miscellaneousState.tone}
-                                  title={`Ver diversos de ${row.student.fullName}`}
+                                  title={financeCellAriaLabel({
+                                    rubric: "Diversos",
+                                    studentName: row.student.fullName,
+                                    state: miscellaneousState.label,
+                                    balance: formatCurrency(miscellaneousSummary.balance),
+                                  })}
+                                />
+                              </td>
+                              <td className="px-4 py-4">
+                                <FinanceCell
+                                  label={formatCurrency(debtTiming.overdueDebt)}
+                                  onClick={() =>
+                                    openFinanceCell({
+                                      kind: "debt",
+                                      studentId: row.student.id,
+                                    })
+                                  }
+                                  supporting="Dívida vencida"
+                                  symbol={debtTiming.overdueDebt > 0 ? "!" : "OK"}
+                                  tone={debtTiming.overdueDebt > 0 ? "danger" : "paid"}
+                                  title={financeCellAriaLabel({
+                                    rubric: "Dívida vencida",
+                                    studentName: row.student.fullName,
+                                    state: debtTiming.overdueDebt > 0 ? "Em dívida" : "Sem dívida vencida",
+                                    balance: formatCurrency(debtTiming.overdueDebt),
+                                  })}
+                                />
+                              </td>
+                              <td className="px-4 py-4">
+                                <FinanceCell
+                                  label={formatCurrency(debtTiming.futureDue)}
+                                  onClick={() =>
+                                    openFinanceCell({
+                                      kind: "debt",
+                                      studentId: row.student.id,
+                                    })
+                                  }
+                                  supporting="Valor a vencer"
+                                  symbol={debtTiming.futureDue > 0 ? "AV" : "OK"}
+                                  tone={debtTiming.futureDue > 0 ? "info" : "paid"}
+                                  title={financeCellAriaLabel({
+                                    rubric: "Valor a vencer",
+                                    studentName: row.student.fullName,
+                                    state: debtTiming.futureDue > 0 ? "A vencer" : "Sem valor a vencer",
+                                    balance: formatCurrency(debtTiming.futureDue),
+                                  })}
                                 />
                               </td>
                               <td className="px-4 py-4">
@@ -3481,25 +4140,46 @@ export function SchoolAdminDemo() {
                                       studentId: row.student.id,
                                     })
                                   }
-                                  supporting={debt > 0 ? "Em dívida" : "Sem dívida"}
+                                  supporting="Total geral"
+                                  symbol={debt > 0 ? "!" : "OK"}
                                   tone={debt > 0 ? "danger" : "paid"}
-                                  title={`Ver dívida de ${row.student.fullName}`}
+                                  title={financeCellAriaLabel({
+                                    rubric: "Total geral",
+                                    studentName: row.student.fullName,
+                                    state: debt > 0 ? "Saldo por liquidar" : "Regularizado",
+                                    balance: formatCurrency(debt),
+                                  })}
                                 />
                               </td>
                               <td className="px-5 py-4">
-                                <TextButton
-                                  onClick={() => openPaymentEntry(row.student.id)}
-                                >
-                                  Lançar
-                                </TextButton>
-                              </td>
+  {selectedProfile.id === "secretaria" ? (
+    <TextButton
+      ariaLabel={`Lançar pagamento para ${row.student.fullName}`}
+      onClick={() => openPaymentEntry(row.student.id)}
+    >
+      Lançar
+    </TextButton>
+  ) : (
+    <TextButton
+      ariaLabel={`Consultar síntese financeira de ${row.student.fullName}`}
+      onClick={() =>
+        openFinanceCell({
+          kind: "debt",
+          studentId: row.student.id,
+        })
+      }
+    >
+      Consultar
+    </TextButton>
+  )}
+</td>
                             </tr>
                           );
                         })
                       ) : (
                         <tr>
                           <td
-                            colSpan={paymentMonths.length + 7}
+                            colSpan={paymentMonths.length + 10}
                             className="px-5 py-10 text-center text-slate-500"
                           >
                             Sem alunos para os filtros seleccionados.
@@ -3511,31 +4191,65 @@ export function SchoolAdminDemo() {
                 </div>
               </section>
 
-              <PaymentForm
-                allStudents={allStudentsAlphabetically}
-                draft={paymentDraft}
-                months={paymentMonths}
-                selectedRow={selectedPaymentRow}
-                selectedStudent={selectedPaymentStudent}
-                settings={paymentSettings}
-                onChange={setPaymentDraft}
-                onSubmit={launchPayment}
-              />
+              {selectedProfile.id === "secretaria" && (
+                <PaymentForm
+                  allRows={allPaymentRows}
+                  allStudents={allStudentsAlphabetically}
+                  draft={paymentDraft}
+                  months={paymentMonths}
+                  preview={selectedPaymentPreview}
+                  recordedAtPreview={paymentRecordedAtPreview}
+                  selectedRow={selectedPaymentRow}
+                  selectedStudent={selectedPaymentStudent}
+                  settings={paymentSettings}
+                  onChange={setPaymentDraft}
+                  onSubmit={launchPayment}
+                />
+              )}
             </div>
           </div>
         )}
 
         {currentPaymentSection?.id === "reports" && renderReports()}
 
-        <FinanceCellDetailPanel
+        <FinanceCellDialog
           canManagePayments={selectedProfile.id === "secretaria"}
           months={paymentMonths}
           row={selectedFinanceRow}
           selection={selectedFinanceCell}
           settings={paymentSettings}
+          studentContextLabel={selectedFinanceContextLabel}
           onClose={() => setSelectedFinanceCell(null)}
+          onCorrectPayment={openPaymentCorrection}
           onCreateMiscellaneous={openMiscellaneousChargeForm}
           onRegisterPayment={registerPaymentFromCell}
+          onShowReceipt={showPaymentReceipt}
+        />
+        <PaymentRuleDialog
+          draft={paymentRuleDraft}
+          levelName={
+            paymentRuleDraft
+              ? paymentRuleLevelLabel({ educationLevelId: paymentRuleDraft.educationLevelId })
+              : ""
+          }
+          onChange={setPaymentRuleDraft}
+          onClose={() => setPaymentRuleDraft(null)}
+          onSubmit={submitPaymentRule}
+        />
+        <PaymentReceiptDialog
+          receipt={paymentReceipt}
+          onClose={() => setPaymentReceipt(null)}
+          onPrint={() => window.print()}
+        />
+        <PaymentCorrectionDialog
+          draft={paymentCorrectionDraft}
+          maxAmount={paymentCorrectionMaxAmount}
+          payment={paymentCorrectionPayment}
+          recordedAtPreview={paymentCorrectionRecordedAtPreview}
+          studentName={paymentCorrectionRow?.student.fullName ?? ""}
+          onChange={setPaymentCorrectionDraft}
+          onClose={() => setPaymentCorrectionTarget(null)}
+          onSubmit={submitPaymentCorrection}
         />
       </div>
     );
@@ -3544,7 +4258,7 @@ export function SchoolAdminDemo() {
   function renderReports() {
     return (
       <div className="grid gap-6">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="lss-card-grid">
           <MetricCard
             label="Previsto"
             value={formatCurrency(schoolPaymentSummary.expected)}
@@ -3564,10 +4278,22 @@ export function SchoolAdminDemo() {
             accent="border-l-[#8b5cf6]"
           />
           <MetricCard
-            label="Em falta"
-            value={formatCurrency(schoolPaymentSummary.balance)}
-            supporting="Saldo global"
+            label="Dívida vencida"
+            value={formatCurrency(schoolPaymentSummary.overdueDebt)}
+            supporting="Fora do prazo"
+            accent="border-l-[#dc2626]"
+          />
+          <MetricCard
+            label="A vencer"
+            value={formatCurrency(schoolPaymentSummary.futureDue)}
+            supporting="Valor futuro"
             accent="border-l-[#d08a19]"
+          />
+          <MetricCard
+            label="Multas"
+            value={formatCurrency(schoolPaymentSummary.fine)}
+            supporting="Percentuais aplicadas"
+            accent="border-l-[#b45309]"
           />
           <MetricCard
             label="Diversos"
@@ -3577,7 +4303,7 @@ export function SchoolAdminDemo() {
           />
         </div>
 
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
               <h3 className="text-base font-semibold">Mensalidades geradas</h3>
@@ -3591,7 +4317,7 @@ export function SchoolAdminDemo() {
               </SecondaryButton>
             )}
           </div>
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
             <table className="w-full min-w-[760px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -3654,7 +4380,7 @@ export function SchoolAdminDemo() {
           </div>
         </section>
 
-        <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
+        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
             <div>
               <h3 className="text-base font-semibold">Pagamentos diversos</h3>
@@ -3662,11 +4388,13 @@ export function SchoolAdminDemo() {
                 Recebimentos que não abatem inscrição nem mensalidades.
               </p>
             </div>
-            <SecondaryButton onClick={openMiscellaneousChargeForm}>
-              Nova cobrança
-            </SecondaryButton>
+            {selectedProfile.id === "secretaria" && (
+              <SecondaryButton onClick={openMiscellaneousChargeForm}>
+                Nova cobranca
+              </SecondaryButton>
+            )}
           </div>
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
             <table className="w-full min-w-[820px] text-left text-sm">
               <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
@@ -3674,8 +4402,8 @@ export function SchoolAdminDemo() {
                   <th className="px-5 py-3 font-semibold">Descrição</th>
                   <th className="px-5 py-3 font-semibold">Valor</th>
                   <th className="px-5 py-3 font-semibold">Forma</th>
-                  <th className="px-5 py-3 font-semibold">Referência</th>
-                  <th className="px-5 py-3 font-semibold">Data</th>
+                  <th className="px-5 py-3 font-semibold">Data efectiva</th>
+                  <th className="px-5 py-3 font-semibold">Registado em</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -3703,10 +4431,10 @@ export function SchoolAdminDemo() {
                         {payment.method ?? "Sem forma"}
                       </td>
                       <td className="px-5 py-4 text-slate-700">
-                        {payment.reference || "Sem referencia"}
+                        {formatDateTime(payment.paidAt)}
                       </td>
                       <td className="px-5 py-4 text-slate-700">
-                        {formatDateTime(payment.paidAt)}
+                        {payment.recordedAt ? formatDateTime(payment.recordedAt) : "Sem registo"}
                       </td>
                     </tr>
                   ))

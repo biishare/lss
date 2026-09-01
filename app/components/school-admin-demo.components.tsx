@@ -1,4 +1,10 @@
-import type { FormEvent, ReactNode } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import {
   monthOptions,
   type AcademicStageDefinition,
@@ -7,16 +13,17 @@ import {
   type EntityStatus,
   type FinanceStatus,
   type MonthOption,
+  type Payment,
   type PaymentSettings,
   type RoomDefinition,
   type SchoolClass,
   type SchoolRoom,
   type Student,
 } from "../lib/school-demo-data";
+import type { PaymentRuleVersion } from "../features/finance/domain/entities";
 import {
   activeAcademicStages,
   buttonBase,
-  calculateMonthlyDue,
   cx,
   dueDateForMonth,
   financeStatusLabel,
@@ -28,19 +35,20 @@ import {
   getChargeBalance,
   getDebtBreakdown,
   getMiscellaneousCharges,
+  getMiscellaneousCellState,
   getMonthCellState,
   getPaymentsForCharges,
   getRegistrationCellState,
   getStudentTuitionStartMonth,
   getTuitionInstallmentNumber,
   inputClasses,
-  monthByKey,
   monthLabel,
   parseMoney,
   paymentCategories,
   paymentMethods,
   profiles,
   registrationChargeId,
+  today,
   secondPenaltyDateForMonth,
   sortClasses,
   stageLabel,
@@ -54,12 +62,208 @@ import {
   type FinanceProfileDraft,
   type FinanceSettingsDraft,
   type GroupDraft,
+  type PaymentCorrectionDraft,
   type MiscellaneousChargeDraft,
   type PaymentCategory,
   type PaymentLaunchDraft,
+  type PaymentPreview,
+  type PaymentReceipt,
+  type PaymentRuleDraft,
   type RoomDraft,
   type StudentLedgerRow,
 } from "./school-admin-demo.model";
+
+type StateLabelTone = FinanceCellTone | "active" | "inactive";
+
+export function PageContainer({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={cx("lss-page-container", className)}>{children}</div>
+  );
+}
+
+export function ResponsiveCard({
+  as = "section",
+  children,
+  className,
+  description,
+  footer,
+  title,
+  wide,
+}: {
+  as?: "article" | "div" | "section";
+  children: ReactNode;
+  className?: string;
+  description?: string;
+  footer?: ReactNode;
+  title?: string;
+  wide?: boolean;
+}) {
+  const cardContent = (
+    <>
+      {(title || description) && (
+        <div className="mb-5 min-w-0">
+          {title && (
+            <h3 className="break-words text-base font-semibold text-slate-950">
+              {title}
+            </h3>
+          )}
+          {description && (
+            <p className="mt-1 break-words text-sm leading-6 text-slate-500">
+              {description}
+            </p>
+          )}
+        </div>
+      )}
+      <div className="min-w-0">{children}</div>
+      {footer && <div className="lss-actions mt-5 justify-end">{footer}</div>}
+    </>
+  );
+  const cardProps = {
+    className: cx("lss-responsive-card", className),
+    "data-wide": wide ? "true" : undefined,
+  };
+
+  if (as === "article") {
+    return <article {...cardProps}>{cardContent}</article>;
+  }
+
+  if (as === "div") {
+    return <div {...cardProps}>{cardContent}</div>;
+  }
+
+  return <section {...cardProps}>{cardContent}</section>;
+}
+
+export function StateLabel({
+  children,
+  className,
+  tone,
+}: {
+  children: ReactNode;
+  className?: string;
+  tone: StateLabelTone;
+}) {
+  return (
+    <span className={cx("lss-state-label", className)} data-tone={tone}>
+      {children}
+    </span>
+  );
+}
+
+export function AppDialog({
+  actions,
+  children,
+  onClose,
+  open,
+  subtitle,
+  title,
+}: {
+  actions?: ReactNode;
+  children: ReactNode;
+  onClose: () => void;
+  open: boolean;
+  subtitle?: string;
+  title: string;
+}) {
+  const titleId = useId();
+  const subtitleId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+      }
+    };
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
+  }, [open]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div
+      className="lss-dialog-overlay"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) {
+          onCloseRef.current();
+        }
+      }}
+    >
+      <div
+        aria-describedby={subtitle ? subtitleId : undefined}
+        aria-labelledby={titleId}
+        aria-modal="true"
+        className="lss-dialog-shell"
+        role="dialog"
+        tabIndex={-1}
+      >
+        <div className="lss-dialog-header">
+          <div className="flex min-w-0 items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h3
+                id={titleId}
+                className="break-words text-lg font-bold text-slate-950"
+              >
+                {title}
+              </h3>
+              {subtitle && (
+                <p
+                  id={subtitleId}
+                  className="mt-1 break-words text-sm leading-6 text-slate-500"
+                >
+                  {subtitle}
+                </p>
+              )}
+            </div>
+            <button
+              ref={closeButtonRef}
+              type="button"
+              onClick={onClose}
+              className="grid size-11 shrink-0 place-items-center rounded-md border border-slate-200 text-xl font-semibold text-slate-600 hover:bg-slate-50"
+              aria-label="Fechar dialogo"
+            >
+              <span aria-hidden="true">x</span>
+            </button>
+          </div>
+        </div>
+        <div className="lss-dialog-body" tabIndex={0}>{children}</div>
+        {actions && <div className="lss-dialog-footer lss-actions">{actions}</div>}
+      </div>
+    </div>
+  );
+}
 
 export function ProfileCard({
   profile,
@@ -97,11 +301,13 @@ export function ProfileCard({
 
 export function PrimaryButton({
   children,
+  form,
   onClick,
   type = "button",
   disabled,
 }: {
   children: ReactNode;
+  form?: string;
   onClick?: () => void;
   type?: "button" | "submit";
   disabled?: boolean;
@@ -109,6 +315,7 @@ export function PrimaryButton({
   return (
     <button
       type={type}
+      form={form}
       onClick={onClick ? () => onClick() : undefined}
       disabled={disabled}
       className={cx(buttonBase, "bg-[#185c54] text-white hover:bg-[#124a44]")}
@@ -120,11 +327,13 @@ export function PrimaryButton({
 
 export function SecondaryButton({
   children,
+  form,
   onClick,
   type = "button",
   disabled,
 }: {
   children: ReactNode;
+  form?: string;
   onClick?: () => void;
   type?: "button" | "submit";
   disabled?: boolean;
@@ -132,6 +341,7 @@ export function SecondaryButton({
   return (
     <button
       type={type}
+      form={form}
       onClick={onClick ? () => onClick() : undefined}
       disabled={disabled}
       className={cx(
@@ -145,10 +355,12 @@ export function SecondaryButton({
 }
 
 export function TextButton({
+  ariaLabel,
   children,
   onClick,
   disabled,
 }: {
+  ariaLabel?: string;
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
@@ -158,7 +370,8 @@ export function TextButton({
       type="button"
       onClick={onClick ? () => onClick() : undefined}
       disabled={disabled}
-      className="inline-flex min-h-9 items-center justify-center rounded-md px-3 text-sm font-semibold text-[#185c54] transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+      aria-label={ariaLabel}
+      className="inline-flex min-h-11 max-w-full items-center justify-center rounded-md px-3 py-2 text-center text-sm font-semibold leading-snug text-[#185c54] transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {children}
     </button>
@@ -176,7 +389,7 @@ export function CrumbButton({
     <button
       type="button"
       onClick={() => onClick()}
-      className="rounded-md bg-slate-100 px-3 py-2 font-semibold text-slate-700 hover:bg-slate-200"
+      className="min-h-11 max-w-full rounded-md bg-slate-100 px-3 py-2 text-left font-semibold leading-snug text-slate-700 hover:bg-slate-200"
     >
       {children}
     </button>
@@ -185,44 +398,28 @@ export function CrumbButton({
 
 export function StatusBadge({ status }: { status: EntityStatus }) {
   return (
-    <span
-      className={cx(
-        "inline-flex min-h-7 items-center rounded-md px-2.5 text-xs font-semibold",
-        status === "active"
-          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-          : "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
-      )}
-    >
+    <StateLabel tone={status === "active" ? "active" : "inactive"}>
       {statusLabel(status)}
-    </span>
+    </StateLabel>
   );
 }
 
 export function StatusDot({ paid, label }: { paid: boolean; label: string }) {
-  return (
-    <span
-      className={cx(
-        "inline-flex min-h-7 items-center rounded-md px-2.5 text-xs font-semibold",
-        paid
-          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
-          : "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-      )}
-    >
-      {label}
-    </span>
-  );
+  return <StateLabel tone={paid ? "paid" : "warning"}>{label}</StateLabel>;
 }
 
 export function FinanceCell({
   label,
   onClick,
   supporting,
+  symbol,
   tone,
   title,
 }: {
   label: string;
   onClick?: () => void;
   supporting?: string;
+  symbol?: string;
   tone: FinanceCellTone;
   title?: string;
 }) {
@@ -235,16 +432,26 @@ export function FinanceCell({
     neutral: "bg-slate-100 text-slate-700 ring-slate-200",
   };
   const classes = cx(
-    "inline-flex min-h-10 min-w-24 flex-col justify-center rounded-md px-2.5 py-1.5 text-left text-xs font-semibold leading-tight ring-1",
+    "inline-flex min-h-11 min-w-24 max-w-48 flex-col justify-center gap-1 rounded-md px-2.5 py-1.5 text-left text-xs font-semibold leading-tight ring-1 whitespace-normal break-words",
     onClick &&
       "transition hover:-translate-y-0.5 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-[#185c54] focus:ring-offset-2",
     toneClasses[tone],
   );
   const content = (
     <>
-      <span>{label}</span>
+      <span className="flex min-w-0 items-center gap-1.5">
+        {symbol && (
+          <span
+            aria-hidden="true"
+            className="grid min-h-5 min-w-5 shrink-0 place-items-center rounded-sm bg-white/70 px-1 text-[10px] font-black leading-none ring-1 ring-black/10"
+          >
+            {symbol}
+          </span>
+        )}
+        <span className="min-w-0 break-words">{label}</span>
+      </span>
       {supporting && (
-        <span className="mt-0.5 text-[11px] font-medium opacity-80">
+        <span className="break-words text-[11px] font-semibold">
           {supporting}
         </span>
       )}
@@ -255,7 +462,10 @@ export function FinanceCell({
     return (
       <button
         type="button"
-        onClick={onClick}
+        onClick={(event) => {
+          event.currentTarget.focus();
+          onClick();
+        }}
         className={classes}
         aria-label={title ?? `${label}${supporting ? `, ${supporting}` : ""}`}
       >
@@ -271,18 +481,22 @@ export function FinanceCell({
 
 export function SummaryMini({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <span className="text-slate-500">{label}</span>
-      <p className="font-semibold text-slate-950">{value}</p>
+    <div className="min-w-0">
+      <span className="break-words text-slate-500">{label}</span>
+      <p className="break-words font-semibold text-slate-950">{value}</p>
     </div>
   );
 }
 
 export function SummaryLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-md bg-slate-50 px-4 py-3">
-      <span className="text-sm font-semibold text-slate-500">{label}</span>
-      <strong className="text-sm text-slate-950">{value}</strong>
+    <div className="grid min-w-0 gap-1 rounded-md bg-slate-50 px-4 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <span className="break-words text-sm font-semibold text-slate-500">
+        {label}
+      </span>
+      <strong className="break-words text-sm text-slate-950 sm:text-right">
+        {value}
+      </strong>
     </div>
   );
 }
@@ -299,20 +513,17 @@ export function MetricCard({
   accent: string;
 }) {
   return (
-    <article
-      className={cx(
-        "rounded-lg border border-slate-200 border-l-4 bg-white p-5 shadow-sm",
-        accent,
-      )}
-    >
-      <p className="text-sm font-semibold text-slate-500">{label}</p>
-      <div className="mt-3 grid gap-3">
-        <strong className="text-3xl font-bold text-slate-950">{value}</strong>
-        <span className="w-fit rounded-md bg-slate-100 px-3 py-1.5 text-sm font-semibold text-slate-600">
+    <ResponsiveCard as="article" className={cx("border-l-4", accent)} wide>
+      <p className="break-words text-sm font-semibold text-slate-500">{label}</p>
+      <div className="mt-3 grid min-w-0 gap-3">
+        <strong className="break-words text-2xl font-bold text-slate-950 sm:text-3xl">
+          {value}
+        </strong>
+        <StateLabel tone="neutral" className="w-fit">
           {supporting}
-        </span>
+        </StateLabel>
       </div>
-    </article>
+    </ResponsiveCard>
   );
 }
 
@@ -331,7 +542,7 @@ export function FlowStep({
     <button
       type="button"
       onClick={() => onClick()}
-      className="min-h-24 rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-[#88c9bb] hover:bg-[#f0fbf8]"
+      className="min-h-24 min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-[#88c9bb] hover:bg-[#f0fbf8]"
     >
       <span className="font-mono text-sm font-bold text-[#185c54]">
         {number}
@@ -352,7 +563,7 @@ export function FieldLabel({
   children: ReactNode;
 }) {
   return (
-    <label className="grid gap-2 text-sm font-semibold text-slate-700">
+    <label className="grid min-w-0 gap-2 text-sm font-semibold text-slate-700">
       <span>{label}</span>
       {children}
     </label>
@@ -393,7 +604,7 @@ export function ClassForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+      className="lss-responsive-card"
     >
       <div>
         <h3 className="text-base font-semibold">Activar classe</h3>
@@ -496,7 +707,7 @@ export function RoomForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+      className="lss-responsive-card"
     >
       <div>
         <h3 className="text-base font-semibold">Activar sala</h3>
@@ -588,7 +799,7 @@ export function GroupForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+      className="lss-responsive-card"
     >
       <div>
         <h3 className="text-base font-semibold">Adicionar turma</h3>
@@ -734,7 +945,7 @@ export function EnrollmentForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+      className="lss-responsive-card"
     >
       <div>
         <h3 className="text-base font-semibold">Matricula</h3>
@@ -976,7 +1187,7 @@ export function FinanceSettingsForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+      className="lss-responsive-card"
     >
       <div>
         <h3 className="text-base font-semibold">Dados de pagamentos</h3>
@@ -1126,7 +1337,7 @@ export function FinanceSettingsForm({
 
 export function PaymentSettingsSummary({ settings }: { settings: PaymentSettings }) {
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="lss-responsive-card">
       <div>
         <h3 className="text-base font-semibold">Dados de pagamentos</h3>
         <p className="text-sm text-slate-500">
@@ -1161,6 +1372,268 @@ export function PaymentSettingsSummary({ settings }: { settings: PaymentSettings
   );
 }
 
+function paymentRuleMonthsLabel(rule: PaymentRuleVersion) {
+  if (rule.coveredMonthKeys.length === 0) {
+    return "Sem meses";
+  }
+
+  return rule.coveredMonthKeys.map((monthKey) => monthLabel(monthKey)).join(", ");
+}
+
+export function PaymentRulesTable({
+  levelLabel,
+  onEdit,
+  rules,
+}: {
+  levelLabel: (rule: PaymentRuleVersion) => string;
+  onEdit: (rule: PaymentRuleVersion) => void;
+  rules: PaymentRuleVersion[];
+}) {
+  const sortedRules = [...rules].sort(
+    (a, b) =>
+      a.academicYearId.localeCompare(b.academicYearId) ||
+      levelLabel(a).localeCompare(levelLabel(b), "pt-PT") ||
+      b.version - a.version,
+  );
+
+  return (
+    <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
+        <div>
+          <h3 className="text-base font-semibold text-slate-950">
+            Regras por nivel
+          </h3>
+        </div>
+      </div>
+
+      <div className="table-scroll" role="region" aria-label="Regras financeiras por nivel" tabIndex={0}>
+        <table className="w-full min-w-[980px] text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+            <tr>
+              <th className="px-5 py-3 font-semibold">Ano</th>
+              <th className="px-5 py-3 font-semibold">Nivel</th>
+              <th className="px-4 py-3 font-semibold">Versao</th>
+              <th className="px-4 py-3 font-semibold">Inscricao</th>
+              <th className="px-4 py-3 font-semibold">Mensalidade</th>
+              <th className="px-4 py-3 font-semibold">Multas</th>
+              <th className="px-4 py-3 font-semibold">Meses</th>
+              <th className="px-4 py-3 font-semibold">Validade</th>
+              <th className="px-5 py-3 font-semibold">Accao</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {sortedRules.length > 0 ? (
+              sortedRules.map((rule) => (
+                <tr key={rule.id} className="hover:bg-slate-50/80">
+                  <td className="px-5 py-4 font-semibold text-slate-800">
+                    {rule.academicYearId}
+                  </td>
+                  <td className="px-5 py-4 font-semibold text-slate-950">
+                    {levelLabel(rule)}
+                  </td>
+                  <td className="px-4 py-4">
+                    <StateLabel tone={rule.status === "active" ? "active" : "inactive"}>
+                      V{rule.version}
+                    </StateLabel>
+                  </td>
+                  <td className="px-4 py-4 font-semibold text-slate-700">
+                    {formatCurrency(rule.inscriptionFee)}
+                  </td>
+                  <td className="px-4 py-4 font-semibold text-slate-700">
+                    {formatCurrency(rule.monthlyFee)}
+                  </td>
+                  <td className="px-4 py-4 text-slate-600">
+                    Dia {rule.firstPenalty.thresholdDay}: {rule.firstPenalty.percent ?? 0}% / Dia {rule.secondPenalty.thresholdDay}: {rule.secondPenalty.percent ?? 0}%
+                  </td>
+                  <td className="max-w-64 px-4 py-4 text-slate-600">
+                    <span className="line-clamp-2 break-words">
+                      {paymentRuleMonthsLabel(rule)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-slate-600">
+                    {formatDate(rule.validFrom)}
+                    {rule.validUntil ? ` ate ${formatDate(rule.validUntil)}` : ""}
+                  </td>
+                  <td className="px-5 py-4">
+                    <TextButton onClick={() => onEdit(rule)}>Editar</TextButton>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={9} className="px-5 py-8 text-center text-slate-500">
+                  Sem regras financeiras.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+export function PaymentRuleDialog({
+  draft,
+  levelName,
+  onChange,
+  onClose,
+  onSubmit,
+}: {
+  draft: PaymentRuleDraft | null;
+  levelName: string;
+  onChange: (draft: PaymentRuleDraft) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const formId = useId();
+
+  if (!draft) {
+    return null;
+  }
+
+  const selectedMonths = new Set(draft.coveredMonthKeys);
+  const toggleMonth = (monthKey: string) => {
+    const nextMonths = selectedMonths.has(monthKey)
+      ? draft.coveredMonthKeys.filter((item) => item !== monthKey)
+      : [...draft.coveredMonthKeys, monthKey];
+
+    onChange({ ...draft, coveredMonthKeys: nextMonths });
+  };
+
+  return (
+    <AppDialog
+      actions={
+        <>
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton type="submit" form={formId}>
+            Guardar nova versao
+          </PrimaryButton>
+        </>
+      }
+      onClose={onClose}
+      open={Boolean(draft)}
+      subtitle={`${draft.academicYearId} / ${levelName}`}
+      title="Editar regra financeira"
+    >
+      <form id={formId} onSubmit={onSubmit} className="grid min-w-0 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FieldLabel label="Ano lectivo">
+            <input value={draft.academicYearId} className={inputClasses()} disabled readOnly />
+          </FieldLabel>
+          <FieldLabel label="Nivel">
+            <input value={levelName} className={inputClasses()} disabled readOnly />
+          </FieldLabel>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <FieldLabel label="Valida a partir de">
+            <input
+              value={draft.validFrom}
+              onChange={(event) => onChange({ ...draft, validFrom: event.target.value })}
+              className={inputClasses()}
+              type="date"
+            />
+          </FieldLabel>
+          <FieldLabel label="Inscricao">
+            <input
+              value={draft.inscriptionFee}
+              onChange={(event) => onChange({ ...draft, inscriptionFee: event.target.value })}
+              className={inputClasses()}
+              min="0"
+              type="number"
+            />
+          </FieldLabel>
+          <FieldLabel label="Mensalidade">
+            <input
+              value={draft.monthlyFee}
+              onChange={(event) => onChange({ ...draft, monthlyFee: event.target.value })}
+              className={inputClasses()}
+              min="0"
+              type="number"
+            />
+          </FieldLabel>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <FieldLabel label="Vencimento mensal">
+            <input
+              value={draft.monthlyDueDay}
+              onChange={(event) => onChange({ ...draft, monthlyDueDay: event.target.value })}
+              className={inputClasses()}
+              max="31"
+              min="1"
+              type="number"
+            />
+          </FieldLabel>
+          <FieldLabel label="1a multa dia">
+            <input
+              value={draft.firstPenaltyDay}
+              onChange={(event) => onChange({ ...draft, firstPenaltyDay: event.target.value })}
+              className={inputClasses()}
+              max="31"
+              min="1"
+              type="number"
+            />
+          </FieldLabel>
+          <FieldLabel label="1a multa (%)">
+            <input
+              value={draft.firstPenaltyPercent}
+              onChange={(event) => onChange({ ...draft, firstPenaltyPercent: event.target.value })}
+              className={inputClasses()}
+              min="0"
+              type="number"
+            />
+          </FieldLabel>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FieldLabel label="2a multa dia">
+            <input
+              value={draft.secondPenaltyDay}
+              onChange={(event) => onChange({ ...draft, secondPenaltyDay: event.target.value })}
+              className={inputClasses()}
+              max="31"
+              min="1"
+              type="number"
+            />
+          </FieldLabel>
+          <FieldLabel label="2a multa total (%)">
+            <input
+              value={draft.secondPenaltyPercent}
+              onChange={(event) => onChange({ ...draft, secondPenaltyPercent: event.target.value })}
+              className={inputClasses()}
+              min="0"
+              type="number"
+            />
+          </FieldLabel>
+        </div>
+
+        <fieldset className="min-w-0 rounded-lg border border-slate-200 p-4">
+          <legend className="px-1 text-sm font-semibold text-slate-600">
+            Meses cobertos
+          </legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {monthOptions.map((month) => (
+              <label
+                key={month.key}
+                className="flex min-h-11 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700"
+              >
+                <input
+                  checked={selectedMonths.has(month.key)}
+                  onChange={() => toggleMonth(month.key)}
+                  type="checkbox"
+                  className="size-5 accent-[#207a70]"
+                />
+                <span>{month.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </form>
+    </AppDialog>
+  );
+}
 export function StudentFinanceForm({
   draft,
   notice,
@@ -1185,7 +1658,7 @@ export function StudentFinanceForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+      className="lss-responsive-card"
     >
       <div>
         <h3 className="text-base font-semibold">Bolsas e ponderacoes</h3>
@@ -1335,7 +1808,7 @@ export function StudentFinanceForm({
             {ruleHistory.slice(0, 5).map((entry) => (
               <div
                 key={entry.id}
-                className="grid gap-1 py-3 text-sm sm:grid-cols-[1fr_auto]"
+                className="grid gap-1 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_auto]"
               >
                 <div>
                   <p className="font-semibold text-slate-800">
@@ -1399,81 +1872,101 @@ export function StudentFinanceForm({
   );
 }
 
+function daysBetweenDates(startDate: string, endDate: string) {
+  const start = new Date(`${startDate}T00:00:00.000Z`).getTime();
+  const end = new Date(`${endDate}T00:00:00.000Z`).getTime();
+
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.round((end - start) / 86400000));
+}
+
 export function PaymentForm({
+  allRows,
   allStudents,
   draft,
   months,
+  preview,
+  recordedAtPreview,
   selectedRow,
   selectedStudent,
   settings,
   onChange,
   onSubmit,
 }: {
+  allRows: StudentLedgerRow[];
   allStudents: Student[];
   draft: PaymentLaunchDraft;
   months: MonthOption[];
+  preview?: PaymentPreview;
+  recordedAtPreview: string;
   selectedRow?: StudentLedgerRow;
   selectedStudent?: Student;
   settings: PaymentSettings;
   onChange: (draft: PaymentLaunchDraft) => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
-  const selectedMonth = monthByKey(draft.monthKey) ?? months[0];
-  const suggestedMonthlyFee =
-    selectedStudent && selectedMonth
-      ? calculateMonthlyDue(selectedStudent, selectedMonth, settings)
-      : { due: settings.monthlyFee, discount: 0, ruleLabel: "Regular" };
-  const selectedMonthLedger = selectedRow?.ledger.monthly.find(
+  const selectedRowForDraft =
+    selectedRow ?? allRows.find((row) => row.student.id === draft.studentId);
+  const selectedStudentForDraft = selectedStudent ?? selectedRowForDraft?.student;
+  const selectedMonthLedger = selectedRowForDraft?.ledger.monthly.find(
     (item) => item.month.key === draft.monthKey,
   );
   const receivedAmount = parseMoney(draft.amount);
-  const monthBalance = selectedMonthLedger?.balance ?? suggestedMonthlyFee.due;
-  const appliedToMonth =
-    draft.category === "tuition" ? Math.min(receivedAmount, monthBalance) : 0;
-  const surplusForNextMonths =
-    draft.category === "tuition" ? Math.max(0, receivedAmount - appliedToMonth) : 0;
-  const registrationBalance =
-    selectedRow?.ledger.registrationBalance ?? settings.inscriptionRenewalFee;
-  const appliedToRegistration =
-    draft.category === "registration"
-      ? Math.min(receivedAmount, registrationBalance)
-      : 0;
-  const registrationSurplus =
-    draft.category === "registration"
-      ? Math.max(0, receivedAmount - appliedToRegistration)
-      : 0;
-  const miscellaneousCharges = selectedRow
-    ? getMiscellaneousCharges(selectedRow.record)
+  const canAllocateFuture = draft.category !== "miscellaneous";
+  const miscellaneousCharges = selectedRowForDraft
+    ? getMiscellaneousCharges(selectedRowForDraft.record)
     : [];
-  const selectedMiscellaneousCharge = miscellaneousCharges.find(
-    (charge) => charge.id === draft.targetChargeId,
-  );
-  const miscellaneousBalance = selectedMiscellaneousCharge
-    ? selectedRow
-      ? getChargeBalance(selectedRow.record, selectedMiscellaneousCharge)
-      : selectedMiscellaneousCharge.amount
-    : receivedAmount;
-  const appliedToMiscellaneous =
-    draft.category === "miscellaneous"
-      ? Math.min(receivedAmount, miscellaneousBalance)
-      : 0;
+  const effectiveDateFuture = Boolean(draft.paidOn && draft.paidOn > today());
+  const recordLagDays = draft.paidOn
+    ? daysBetweenDates(draft.paidOn, recordedAtPreview.slice(0, 10))
+    : 0;
+  const suggestedAmountFor = (
+    category: PaymentCategory,
+    row: StudentLedgerRow | undefined,
+    monthKey: string,
+    targetChargeId?: string,
+  ) => {
+    if (!row) {
+      return category === "registration"
+        ? settings.inscriptionRenewalFee
+        : category === "tuition"
+          ? settings.monthlyFee
+          : 0;
+    }
+
+    if (category === "registration") {
+      return row.ledger.registrationBalance + row.ledger.registrationPenaltyBalance;
+    }
+
+    if (category === "tuition") {
+      const month = row.ledger.monthly.find((item) => item.month.key === monthKey);
+
+      return month ? month.balance + month.fineBalance : settings.monthlyFee;
+    }
+
+    const charge = getMiscellaneousCharges(row.record).find(
+      (item) => item.id === targetChargeId,
+    );
+
+    return charge ? getChargeBalance(row.record, charge) : 0;
+  };
+  const previewItems = preview?.items ?? [];
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
-    >
+    <form onSubmit={onSubmit} className="lss-responsive-card">
       <div>
-        <h3 className="text-base font-semibold">Lançar pagamento</h3>
+        <h3 className="text-base font-semibold">Lancar pagamento</h3>
         <p className="text-sm text-slate-500">
-          Recebimentos de inscrição/renovação, mensalidade e pagamentos diversos.
+          Recebimentos de inscricao/renovacao, mensalidade e pagamentos diversos.
         </p>
       </div>
 
-      {draft.category !== "miscellaneous" && (
+      {canAllocateFuture && (
         <div className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-100">
-          Qualquer valor recebido acima do saldo devido fica como credito para
-          as mensalidades seguintes.
+          Meses futuros so recebem saldo remanescente com pagamento antecipado activo.
         </div>
       )}
 
@@ -1482,18 +1975,27 @@ export function PaymentForm({
           <select
             value={draft.studentId}
             onChange={(event) => {
+              const nextStudentId = event.target.value;
               const nextStudent = allStudents.find(
-                (student) => student.id === event.target.value,
+                (student) => student.id === nextStudentId,
               );
-              const nextFee =
-                nextStudent && selectedMonth
-                  ? calculateMonthlyDue(nextStudent, selectedMonth, settings).due
-                  : settings.monthlyFee;
+              const nextRow = allRows.find((row) => row.student.id === nextStudentId);
+              const nextMonthKey = nextStudent
+                ? getStudentTuitionStartMonth(nextStudent, settings)
+                : draft.monthKey;
 
               onChange({
                 ...draft,
-                studentId: event.target.value,
-                amount: draft.category === "tuition" ? String(nextFee) : draft.amount,
+                studentId: nextStudentId,
+                monthKey: draft.category === "tuition" ? draft.monthKey : nextMonthKey,
+                targetChargeId: "",
+                amount: String(
+                  suggestedAmountFor(
+                    draft.category,
+                    nextRow,
+                    draft.category === "tuition" ? draft.monthKey : nextMonthKey,
+                  ),
+                ),
               });
             }}
             className={inputClasses()}
@@ -1516,16 +2018,22 @@ export function PaymentForm({
             value={draft.category}
             onChange={(event) => {
               const category = event.target.value as PaymentCategory;
+              const nextMonthKey =
+                category === "registration" && selectedStudentForDraft
+                  ? getStudentTuitionStartMonth(selectedStudentForDraft, settings)
+                  : draft.monthKey;
+
               onChange({
                 ...draft,
                 category,
+                monthKey: nextMonthKey,
                 targetChargeId: "",
-                amount:
-                  category === "tuition"
-                    ? String(suggestedMonthlyFee.due)
-                    : category === "registration"
-                      ? String(settings.inscriptionRenewalFee)
-                      : "0",
+                amount: String(
+                  suggestedAmountFor(category, selectedRowForDraft, nextMonthKey),
+                ),
+                description: category === "miscellaneous" ? "" : draft.description,
+                allowFutureAllocation:
+                  category === "miscellaneous" ? false : draft.allowFutureAllocation,
               });
             }}
             className={inputClasses()}
@@ -1538,20 +2046,25 @@ export function PaymentForm({
           </select>
         </FieldLabel>
 
-        <FieldLabel label="Mês da mensalidade">
+        <FieldLabel label="Mes da mensalidade">
           <select
             value={draft.monthKey}
             onChange={(event) => {
-              const month = monthByKey(event.target.value) ?? months[0];
-              const nextFee =
-                selectedStudent && month
-                  ? calculateMonthlyDue(selectedStudent, month, settings).due
-                  : settings.monthlyFee;
+              const monthKey = event.target.value;
 
               onChange({
                 ...draft,
-                monthKey: event.target.value,
-                amount: draft.category === "tuition" ? String(nextFee) : draft.amount,
+                monthKey,
+                amount:
+                  draft.category === "tuition"
+                    ? String(
+                        suggestedAmountFor(
+                          "tuition",
+                          selectedRowForDraft,
+                          monthKey,
+                        ),
+                      )
+                    : draft.amount,
               });
             }}
             className={inputClasses()}
@@ -1566,7 +2079,7 @@ export function PaymentForm({
         </FieldLabel>
 
         {draft.category === "miscellaneous" && (
-          <FieldLabel label="Cobrança diversa">
+          <FieldLabel label="Cobranca diversa">
             <select
               value={draft.targetChargeId ?? ""}
               onChange={(event) => {
@@ -1578,11 +2091,7 @@ export function PaymentForm({
                   ...draft,
                   targetChargeId: event.target.value,
                   amount: charge
-                    ? String(
-                        selectedRow
-                          ? getChargeBalance(selectedRow.record, charge)
-                          : charge.amount,
-                      )
+                    ? String(selectedRowForDraft ? getChargeBalance(selectedRowForDraft.record, charge) : charge.amount)
                     : "0",
                   description: charge?.description ?? "",
                 });
@@ -1591,13 +2100,13 @@ export function PaymentForm({
             >
               <option value="">Novo recebimento diverso</option>
               {miscellaneousCharges.map((charge) => {
-                const balance = selectedRow
-                  ? getChargeBalance(selectedRow.record, charge)
+                const balance = selectedRowForDraft
+                  ? getChargeBalance(selectedRowForDraft.record, charge)
                   : charge.amount;
 
                 return (
                   <option key={charge.id} value={charge.id}>
-                    {charge.description} · saldo {formatCurrency(balance)}
+                    {charge.description} - saldo {formatCurrency(balance)}
                   </option>
                 );
               })}
@@ -1606,7 +2115,7 @@ export function PaymentForm({
         )}
 
         {draft.category === "miscellaneous" && !draft.targetChargeId && (
-          <FieldLabel label="Descrição do pagamento diverso">
+          <FieldLabel label="Descricao do pagamento diverso">
             <input
               value={draft.description}
               onChange={(event) =>
@@ -1628,16 +2137,44 @@ export function PaymentForm({
           />
         </FieldLabel>
 
-        <FieldLabel label="Data do pagamento">
+        <FieldLabel label="Data efectiva do pagamento (no comprovativo)">
           <input
             value={draft.paidOn}
-            onChange={(event) =>
-              onChange({ ...draft, paidOn: event.target.value })
-            }
+            onChange={(event) => onChange({ ...draft, paidOn: event.target.value })}
             className={inputClasses()}
+            max={today()}
             type="date"
           />
         </FieldLabel>
+
+        {effectiveDateFuture && (
+          <p className="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-rose-100">
+            A data efectiva nao pode estar no futuro.
+          </p>
+        )}
+
+        {recordLagDays > 7 && (
+          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-100">
+            O comprovativo tem {recordLagDays} dias face ao registo de hoje.
+          </p>
+        )}
+
+        {canAllocateFuture && (
+          <label className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
+            <input
+              checked={draft.allowFutureAllocation}
+              onChange={(event) =>
+                onChange({
+                  ...draft,
+                  allowFutureAllocation: event.target.checked,
+                })
+              }
+              type="checkbox"
+              className="size-5 accent-[#207a70]"
+            />
+            <span>Pagamento antecipado para meses futuros</span>
+          </label>
+        )}
 
         <FieldLabel label="Forma de pagamento">
           <select
@@ -1650,71 +2187,72 @@ export function PaymentForm({
             ))}
           </select>
         </FieldLabel>
-
-        <FieldLabel label="Referência">
-          <input
-            value={draft.reference}
-            onChange={(event) =>
-              onChange({ ...draft, reference: event.target.value })
-            }
-            className={inputClasses()}
-            placeholder="Opcional"
-          />
-        </FieldLabel>
       </div>
 
       <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <SummaryLine label="Aluno" value={selectedStudent?.fullName ?? "Sem aluno"} />
-        {draft.category === "tuition" && (
-          <>
-            <SummaryLine
-              label="Regra"
-              value={`${suggestedMonthlyFee.ruleLabel} / devido ${formatCurrency(suggestedMonthlyFee.due)}`}
-            />
-            <SummaryLine
-              label="Aplicado neste mes"
-              value={formatCurrency(appliedToMonth)}
-            />
-            <SummaryLine
-              label="Sobra para meses seguintes"
-              value={formatCurrency(surplusForNextMonths)}
-            />
-          </>
+        <SummaryLine label="Aluno" value={selectedStudentForDraft?.fullName ?? "Sem aluno"} />
+        {draft.category === "tuition" && selectedMonthLedger && (
+          <SummaryLine
+            label="Regra"
+            value={`${selectedMonthLedger.ruleLabel} / devido ${formatCurrency(selectedMonthLedger.due)}`}
+          />
         )}
-        {draft.category === "registration" && (
-          <>
-            <SummaryLine
-              label="Aplicado na inscrição"
-              value={formatCurrency(appliedToRegistration)}
-            />
-            <SummaryLine
-              label="Sobra para mensalidades"
-              value={formatCurrency(registrationSurplus)}
-            />
-          </>
+        {draft.category === "registration" && selectedRowForDraft && (
+          <SummaryLine
+            label="Inscricao devida"
+            value={formatCurrency(selectedRowForDraft.ledger.registrationDue)}
+          />
         )}
-        {draft.category === "miscellaneous" && (
-          <>
-            <SummaryLine
-              label={draft.targetChargeId ? "Cobrança" : "Pagamento diverso"}
-              value={draft.description.trim() || "Descrição por preencher"}
-            />
-            <SummaryLine
-              label="Aplicado"
-              value={formatCurrency(appliedToMiscellaneous)}
-            />
-          </>
-        )}
-        <SummaryLine label="Pagamento em" value={formatDate(draft.paidOn)} />
-        <SummaryLine
-          label="Registado em"
-          value={formatDateTime(new Date().toISOString())}
-        />
-        <SummaryLine label="Valor" value={formatCurrency(parseMoney(draft.amount))} />
+        <SummaryLine label="Data efectiva" value={draft.paidOn ? formatDate(draft.paidOn) : "Obrigatoria"} />
+        <SummaryLine label="Data de registo" value={formatDateTime(recordedAtPreview)} />
+        <SummaryLine label="Valor" value={formatCurrency(receivedAmount)} />
+        <SummaryLine label="Multa prevista" value={formatCurrency(preview?.penaltyTotal ?? 0)} />
+        <SummaryLine label="Total alocado" value={formatCurrency(preview?.totalAllocated ?? 0)} />
+        <SummaryLine label="Sobra nao alocada" value={formatCurrency(preview?.unallocatedAmount ?? 0)} />
+      </div>
+
+      <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+        <h4 className="text-sm font-bold uppercase text-slate-500">
+          Alocacoes previstas
+        </h4>
+        <div className="mt-3 grid gap-2">
+          {previewItems.length > 0 ? (
+            previewItems.map((item) => (
+              <div
+                key={item.chargeId}
+                className="flex flex-wrap items-start justify-between gap-3 rounded-md bg-slate-50 px-3 py-3 text-sm"
+              >
+                <div className="min-w-0">
+                  <strong className="break-words text-slate-950">
+                    {item.label}
+                  </strong>
+                  <p className="mt-1 text-xs font-semibold text-slate-500">
+                    {item.kind === "penalty" ? "Multa" : "Base"} / saldo apos {formatCurrency(item.balanceAfter)}
+                  </p>
+                </div>
+                <span className="font-bold text-slate-800">
+                  {formatCurrency(item.amount)}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-500">
+              Nenhuma rubrica aberta para este pagamento.
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2">
-        <PrimaryButton type="submit" disabled={!draft.studentId || receivedAmount <= 0}>
+        <PrimaryButton
+          type="submit"
+          disabled={
+            !draft.studentId ||
+            !draft.paidOn ||
+            receivedAmount <= 0 ||
+            effectiveDateFuture
+          }
+        >
           Confirmar pagamento
         </PrimaryButton>
       </div>
@@ -1722,18 +2260,187 @@ export function PaymentForm({
   );
 }
 
+export function PaymentReceiptDialog({
+  onClose,
+  onPrint,
+  receipt,
+}: {
+  onClose: () => void;
+  onPrint: () => void;
+  receipt: PaymentReceipt | null;
+}) {
+  if (!receipt) {
+    return null;
+  }
+
+  return (
+    <AppDialog
+      actions={
+        <>
+          <SecondaryButton onClick={onPrint}>Imprimir</SecondaryButton>
+          <PrimaryButton onClick={onClose}>Fechar</PrimaryButton>
+        </>
+      }
+      onClose={onClose}
+      open={Boolean(receipt)}
+      subtitle={receipt.studentName}
+      title={`Recibo ${receipt.id}`}
+    >
+      <div className="grid min-w-0 gap-5">
+        <section className="min-w-0 rounded-lg border border-slate-200 px-4">
+          <DetailLine label="Aluno" value={receipt.studentName} />
+          <DetailLine label="Matricula" value={receipt.registrationNumber} />
+          <DetailLine label="Pagamento" value={receipt.paymentId} />
+          <DetailLine label="Valor recebido" value={formatCurrency(receipt.amount)} />
+          <DetailLine label="Forma" value={receipt.method} />
+          <DetailLine label="Data efectiva" value={formatDate(receipt.effectivePaymentDate)} />
+          <DetailLine label="Data de registo" value={formatDateTime(receipt.recordedAt)} />
+          <DetailLine label="Operador" value={receipt.recordedBy} />
+        </section>
+
+        <section className="min-w-0">
+          <h4 className="text-sm font-bold uppercase text-slate-500">Rubricas</h4>
+          <div className="mt-2 grid gap-2">
+            {receipt.items.length > 0 ? (
+              receipt.items.map((item) => (
+                <div
+                  key={`${receipt.paymentId}-${item.chargeId}`}
+                  className="flex flex-wrap items-start justify-between gap-3 rounded-md bg-slate-50 px-3 py-3 text-sm"
+                >
+                  <div className="min-w-0">
+                    <strong className="break-words text-slate-950">{item.label}</strong>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      {item.kind === "penalty" ? "Multa" : "Base"}
+                    </p>
+                  </div>
+                  <span className="font-bold text-slate-800">
+                    {formatCurrency(item.amount)}
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-500">
+                Pagamento sem alocacao aplicada.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section className="min-w-0 rounded-lg border border-slate-200 px-4">
+          <DetailLine label="Multa liquidada" value={formatCurrency(receipt.penaltyTotal)} />
+          <DetailLine label="Sobra nao alocada" value={formatCurrency(receipt.unallocatedAmount)} />
+        </section>
+      </div>
+    </AppDialog>
+  );
+}
+
+export function PaymentCorrectionDialog({
+  draft,
+  maxAmount,
+  onChange,
+  onClose,
+  onSubmit,
+  payment,
+  recordedAtPreview,
+  studentName,
+}: {
+  draft: PaymentCorrectionDraft;
+  maxAmount: number;
+  onChange: (draft: PaymentCorrectionDraft) => void;
+  onClose: () => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  payment?: Payment;
+  recordedAtPreview: string;
+  studentName: string;
+}) {
+  const formId = useId();
+  const amount = parseMoney(draft.amount);
+
+  if (!payment) {
+    return null;
+  }
+
+  return (
+    <AppDialog
+      actions={
+        <>
+          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
+          <PrimaryButton
+            type="submit"
+            form={formId}
+            disabled={!draft.reason.trim() || amount <= 0 || amount > maxAmount}
+          >
+            Confirmar correcao
+          </PrimaryButton>
+        </>
+      }
+      onClose={onClose}
+      open={Boolean(payment)}
+      subtitle={studentName}
+      title="Corrigir pagamento"
+    >
+      <form id={formId} onSubmit={onSubmit} className="grid min-w-0 gap-4">
+        <div className="rounded-lg border border-slate-200 px-4">
+          <DetailLine label="Pagamento original" value={payment.id} />
+          <DetailLine label="Valor original" value={formatCurrency(payment.amount)} />
+          <DetailLine label="Data efectiva" value={formatDate(payment.effectivePaymentDate ?? payment.paidOn)} />
+          <DetailLine label="Registado em" value={formatDateTime(payment.recordedAt)} />
+          <DetailLine label="Operador" value={payment.recordedBy ?? "Secretaria"} />
+          <DetailLine label="Maximo corrigivel" value={formatCurrency(maxAmount)} />
+        </div>
+
+        <FieldLabel label="Valor do ajuste">
+          <input
+            value={draft.amount}
+            onChange={(event) => onChange({ ...draft, amount: event.target.value })}
+            className={inputClasses()}
+            max={String(maxAmount)}
+            min="0"
+            type="number"
+          />
+        </FieldLabel>
+
+        <FieldLabel label="Motivo da correcao">
+          <textarea
+            value={draft.reason}
+            onChange={(event) => onChange({ ...draft, reason: event.target.value })}
+            className={cx(inputClasses(), "min-h-24 resize-y")}
+            placeholder="Ex.: comprovativo associado ao aluno incorrecto"
+          />
+        </FieldLabel>
+
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4">
+          <DetailLine label="Data de registo" value={formatDateTime(recordedAtPreview)} />
+        </div>
+      </form>
+    </AppDialog>
+  );
+}
 function DetailLine({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-3 last:border-b-0">
-      <span className="text-sm font-semibold text-slate-500">{label}</span>
-      <span className="max-w-[65%] text-right text-sm font-semibold text-slate-900">
+    <div className="grid min-w-0 gap-1 border-b border-slate-100 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+      <span className="break-words text-sm font-semibold text-slate-500">
+        {label}
+      </span>
+      <span className="break-words text-sm font-semibold text-slate-900 sm:text-right">
         {value}
       </span>
     </div>
   );
 }
 
-function HistoryList({ items }: { items: ReturnType<typeof getPaymentsForCharges> }) {
+function HistoryList({
+  canCorrect,
+  items,
+  onCorrectPayment,
+  onShowReceipt,
+}: {
+  canCorrect: boolean;
+  items: ReturnType<typeof getPaymentsForCharges>;
+  onCorrectPayment: (paymentId: string) => void;
+  onShowReceipt: (paymentId: string) => void;
+}) {
   if (items.length === 0) {
     return (
       <p className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-500">
@@ -1754,32 +2461,46 @@ function HistoryList({ items }: { items: ReturnType<typeof getPaymentsForCharges
               {formatCurrency(item.amount)}
             </strong>
             <span className="text-xs font-semibold text-slate-500">
-              {formatDate(item.paidOn)}
+              {formatDate(item.effectivePaymentDate)}
             </span>
           </div>
           <p className="mt-1 text-slate-600">
             {item.method}
-            {item.reference ? ` · ${item.reference}` : ""}
+            {item.legacyReference ? ` - ${item.legacyReference}` : ""}
           </p>
+          <p className="mt-1 text-xs font-semibold text-slate-500">
+            Registado por {item.recordedBy} em {formatDateTime(item.recordedAt)}
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <TextButton onClick={() => onShowReceipt(item.id)}>Recibo</TextButton>
+            {canCorrect && (
+              <TextButton onClick={() => onCorrectPayment(item.id)}>
+                Corrigir
+              </TextButton>
+            )}
+          </div>
         </div>
       ))}
     </div>
   );
 }
-
-export function FinanceCellDetailPanel({
+export function FinanceCellDialog({
   canManagePayments,
   months,
   onClose,
+  onCorrectPayment,
   onCreateMiscellaneous,
   onRegisterPayment,
+  onShowReceipt,
   row,
   selection,
   settings,
+  studentContextLabel,
 }: {
   canManagePayments: boolean;
   months: MonthOption[];
   onClose: () => void;
+  onCorrectPayment: (studentId: string, paymentId: string) => void;
   onCreateMiscellaneous: () => void;
   onRegisterPayment: (
     draft: Partial<PaymentLaunchDraft> & {
@@ -1787,15 +2508,18 @@ export function FinanceCellDetailPanel({
       studentId: string;
     },
   ) => void;
+  onShowReceipt: (studentId: string, paymentId: string) => void;
   row?: StudentLedgerRow;
   selection: FinanceCellSelection | null;
   settings: PaymentSettings;
+  studentContextLabel: string;
 }) {
   if (!selection || !row) {
     return null;
   }
 
   const student = row.student;
+  const stableNumber = student.stableNumber ?? "Sem numero";
   const paymentAction = (
     draft: Partial<PaymentLaunchDraft> & {
       category: PaymentCategory;
@@ -1804,36 +2528,52 @@ export function FinanceCellDetailPanel({
   ) => {
     onRegisterPayment(draft);
   };
-  let title = "Detalhes";
+  let title = "Detalhe financeiro";
   let subtitle = student.fullName;
+  let rubricLabel = "Rubrica";
+  let statusLabelText = "Consulta";
+  let statusDetail = "Consulta financeira";
+  let statusTone: StateLabelTone = "neutral";
+  let statusSymbol = "";
   let body: ReactNode = null;
   let history = getPaymentsForCharges(row.record, []);
   let action: ReactNode = null;
 
+  const setStatus = ({
+    detail,
+    label,
+    symbol,
+    tone,
+  }: {
+    detail: string;
+    label: string;
+    symbol: string;
+    tone: FinanceCellTone;
+  }) => {
+    statusLabelText = label;
+    statusDetail = detail;
+    statusTone = tone;
+    statusSymbol = symbol;
+  };
+
   if (selection.kind === "registration") {
     const status = getRegistrationCellState(row.ledger, settings);
-    const balance = row.ledger.registrationBalance;
+    const balance = row.ledger.registrationBalance + row.ledger.registrationPenaltyBalance;
 
     title = "Detalhes da inscrição";
-    subtitle = `${student.fullName} · ${student.registrationNumber}`;
+    subtitle = `${student.fullName} / ${student.registrationNumber}`;
+    rubricLabel = "Inscrição/Renovação";
+    setStatus(status);
     history = getPaymentsForCharges(row.record, [registrationChargeId(student.id)]);
     body = (
       <>
-        <DetailLine label="Estado" value={status.label} />
-        <DetailLine
-          label="Valor"
-          value={formatCurrency(settings.inscriptionRenewalFee)}
-        />
-        <DetailLine
-          label="Pago"
-          value={formatCurrency(settings.inscriptionRenewalFee - balance)}
-        />
+        <DetailLine label="Valor base" value={formatCurrency(row.ledger.registrationBaseAmount)} />
+        <DetailLine label="Desconto" value={formatCurrency(row.ledger.registrationDiscount)} />
+        <DetailLine label="Valor devido" value={formatCurrency(row.ledger.registrationDue)} />
+        <DetailLine label="Pago" value={formatCurrency(row.ledger.registrationPaid + row.ledger.registrationPenaltyPaid)} />
+        <DetailLine label="Multa" value={formatCurrency(row.ledger.registrationPenaltyTotal)} />
         <DetailLine label="Saldo" value={formatCurrency(balance)} />
-        <DetailLine label="Multa" value={formatCurrency(row.ledger.registrationFine)} />
-        <DetailLine
-          label="Matrícula"
-          value={formatDate(student.enrollmentDate)}
-        />
+        <DetailLine label="Matrícula" value={formatDate(student.enrollmentDate)} />
       </>
     );
 
@@ -1868,48 +2608,38 @@ export function FinanceCellDetailPanel({
     );
 
     title = "Detalhes da mensalidade";
-    subtitle = `${student.fullName} · ${
-      month?.month.label ?? monthLabel(selection.monthKey)
-    }${installmentNumber ? ` · ${installmentNumber}ª mensalidade` : ""}`;
+    subtitle = `${student.fullName} / ${month?.month.label ?? monthLabel(selection.monthKey)}`;
+    rubricLabel = `${month?.month.label ?? monthLabel(selection.monthKey)}${
+      installmentNumber ? ` / ${installmentNumber}ª mensalidade` : ""
+    }`;
+    if (status) {
+      setStatus(status);
+    }
     history = getPaymentsForCharges(row.record, [
       tuitionChargeId(student.id, selection.monthKey),
     ]);
     body = month ? (
       month.applicable ? (
         <>
-          <DetailLine label="Estado" value={status?.label ?? "Pendente"} />
-          <DetailLine
-            label="Valor normal"
-            value={formatCurrency(month.due + month.discount)}
-          />
+          <DetailLine label="Valor base" value={formatCurrency(month.baseAmount)} />
           <DetailLine label="Desconto" value={formatCurrency(month.discount)} />
           <DetailLine label="Valor devido" value={formatCurrency(month.due)} />
-          <DetailLine label="Pago" value={formatCurrency(month.paid)} />
-          <DetailLine label="Multa" value={formatCurrency(month.fine)} />
-          <DetailLine label="Saldo" value={formatCurrency(month.balance)} />
+          <DetailLine label="Pago" value={formatCurrency(month.paid + month.finePaid)} />
+          <DetailLine label="Multa" value={formatCurrency(month.fineTotal)} />
+          <DetailLine label="Saldo" value={formatCurrency(month.balance + month.fineBalance)} />
           <DetailLine label="Regra" value={month.ruleLabel} />
-          <DetailLine
-            label="Vencimento"
-            value={formatDate(dueDateForMonth(month.month.key, settings))}
-          />
-          <DetailLine
-            label="1ª multa"
-            value={formatDate(firstPenaltyDateForMonth(month.month.key, settings))}
-          />
-          <DetailLine
-            label="2ª multa"
-            value={formatDate(secondPenaltyDateForMonth(month.month.key, settings))}
-          />
+          <DetailLine label="Vencimento" value={formatDate(dueDateForMonth(month.month.key, settings))} />
+          <DetailLine label="1ª multa" value={formatDate(firstPenaltyDateForMonth(month.month.key, settings))} />
+          <DetailLine label="2ª multa" value={formatDate(secondPenaltyDateForMonth(month.month.key, settings))} />
         </>
       ) : (
         <p className="rounded-md bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-600">
-          Mensalidade não aplicável. O aluno ainda não iniciou mensalidades neste
-          período.
+          Mensalidade não aplicável. O aluno ainda não iniciou mensalidades neste período.
         </p>
       )
     ) : null;
 
-    if (canManagePayments && month?.applicable && month.balance > 0) {
+    if (canManagePayments && month?.applicable && month.balance + month.fineBalance > 0) {
       action = (
         <PrimaryButton
           onClick={() =>
@@ -1917,7 +2647,7 @@ export function FinanceCellDetailPanel({
               studentId: student.id,
               category: "tuition",
               monthKey: month.month.key,
-              amount: String(month.balance),
+              amount: String(month.balance + month.fineBalance),
             })
           }
         >
@@ -1933,9 +2663,12 @@ export function FinanceCellDetailPanel({
     const firstOpenCharge = charges.find(
       (charge) => getChargeBalance(row.record, charge) > 0,
     );
+    const miscellaneousState = getMiscellaneousCellState(row.record);
 
     title = "Detalhes de diversos";
-    subtitle = `${student.fullName} · cobranças extras`;
+    subtitle = `${student.fullName} / cobranças extras`;
+    rubricLabel = "Diversos";
+    setStatus(miscellaneousState);
     history = getPaymentsForCharges(row.record, chargeIds);
     body =
       charges.length > 0 ? (
@@ -1948,8 +2681,8 @@ export function FinanceCellDetailPanel({
                 key={charge.id}
                 className="rounded-md border border-slate-200 bg-white px-3 py-3"
               >
-                <div className="flex items-start justify-between gap-3">
-                  <strong className="text-sm text-slate-950">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <strong className="min-w-0 break-words text-sm text-slate-950">
                     {charge.description}
                   </strong>
                   <span className="text-sm font-bold text-slate-700">
@@ -1973,7 +2706,7 @@ export function FinanceCellDetailPanel({
       );
 
     action = (
-      <div className="flex flex-wrap gap-2">
+      <>
         {canManagePayments && firstOpenCharge && (
           <PrimaryButton
             onClick={() =>
@@ -1994,20 +2727,28 @@ export function FinanceCellDetailPanel({
             Nova cobrança diversa
           </SecondaryButton>
         )}
-      </div>
+      </>
     );
   }
 
   if (selection.kind === "debt") {
     const breakdown = getDebtBreakdown(row);
+    const timing = row.ledger.totals;
     const total = breakdown.reduce((sum, item) => sum + item.amount, 0);
-    const firstMonthlyDebt = row.ledger.monthly.find((month) => month.balance > 0);
+    const firstMonthlyDebt = row.ledger.monthly.find(
+      (month) => month.balance + month.fineBalance > 0,
+    );
     const firstMiscCharge = getMiscellaneousCharges(row.record).find(
       (charge) => getChargeBalance(row.record, charge) > 0,
     );
 
-    title = "Detalhes da dívida";
-    subtitle = `${student.fullName} · total ${formatCurrency(total)}`;
+    title = "Detalhes da síntese";
+    subtitle = `${student.fullName} / total ${formatCurrency(total)}`;
+    rubricLabel = "Síntese financeira";
+    statusLabelText = total > 0 ? "Dívida" : "Regularizado";
+    statusDetail = total > 0 ? "Existe saldo por liquidar" : "Sem dívida aberta";
+    statusTone = total > 0 ? "danger" : "paid";
+    statusSymbol = total > 0 ? "!" : "OK";
     history = getPaymentsForCharges(
       row.record,
       row.record.charges.map((charge) => charge.id),
@@ -2015,14 +2756,16 @@ export function FinanceCellDetailPanel({
     body =
       breakdown.length > 0 ? (
         <div className="grid gap-2">
+          <DetailLine label="Dívida vencida" value={formatCurrency(timing.overdueDebt)} />
+          <DetailLine label="Valor a vencer" value={formatCurrency(timing.futureDue)} />
           {breakdown.map((item) => (
             <div
               key={item.id}
-              className="flex items-start justify-between gap-4 rounded-md bg-slate-50 px-3 py-3"
+              className="flex flex-wrap items-start justify-between gap-4 rounded-md bg-slate-50 px-3 py-3"
             >
-              <div>
-                <strong className="text-sm text-slate-950">{item.label}</strong>
-                <p className="mt-1 text-xs text-slate-500">{item.detail}</p>
+              <div className="min-w-0">
+                <strong className="break-words text-sm text-slate-950">{item.label}</strong>
+                <p className="mt-1 break-words text-xs text-slate-500">{item.detail}</p>
               </div>
               <span className="text-sm font-bold text-slate-800">
                 {formatCurrency(item.amount)}
@@ -2040,11 +2783,11 @@ export function FinanceCellDetailPanel({
       action = (
         <PrimaryButton
           onClick={() => {
-            if (row.ledger.registrationBalance > 0) {
+            if (row.ledger.registrationBalance + row.ledger.registrationPenaltyBalance > 0) {
               paymentAction({
                 studentId: student.id,
                 category: "registration",
-                amount: String(row.ledger.registrationBalance),
+                amount: String(row.ledger.registrationBalance + row.ledger.registrationPenaltyBalance),
                 monthKey: getStudentTuitionStartMonth(student, settings),
               });
               return;
@@ -2055,7 +2798,7 @@ export function FinanceCellDetailPanel({
                 studentId: student.id,
                 category: "tuition",
                 monthKey: firstMonthlyDebt.month.key,
-                amount: String(firstMonthlyDebt.balance),
+                amount: String(firstMonthlyDebt.balance + firstMonthlyDebt.fineBalance),
               });
               return;
             }
@@ -2077,56 +2820,79 @@ export function FinanceCellDetailPanel({
     }
   }
 
+  const footerActions = (
+    <>
+      {!canManagePayments && (
+        <p className="min-w-0 flex-1 break-words text-sm font-semibold text-slate-600">
+          Director: modo de consulta, sem autorização para mutações financeiras.
+        </p>
+      )}
+      {action}
+      <SecondaryButton onClick={onClose}>Fechar</SecondaryButton>
+    </>
+  );
+
   return (
-    <div
-      className="fixed inset-0 z-40 flex items-end bg-slate-950/20 px-0 pt-12 lg:items-stretch lg:justify-end lg:p-0"
-      onClick={onClose}
+    <AppDialog
+      actions={footerActions}
+      onClose={onClose}
+      open={Boolean(selection && row)}
+      subtitle={subtitle}
+      title={title}
     >
-      <aside
-        className="max-h-[88vh] w-full overflow-y-auto rounded-t-xl bg-white shadow-2xl lg:h-full lg:max-h-none lg:w-[460px] lg:rounded-none"
-        onClick={(event) => event.stopPropagation()}
-        aria-label={title}
-      >
-        <div className="sticky top-0 z-10 border-b border-slate-200 bg-white px-5 py-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-bold text-slate-950">{title}</h3>
-              <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
-            </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="grid size-10 place-items-center rounded-md border border-slate-200 text-xl font-semibold text-slate-500 hover:bg-slate-50"
-              aria-label="Fechar detalhes"
-            >
-              ×
-            </button>
+      <div className="grid min-w-0 gap-5">
+        <section className="min-w-0">
+          <h4 className="text-sm font-bold uppercase text-slate-500">
+            Identificação
+          </h4>
+          <div className="mt-2 rounded-lg border border-slate-200 px-4">
+            <DetailLine label="Aluno" value={student.fullName} />
+            <DetailLine label="Número estável" value={stableNumber} />
+            <DetailLine label="Matrícula" value={student.registrationNumber} />
+            <DetailLine label="Nível/Turma" value={studentContextLabel} />
+            <DetailLine label="Ano lectivo" value={settings.academicYear} />
+            <DetailLine label="Rubrica" value={rubricLabel} />
           </div>
-        </div>
+        </section>
 
-        <div className="grid gap-5 px-5 py-5">
-          <section>
-            <h4 className="text-sm font-bold uppercase text-slate-500">
-              Resumo
-            </h4>
-            <div className="mt-2 rounded-lg border border-slate-200 px-4">
-              {body}
-            </div>
-          </section>
+        <section className="min-w-0">
+          <h4 className="text-sm font-bold uppercase text-slate-500">
+            Estado
+          </h4>
+          <div className="mt-2 flex flex-wrap items-center gap-3 rounded-lg border border-slate-200 px-4 py-3">
+            <StateLabel tone={statusTone}>
+              {statusSymbol ? `${statusSymbol} - ${statusLabelText}` : statusLabelText}
+            </StateLabel>
+            <span className="min-w-0 break-words text-sm font-semibold text-slate-600">
+              {statusDetail}
+            </span>
+          </div>
+        </section>
 
-          {action && <div className="flex flex-wrap gap-2">{action}</div>}
+        <section className="min-w-0">
+          <h4 className="text-sm font-bold uppercase text-slate-500">
+            Resumo
+          </h4>
+          <div className="mt-2 rounded-lg border border-slate-200 px-4">
+            {body}
+          </div>
+        </section>
 
-          <section>
-            <h4 className="text-sm font-bold uppercase text-slate-500">
-              Histórico
-            </h4>
-            <div className="mt-2">
-              <HistoryList items={history} />
-            </div>
-          </section>
-        </div>
-      </aside>
-    </div>
+        <section className="min-w-0">
+          <h4 className="text-sm font-bold uppercase text-slate-500">
+            Histórico
+          </h4>
+          <div className="mt-2">
+            <HistoryList
+              canCorrect={canManagePayments}
+              items={history}
+              onCorrectPayment={(paymentId) => onCorrectPayment(student.id, paymentId)}
+              onShowReceipt={(paymentId) => onShowReceipt(student.id, paymentId)}
+            />
+          </div>
+        </section>
+      </div>
+    </AppDialog>
   );
 }
 
@@ -2154,7 +2920,7 @@ export function MiscellaneousChargeForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+      className="lss-responsive-card"
     >
       <div>
         <h3 className="text-base font-semibold">Nova cobrança diversa</h3>
@@ -2252,7 +3018,6 @@ export function MiscellaneousChargeForm({
     </form>
   );
 }
-
 export function StudentFilters({
   classes,
   currentClassId,
@@ -2273,7 +3038,7 @@ export function StudentFilters({
   search: string;
 }) {
   return (
-    <div className="grid gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 md:grid-cols-[220px_220px_1fr]">
+    <div className="grid min-w-0 gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 md:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_minmax(0,1fr)]">
       <select
         value={currentClassId}
         onChange={(event) => onClassChange(event.target.value)}

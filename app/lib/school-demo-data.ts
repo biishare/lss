@@ -40,6 +40,8 @@ export type SchoolClass = {
   name: string;
   stage: string;
   academicYear: string;
+  academicYearId?: string;
+  educationLevelId?: string;
   status: EntityStatus;
   createdAt: string;
 };
@@ -89,6 +91,10 @@ export type SchoolRoom = {
 
 export type Student = {
   id: string;
+  enrollmentId?: string;
+  academicYearId?: string;
+  educationLevelId?: string;
+  stableNumber?: string;
   registrationNumber: string;
   fullName: string;
   guardianName: string;
@@ -115,10 +121,32 @@ export type PaymentSettings = {
   monthlyFee: number;
   startMonth: string;
   endMonth: string;
+  monthlyDueDay?: number;
   firstPenaltyDay: number;
   firstPenaltyAmount: number;
+  firstPenaltyPercent?: number;
   secondPenaltyDay: number;
   secondPenaltyAmount: number;
+  secondPenaltyPercent?: number;
+};
+
+export type ChargeSnapshot = {
+  source: "legacy" | "rule-version";
+  ruleVersionId?: string;
+  ruleVersion?: number;
+  academicYearId?: string;
+  educationLevelId?: string;
+  originalAmount: number;
+  discountPercent: number;
+  discountAmount: number;
+  dueAmount: number;
+  ruleLabel?: string;
+  monthlyDueDay?: number;
+  firstPenaltyDay?: number;
+  firstPenaltyPercent?: number;
+  secondPenaltyDay?: number;
+  secondPenaltyPercent?: number;
+  publishedAt: string;
 };
 
 export type PaymentEntry = {
@@ -140,7 +168,32 @@ export type Charge = {
   description: string;
   monthKey?: string;
   dueOn?: string;
+  baseAmount?: number;
+  discountAmount?: number;
+  dueAmount?: number;
+  ruleVersionId?: string;
+  snapshot?: ChargeSnapshot;
   createdAt: string;
+};
+
+export type PenaltyStage = "first" | "second";
+
+export type PenaltyCharge = {
+  id: string;
+  studentId: string;
+  baseChargeId: string;
+  stage: PenaltyStage;
+  amount: number;
+  effectiveOn: string;
+  createdAt: string;
+  snapshot: {
+    thresholdDay: number;
+    percent: number;
+    baseBalance: number;
+    targetTotal: number;
+    previousPenaltyTotal: number;
+    ruleVersionId?: string;
+  };
 };
 
 export type Payment = {
@@ -148,9 +201,12 @@ export type Payment = {
   studentId: string;
   amount: number;
   paidOn: string;
+  effectivePaymentDate?: string;
   recordedAt: string;
+  recordedBy?: string;
   method: string;
   reference?: string;
+  legacyReference?: string;
   observation?: string;
 };
 
@@ -161,11 +217,24 @@ export type PaymentAllocation = {
   amount: number;
 };
 
+export type PaymentCorrection = {
+  id: string;
+  paymentId: string;
+  studentId: string;
+  reason: string;
+  amount: number;
+  recordedAt: string;
+  recordedBy: string;
+  linkedChargeId: string;
+};
+
 export type StudentPaymentRecord = {
   studentId: string;
   charges: Charge[];
+  penaltyCharges?: PenaltyCharge[];
   payments: Payment[];
   allocations: PaymentAllocation[];
+  corrections?: PaymentCorrection[];
   inscriptionRenewal: PaymentEntry;
   monthlyPayments: Record<string, PaymentEntry>;
   miscellaneousPayments: PaymentEntry[];

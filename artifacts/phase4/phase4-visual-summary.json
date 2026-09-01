@@ -1,0 +1,1091 @@
+{
+  "summary": [
+    {
+      "viewport": {
+        "width": 320,
+        "height": 568
+      },
+      "before": {
+        "clientWidth": 320,
+        "scrollWidth": 320,
+        "globalOverflow": 0,
+        "bodyScrollWidth": 320,
+        "tableClientWidth": 286,
+        "tableScrollWidth": 2331,
+        "tableHasInternalScroll": true,
+        "tableFocusable": true,
+        "tableRole": "region",
+        "headers": [
+          "",
+          "Nº",
+          "Aluno",
+          "Nível/Turma",
+          "Inscrição",
+          "Mar",
+          "Abr",
+          "Mai",
+          "Jun",
+          "Jul",
+          "Ago",
+          "Set",
+          "Out",
+          "Nov",
+          "Diversos",
+          "Dívida vencida",
+          "A vencer",
+          "Total geral",
+          "Acção"
+        ],
+        "missingHeaders": [],
+        "financeButtonCount": 28,
+        "financeLabelsWithoutSaldo": [],
+        "missingButtonNames": [],
+        "stableNumbers": [
+          "001",
+          "002"
+        ],
+        "stickyStudentLeft": 153,
+        "stickyNumberLeft": 73
+      },
+      "dialogChecks": [
+        {
+          "clickCase": {
+            "name": "registration",
+            "prefix": "Inscrição"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 432,
+              "top": 3554,
+              "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da inscrição",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 304,
+              "height": 552,
+              "top": 8,
+              "left": 8
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 432,
+            "pageScrollY": 3554
+          }
+        },
+        {
+          "clickCase": {
+            "name": "tuition",
+            "prefix": "Março"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 562,
+              "top": 3554,
+              "label": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da mensalidade",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 304,
+              "height": 552,
+              "top": 8,
+              "left": 8
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 562,
+            "pageScrollY": 3554
+          }
+        },
+        {
+          "clickCase": {
+            "name": "miscellaneous",
+            "prefix": "Diversos"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 1608,
+              "top": 3554,
+              "label": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes de diversos",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 304,
+              "height": 552,
+              "top": 8,
+              "left": 8
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 1608,
+            "pageScrollY": 3554
+          }
+        }
+      ],
+      "keyboard": {
+        "keyboardOpen": {
+          "opened": true,
+          "before": {
+            "left": 432,
+            "top": 3554,
+            "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+          }
+        },
+        "keyboardAfter": {
+          "dialogOpen": false,
+          "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+          "tableScrollLeft": 432,
+          "pageScrollY": 3554
+        }
+      },
+      "scrollCase": {
+        "ready": true,
+        "beforeLeft": 2045,
+        "label": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro."
+      },
+      "debtDialog": {
+        "open": true,
+        "bodyOverflow": "hidden"
+      },
+      "debtAfter": {
+        "dialogOpen": false,
+        "activeLabel": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro.",
+        "tableScrollLeft": 2045,
+        "pageScrollY": 3554
+      },
+      "axeResult": {
+        "violations": [],
+        "criticalOrSerious": []
+      }
+    },
+    {
+      "viewport": {
+        "width": 360,
+        "height": 800
+      },
+      "before": {
+        "clientWidth": 360,
+        "scrollWidth": 360,
+        "globalOverflow": 0,
+        "bodyScrollWidth": 360,
+        "tableClientWidth": 326,
+        "tableScrollWidth": 2331,
+        "tableHasInternalScroll": true,
+        "tableFocusable": true,
+        "tableRole": "region",
+        "headers": [
+          "",
+          "Nº",
+          "Aluno",
+          "Nível/Turma",
+          "Inscrição",
+          "Mar",
+          "Abr",
+          "Mai",
+          "Jun",
+          "Jul",
+          "Ago",
+          "Set",
+          "Out",
+          "Nov",
+          "Diversos",
+          "Dívida vencida",
+          "A vencer",
+          "Total geral",
+          "Acção"
+        ],
+        "missingHeaders": [],
+        "financeButtonCount": 28,
+        "financeLabelsWithoutSaldo": [],
+        "missingButtonNames": [],
+        "stableNumbers": [
+          "001",
+          "002"
+        ],
+        "stickyStudentLeft": 153,
+        "stickyNumberLeft": 73
+      },
+      "dialogChecks": [
+        {
+          "clickCase": {
+            "name": "registration",
+            "prefix": "Inscrição"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 412,
+              "top": 3338,
+              "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da inscrição",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 344,
+              "height": 784,
+              "top": 8,
+              "left": 8
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 412,
+            "pageScrollY": 3338
+          }
+        },
+        {
+          "clickCase": {
+            "name": "tuition",
+            "prefix": "Março"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 542,
+              "top": 3338,
+              "label": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da mensalidade",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 344,
+              "height": 784,
+              "top": 8,
+              "left": 8
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 542,
+            "pageScrollY": 3338
+          }
+        },
+        {
+          "clickCase": {
+            "name": "miscellaneous",
+            "prefix": "Diversos"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 1588,
+              "top": 3338,
+              "label": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes de diversos",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 344,
+              "height": 784,
+              "top": 8,
+              "left": 8
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 1588,
+            "pageScrollY": 3338
+          }
+        }
+      ],
+      "keyboard": {
+        "keyboardOpen": {
+          "opened": true,
+          "before": {
+            "left": 412,
+            "top": 3338,
+            "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+          }
+        },
+        "keyboardAfter": {
+          "dialogOpen": false,
+          "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+          "tableScrollLeft": 412,
+          "pageScrollY": 3338
+        }
+      },
+      "scrollCase": {
+        "ready": true,
+        "beforeLeft": 2005,
+        "label": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro."
+      },
+      "debtDialog": {
+        "open": true,
+        "bodyOverflow": "hidden"
+      },
+      "debtAfter": {
+        "dialogOpen": false,
+        "activeLabel": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro.",
+        "tableScrollLeft": 2005,
+        "pageScrollY": 3338
+      },
+      "axeResult": {
+        "violations": [],
+        "criticalOrSerious": []
+      }
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "before": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "globalOverflow": 0,
+        "bodyScrollWidth": 390,
+        "tableClientWidth": 356,
+        "tableScrollWidth": 2331,
+        "tableHasInternalScroll": true,
+        "tableFocusable": true,
+        "tableRole": "region",
+        "headers": [
+          "",
+          "Nº",
+          "Aluno",
+          "Nível/Turma",
+          "Inscrição",
+          "Mar",
+          "Abr",
+          "Mai",
+          "Jun",
+          "Jul",
+          "Ago",
+          "Set",
+          "Out",
+          "Nov",
+          "Diversos",
+          "Dívida vencida",
+          "A vencer",
+          "Total geral",
+          "Acção"
+        ],
+        "missingHeaders": [],
+        "financeButtonCount": 28,
+        "financeLabelsWithoutSaldo": [],
+        "missingButtonNames": [],
+        "stableNumbers": [
+          "001",
+          "002"
+        ],
+        "stickyStudentLeft": 153,
+        "stickyNumberLeft": 73
+      },
+      "dialogChecks": [
+        {
+          "clickCase": {
+            "name": "registration",
+            "prefix": "Inscrição"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 397,
+              "top": 3264,
+              "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da inscrição",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 374,
+              "height": 828,
+              "top": 8,
+              "left": 8
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 397,
+            "pageScrollY": 3264
+          }
+        },
+        {
+          "clickCase": {
+            "name": "tuition",
+            "prefix": "Março"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 527,
+              "top": 3264,
+              "label": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da mensalidade",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 374,
+              "height": 828,
+              "top": 8,
+              "left": 8
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 527,
+            "pageScrollY": 3264
+          }
+        },
+        {
+          "clickCase": {
+            "name": "miscellaneous",
+            "prefix": "Diversos"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 1573,
+              "top": 3264,
+              "label": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes de diversos",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 374,
+              "height": 828,
+              "top": 8,
+              "left": 8
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 1573,
+            "pageScrollY": 3264
+          }
+        }
+      ],
+      "keyboard": {
+        "keyboardOpen": {
+          "opened": true,
+          "before": {
+            "left": 397,
+            "top": 3264,
+            "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+          }
+        },
+        "keyboardAfter": {
+          "dialogOpen": false,
+          "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+          "tableScrollLeft": 397,
+          "pageScrollY": 3264
+        }
+      },
+      "scrollCase": {
+        "ready": true,
+        "beforeLeft": 1975,
+        "label": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro."
+      },
+      "debtDialog": {
+        "open": true,
+        "bodyOverflow": "hidden"
+      },
+      "debtAfter": {
+        "dialogOpen": false,
+        "activeLabel": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro.",
+        "tableScrollLeft": 1975,
+        "pageScrollY": 3264
+      },
+      "axeResult": {
+        "violations": [],
+        "criticalOrSerious": []
+      }
+    },
+    {
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "before": {
+        "clientWidth": 753,
+        "scrollWidth": 753,
+        "globalOverflow": 0,
+        "bodyScrollWidth": 753,
+        "tableClientWidth": 688,
+        "tableScrollWidth": 2313,
+        "tableHasInternalScroll": true,
+        "tableFocusable": true,
+        "tableRole": "region",
+        "headers": [
+          "",
+          "Nº",
+          "Aluno",
+          "Nível/Turma",
+          "Inscrição",
+          "Mar",
+          "Abr",
+          "Mai",
+          "Jun",
+          "Jul",
+          "Ago",
+          "Set",
+          "Out",
+          "Nov",
+          "Diversos",
+          "Dívida vencida",
+          "A vencer",
+          "Total geral",
+          "Acção"
+        ],
+        "missingHeaders": [],
+        "financeButtonCount": 28,
+        "financeLabelsWithoutSaldo": [],
+        "missingButtonNames": [],
+        "stableNumbers": [
+          "001",
+          "002"
+        ],
+        "stickyStudentLeft": 161,
+        "stickyNumberLeft": 81
+      },
+      "dialogChecks": [
+        {
+          "clickCase": {
+            "name": "registration",
+            "prefix": "Inscrição"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 222,
+              "top": 2082,
+              "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da inscrição",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 672,
+              "height": 768,
+              "top": 128,
+              "left": 40.5
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 222,
+            "pageScrollY": 2082
+          }
+        },
+        {
+          "clickCase": {
+            "name": "tuition",
+            "prefix": "Março"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 359,
+              "top": 2082,
+              "label": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da mensalidade",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 672,
+              "height": 768,
+              "top": 128,
+              "left": 40.5
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 359,
+            "pageScrollY": 2082
+          }
+        },
+        {
+          "clickCase": {
+            "name": "miscellaneous",
+            "prefix": "Diversos"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 1405,
+              "top": 2082,
+              "label": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes de diversos",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 672,
+              "height": 768,
+              "top": 128,
+              "left": 40.5
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 1405,
+            "pageScrollY": 2082
+          }
+        }
+      ],
+      "keyboard": {
+        "keyboardOpen": {
+          "opened": true,
+          "before": {
+            "left": 229,
+            "top": 2082,
+            "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+          }
+        },
+        "keyboardAfter": {
+          "dialogOpen": false,
+          "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+          "tableScrollLeft": 229,
+          "pageScrollY": 2082
+        }
+      },
+      "scrollCase": {
+        "ready": true,
+        "beforeLeft": 1610,
+        "label": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro."
+      },
+      "debtDialog": {
+        "open": true,
+        "bodyOverflow": "hidden"
+      },
+      "debtAfter": {
+        "dialogOpen": false,
+        "activeLabel": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro.",
+        "tableScrollLeft": 1610,
+        "pageScrollY": 2082
+      },
+      "axeResult": {
+        "violations": [],
+        "criticalOrSerious": []
+      }
+    },
+    {
+      "viewport": {
+        "width": 1024,
+        "height": 768
+      },
+      "before": {
+        "clientWidth": 1009,
+        "scrollWidth": 1009,
+        "globalOverflow": 0,
+        "bodyScrollWidth": 1009,
+        "tableClientWidth": 648,
+        "tableScrollWidth": 2313,
+        "tableHasInternalScroll": true,
+        "tableFocusable": true,
+        "tableRole": "region",
+        "headers": [
+          "",
+          "Nº",
+          "Aluno",
+          "Nível/Turma",
+          "Inscrição",
+          "Mar",
+          "Abr",
+          "Mai",
+          "Jun",
+          "Jul",
+          "Ago",
+          "Set",
+          "Out",
+          "Nov",
+          "Diversos",
+          "Dívida vencida",
+          "A vencer",
+          "Total geral",
+          "Acção"
+        ],
+        "missingHeaders": [],
+        "financeButtonCount": 28,
+        "financeLabelsWithoutSaldo": [],
+        "missingButtonNames": [],
+        "stableNumbers": [
+          "001",
+          "002"
+        ],
+        "stickyStudentLeft": 449,
+        "stickyNumberLeft": 369
+      },
+      "dialogChecks": [
+        {
+          "clickCase": {
+            "name": "registration",
+            "prefix": "Inscrição"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 242,
+              "top": 1443,
+              "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da inscrição",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 672,
+              "height": 691.1875,
+              "top": 38.40625,
+              "left": 168.5
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 242,
+            "pageScrollY": 1443
+          }
+        },
+        {
+          "clickCase": {
+            "name": "tuition",
+            "prefix": "Março"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 379,
+              "top": 1443,
+              "label": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da mensalidade",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 672,
+              "height": 691.1875,
+              "top": 38.40625,
+              "left": 168.5
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 379,
+            "pageScrollY": 1443
+          }
+        },
+        {
+          "clickCase": {
+            "name": "miscellaneous",
+            "prefix": "Diversos"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 1425,
+              "top": 1443,
+              "label": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes de diversos",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 672,
+              "height": 691.1875,
+              "top": 38.40625,
+              "left": 168.5
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 1425,
+            "pageScrollY": 1443
+          }
+        }
+      ],
+      "keyboard": {
+        "keyboardOpen": {
+          "opened": true,
+          "before": {
+            "left": 249,
+            "top": 1443,
+            "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+          }
+        },
+        "keyboardAfter": {
+          "dialogOpen": false,
+          "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+          "tableScrollLeft": 249,
+          "pageScrollY": 1443
+        }
+      },
+      "scrollCase": {
+        "ready": true,
+        "beforeLeft": 1650,
+        "label": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro."
+      },
+      "debtDialog": {
+        "open": true,
+        "bodyOverflow": "hidden"
+      },
+      "debtAfter": {
+        "dialogOpen": false,
+        "activeLabel": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro.",
+        "tableScrollLeft": 1650,
+        "pageScrollY": 1443
+      },
+      "axeResult": {
+        "violations": [],
+        "criticalOrSerious": []
+      }
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "before": {
+        "clientWidth": 1425,
+        "scrollWidth": 1425,
+        "globalOverflow": 0,
+        "bodyScrollWidth": 1425,
+        "tableClientWidth": 640,
+        "tableScrollWidth": 2313,
+        "tableHasInternalScroll": true,
+        "tableFocusable": true,
+        "tableRole": "region",
+        "headers": [
+          "",
+          "Nº",
+          "Aluno",
+          "Nível/Turma",
+          "Inscrição",
+          "Mar",
+          "Abr",
+          "Mai",
+          "Jun",
+          "Jul",
+          "Ago",
+          "Set",
+          "Out",
+          "Nov",
+          "Diversos",
+          "Dívida vencida",
+          "A vencer",
+          "Total geral",
+          "Acção"
+        ],
+        "missingHeaders": [],
+        "financeButtonCount": 28,
+        "financeLabelsWithoutSaldo": [],
+        "missingButtonNames": [],
+        "stableNumbers": [
+          "001",
+          "002"
+        ],
+        "stickyStudentLeft": 449,
+        "stickyNumberLeft": 369
+      },
+      "dialogChecks": [
+        {
+          "clickCase": {
+            "name": "registration",
+            "prefix": "Inscrição"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 246,
+              "top": 1045,
+              "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da inscrição",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 672,
+              "height": 768,
+              "top": 66,
+              "left": 376.5
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 246,
+            "pageScrollY": 1045
+          }
+        },
+        {
+          "clickCase": {
+            "name": "tuition",
+            "prefix": "Março"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 383,
+              "top": 1045,
+              "label": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes da mensalidade",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 672,
+              "height": 768,
+              "top": 66,
+              "left": 376.5
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Marco, 1ª mensalidade, Ana Mabote de Almeida, 2ª multa, saldo 1650 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 383,
+            "pageScrollY": 1045
+          }
+        },
+        {
+          "clickCase": {
+            "name": "miscellaneous",
+            "prefix": "Diversos"
+          },
+          "open": {
+            "opened": true,
+            "before": {
+              "left": 1429,
+              "top": 1045,
+              "label": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro."
+            }
+          },
+          "dialog": {
+            "open": true,
+            "title": "Detalhes de diversos",
+            "focusInside": true,
+            "bodyOverflow": "hidden",
+            "rect": {
+              "width": 672,
+              "height": 768,
+              "top": 66,
+              "left": 376.5
+            }
+          },
+          "after": {
+            "dialogOpen": false,
+            "activeLabel": "Diversos, Ana Mabote de Almeida, —, saldo 0 MT. Abrir detalhe financeiro.",
+            "tableScrollLeft": 1429,
+            "pageScrollY": 1045
+          }
+        }
+      ],
+      "keyboard": {
+        "keyboardOpen": {
+          "opened": true,
+          "before": {
+            "left": 253,
+            "top": 1045,
+            "label": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro."
+          }
+        },
+        "keyboardAfter": {
+          "dialogOpen": false,
+          "activeLabel": "Inscrição, Ana Mabote de Almeida, 2ª multa, saldo 3850 MT. Abrir detalhe financeiro.",
+          "tableScrollLeft": 253,
+          "pageScrollY": 1045
+        }
+      },
+      "scrollCase": {
+        "ready": true,
+        "beforeLeft": 1658,
+        "label": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro."
+      },
+      "debtDialog": {
+        "open": true,
+        "bodyOverflow": "hidden"
+      },
+      "debtAfter": {
+        "dialogOpen": false,
+        "activeLabel": "Total geral, Ana Mabote de Almeida, Saldo por liquidar, saldo 10 300 MT. Abrir detalhe financeiro.",
+        "tableScrollLeft": 1658,
+        "pageScrollY": 1045
+      },
+      "axeResult": {
+        "violations": [],
+        "criticalOrSerious": []
+      }
+    }
+  ],
+  "failures": []
+}
