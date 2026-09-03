@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# LSS — demonstração de gestão escolar
 
-## Getting Started
+Demo navegável do Liceu São Silvestre, construída com Next.js, React,
+TypeScript, Material UI e Tailwind CSS. Usa apenas dados fictícios e guarda as
+alterações no `localStorage` do navegador.
 
-First, run the development server:
+Não existe backend, base de dados, autenticação real ou integração externa.
+
+## Executar
+
+Requer Node.js 20.9 ou posterior.
 
 ```bash
+npm ci
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abra [http://localhost:3000](http://localhost:3000) e escolha um dos perfis:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Secretaria** — pode matricular, configurar regras e registar pagamentos.
+- **Director** — consulta indicadores, alunos, pagamentos, relatórios e
+  configurações em modo de leitura.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Rotas da demo
 
-## Learn More
+- `/dashboard` — início e indicadores;
+- `/students` — alunos, classes, salas e turmas;
+- `/payments` — políticas por classe/ano, cobranças diversas, planilha e lançamentos;
+- `/reports` — síntese financeira e histórico;
+- `/settings` — parâmetros e gestão dos dados locais.
 
-To learn more about Next.js, take a look at the following resources:
+## Dados locais
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Em **Configurações**, o perfil Secretaria pode exportar os dados para JSON,
+importar uma exportação v2 e repor os dados fictícios. Uma importação inválida
+ou cancelada não substitui o estado actual. Sair da sessão não apaga os dados.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Os nomes e movimentos incluídos no estado inicial são dados de exemplo para
+apresentação e testes locais.
 
-## Deploy on Vercel
+## Validar
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npm test
+npm run lint
+npx tsc --noEmit
+npm run build
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+O registo fase a fase está em [`docs/upgrade-progress.md`](docs/upgrade-progress.md)
+e o guia de operação em [`docs/operations.md`](docs/operations.md).

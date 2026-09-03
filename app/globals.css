@@ -1,3 +1,4 @@
+@layer theme, base, mui, components, utilities;
 @import "tailwindcss";
 
 :root {
@@ -98,6 +99,8 @@ textarea:focus-visible,
 .lss-shell-grid {
   width: 100%;
   min-height: calc(100vh - 81px);
+  grid-template-columns: minmax(0, 1fr);
+  transition: grid-template-columns 180ms ease;
 }
 
 .lss-section-grid,
@@ -113,7 +116,18 @@ textarea:focus-visible,
 
 @media (min-width: 1024px) {
   .lss-shell-grid {
-    grid-template-columns: minmax(16rem, 17.5rem) minmax(0, 1fr);
+    grid-template-columns: 256px minmax(0, 1fr);
+  }
+
+  .lss-shell-grid[data-collapsed="true"] {
+    grid-template-columns: 64px minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lss-shell-grid,
+  .lss-shell-grid aside {
+    transition: none;
   }
 }
 

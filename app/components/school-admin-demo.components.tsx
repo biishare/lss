@@ -1,10 +1,11 @@
-import {
-  useEffect,
-  useId,
-  useRef,
-  type FormEvent,
-  type ReactNode,
-} from "react";
+import { useId, type FormEvent, type ReactNode } from "react";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import IconButton from "@mui/material/IconButton";
 import {
   monthOptions,
   type AcademicStageDefinition,
@@ -150,9 +151,12 @@ export function StateLabel({
   tone: StateLabelTone;
 }) {
   return (
-    <span className={cx("lss-state-label", className)} data-tone={tone}>
-      {children}
-    </span>
+    <Chip
+      className={cx("lss-state-label", className)}
+      data-tone={tone}
+      label={children}
+      size="small"
+    />
   );
 }
 
@@ -173,95 +177,48 @@ export function AppDialog({
 }) {
   const titleId = useId();
   const subtitleId = useId();
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const onCloseRef = useRef(onClose);
-  const previousFocusRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    previousFocusRef.current =
-      document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const previousOverflow = document.body.style.overflow;
-    const focusTimer = window.setTimeout(() => closeButtonRef.current?.focus(), 0);
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-      }
-    };
-
-    document.body.style.overflow = "hidden";
-    document.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.clearTimeout(focusTimer);
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", handleKeyDown);
-      previousFocusRef.current?.focus();
-    };
-  }, [open]);
-
-  if (!open) {
-    return null;
-  }
 
   return (
-    <div
-      className="lss-dialog-overlay"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onCloseRef.current();
-        }
+    <Dialog
+      open={open}
+      onClose={onClose}
+      aria-labelledby={titleId}
+      aria-describedby={subtitle ? subtitleId : undefined}
+      scroll="paper"
+      slotProps={{
+        paper: {
+          className: "lss-dialog-shell",
+        },
       }}
     >
-      <div
-        aria-describedby={subtitle ? subtitleId : undefined}
-        aria-labelledby={titleId}
-        aria-modal="true"
-        className="lss-dialog-shell"
-        role="dialog"
-        tabIndex={-1}
-      >
-        <div className="lss-dialog-header">
-          <div className="flex min-w-0 items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h3
-                id={titleId}
-                className="break-words text-lg font-bold text-slate-950"
-              >
-                {title}
-              </h3>
-              {subtitle && (
-                <p
-                  id={subtitleId}
-                  className="mt-1 break-words text-sm leading-6 text-slate-500"
-                >
-                  {subtitle}
-                </p>
-              )}
-            </div>
-            <button
-              ref={closeButtonRef}
-              type="button"
-              onClick={onClose}
-              className="grid size-11 shrink-0 place-items-center rounded-md border border-slate-200 text-xl font-semibold text-slate-600 hover:bg-slate-50"
-              aria-label="Fechar dialogo"
-            >
-              <span aria-hidden="true">x</span>
-            </button>
+      <DialogTitle className="lss-dialog-header" component="div">
+        <div className="flex min-w-0 items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h3 id={titleId} className="break-words text-lg font-bold text-slate-950">
+              {title}
+            </h3>
+            {subtitle && (
+              <p id={subtitleId} className="mt-1 break-words text-sm leading-6 text-slate-500">
+                {subtitle}
+              </p>
+            )}
           </div>
+          <IconButton onClick={onClose} aria-label="Fechar diálogo" size="large">
+            <span aria-hidden="true" className="text-2xl leading-none">
+              ×
+            </span>
+          </IconButton>
         </div>
-        <div className="lss-dialog-body" tabIndex={0}>{children}</div>
-        {actions && <div className="lss-dialog-footer lss-actions">{actions}</div>}
-      </div>
-    </div>
+      </DialogTitle>
+      <DialogContent dividers className="lss-dialog-body">
+        {children}
+      </DialogContent>
+      {actions && (
+        <DialogActions className="lss-dialog-footer lss-actions">
+          {actions}
+        </DialogActions>
+      )}
+    </Dialog>
   );
 }
 
@@ -313,15 +270,17 @@ export function PrimaryButton({
   disabled?: boolean;
 }) {
   return (
-    <button
+    <Button
       type={type}
       form={form}
       onClick={onClick ? () => onClick() : undefined}
       disabled={disabled}
-      className={cx(buttonBase, "bg-[#185c54] text-white hover:bg-[#124a44]")}
+      variant="contained"
+      color="primary"
+      className={buttonBase}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -339,18 +298,17 @@ export function SecondaryButton({
   disabled?: boolean;
 }) {
   return (
-    <button
+    <Button
       type={type}
       form={form}
       onClick={onClick ? () => onClick() : undefined}
       disabled={disabled}
-      className={cx(
-        buttonBase,
-        "border border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50",
-      )}
+      variant="outlined"
+      color="inherit"
+      className={buttonBase}
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -366,15 +324,17 @@ export function TextButton({
   disabled?: boolean;
 }) {
   return (
-    <button
+    <Button
       type="button"
       onClick={onClick ? () => onClick() : undefined}
       disabled={disabled}
       aria-label={ariaLabel}
-      className="inline-flex min-h-11 max-w-full items-center justify-center rounded-md px-3 py-2 text-center text-sm font-semibold leading-snug text-[#185c54] transition-colors hover:bg-teal-50 disabled:cursor-not-allowed disabled:opacity-50"
+      variant="text"
+      color="primary"
+      className="min-h-11 max-w-full"
     >
       {children}
-    </button>
+    </Button>
   );
 }
 
@@ -1382,58 +1342,113 @@ function paymentRuleMonthsLabel(rule: PaymentRuleVersion) {
 
 export function PaymentRulesTable({
   levelLabel,
+  onCreate,
   onEdit,
+  readOnly = false,
   rules,
 }: {
   levelLabel: (rule: PaymentRuleVersion) => string;
+  onCreate: () => void;
   onEdit: (rule: PaymentRuleVersion) => void;
+  readOnly?: boolean;
   rules: PaymentRuleVersion[];
 }) {
-  const sortedRules = [...rules].sort(
-    (a, b) =>
-      a.academicYearId.localeCompare(b.academicYearId) ||
-      levelLabel(a).localeCompare(levelLabel(b), "pt-PT") ||
-      b.version - a.version,
-  );
+  const groupedRules = Array.from(
+    rules.reduce((groups, rule) => {
+      const key = rule.policyId
+        ? [
+            rule.policyId,
+            rule.academicYearId,
+            rule.validFrom,
+            rule.status,
+            rule.inscriptionFee,
+            rule.monthlyFee,
+            rule.coveredMonthKeys.join(","),
+          ].join(":")
+        : rule.id;
+      const group = groups.get(key) ?? [];
+      group.push(rule);
+      groups.set(key, group);
+      return groups;
+    }, new Map<string, PaymentRuleVersion[]>()),
+  )
+    .map(([key, grouped]) => ({
+      key,
+      rules: grouped.sort((a, b) => levelLabel(a).localeCompare(levelLabel(b), "pt-PT")),
+    }))
+    .sort((a, b) => {
+      const firstA = a.rules[0];
+      const firstB = b.rules[0];
+      return (
+        firstB.academicYearId.localeCompare(firstA.academicYearId) ||
+        (firstA.policyName ?? levelLabel(firstA)).localeCompare(
+          firstB.policyName ?? levelLabel(firstB),
+          "pt-PT",
+        ) ||
+        firstB.version - firstA.version
+      );
+    });
 
   return (
     <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
         <div>
           <h3 className="text-base font-semibold text-slate-950">
-            Regras por nivel
+            Políticas de pagamento
           </h3>
+          <p className="text-sm text-slate-500">
+            Defina uma vez e associe às classes abrangidas.
+          </p>
         </div>
+        {!readOnly && <PrimaryButton onClick={onCreate}>Nova política</PrimaryButton>}
       </div>
 
-      <div className="table-scroll" role="region" aria-label="Regras financeiras por nivel" tabIndex={0}>
-        <table className="w-full min-w-[980px] text-left text-sm">
+      <div className="table-scroll" role="region" aria-label="Políticas de pagamento por classe" tabIndex={0}>
+        <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
             <tr>
+              <th className="px-5 py-3 font-semibold">Política</th>
               <th className="px-5 py-3 font-semibold">Ano</th>
-              <th className="px-5 py-3 font-semibold">Nivel</th>
-              <th className="px-4 py-3 font-semibold">Versao</th>
-              <th className="px-4 py-3 font-semibold">Inscricao</th>
+              <th className="px-5 py-3 font-semibold">Classes</th>
+              <th className="px-4 py-3 font-semibold">Estado</th>
+              <th className="px-4 py-3 font-semibold">Inscrição</th>
               <th className="px-4 py-3 font-semibold">Mensalidade</th>
+              <th className="px-4 py-3 font-semibold">Período / limite</th>
               <th className="px-4 py-3 font-semibold">Multas</th>
-              <th className="px-4 py-3 font-semibold">Meses</th>
-              <th className="px-4 py-3 font-semibold">Validade</th>
-              <th className="px-5 py-3 font-semibold">Accao</th>
+              {!readOnly && <th className="px-5 py-3 font-semibold">Acção</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {sortedRules.length > 0 ? (
-              sortedRules.map((rule) => (
-                <tr key={rule.id} className="hover:bg-slate-50/80">
+            {groupedRules.length > 0 ? (
+              groupedRules.map(({ key, rules: policyRules }) => {
+                const rule = policyRules[0];
+                const versions = Array.from(new Set(policyRules.map((item) => item.version)))
+                  .sort((a, b) => b - a)
+                  .map((version) => `V${version}`)
+                  .join(", ");
+                const firstMonth = rule.coveredMonthKeys[0];
+                const lastMonth = rule.coveredMonthKeys.at(-1);
+
+                return (
+                <tr key={key} className="hover:bg-slate-50/80">
+                  <td className="px-5 py-4">
+                    <span className="block font-semibold text-slate-950">
+                      {rule.policyName ?? `Política ${levelLabel(rule)}`}
+                    </span>
+                    <span className="mt-1 block text-xs text-slate-500">
+                      {formatDate(rule.validFrom)}
+                      {rule.validUntil ? ` até ${formatDate(rule.validUntil)}` : ""}
+                    </span>
+                  </td>
                   <td className="px-5 py-4 font-semibold text-slate-800">
                     {rule.academicYearId}
                   </td>
-                  <td className="px-5 py-4 font-semibold text-slate-950">
-                    {levelLabel(rule)}
+                  <td className="max-w-72 px-5 py-4 font-semibold text-slate-700">
+                    {policyRules.map(levelLabel).join(", ")}
                   </td>
                   <td className="px-4 py-4">
                     <StateLabel tone={rule.status === "active" ? "active" : "inactive"}>
-                      V{rule.version}
+                      {rule.status === "active" ? "Activa" : "Inactiva"} · {versions}
                     </StateLabel>
                   </td>
                   <td className="px-4 py-4 font-semibold text-slate-700">
@@ -1443,26 +1458,29 @@ export function PaymentRulesTable({
                     {formatCurrency(rule.monthlyFee)}
                   </td>
                   <td className="px-4 py-4 text-slate-600">
-                    Dia {rule.firstPenalty.thresholdDay}: {rule.firstPenalty.percent ?? 0}% / Dia {rule.secondPenalty.thresholdDay}: {rule.secondPenalty.percent ?? 0}%
-                  </td>
-                  <td className="max-w-64 px-4 py-4 text-slate-600">
-                    <span className="line-clamp-2 break-words">
-                      {paymentRuleMonthsLabel(rule)}
-                    </span>
+                    {firstMonth && lastMonth
+                      ? `${monthLabel(firstMonth)}–${monthLabel(lastMonth)}`
+                      : paymentRuleMonthsLabel(rule)}
+                    <span className="block text-xs">Dia {rule.monthlyDueDay}</span>
                   </td>
                   <td className="px-4 py-4 text-slate-600">
-                    {formatDate(rule.validFrom)}
-                    {rule.validUntil ? ` ate ${formatDate(rule.validUntil)}` : ""}
+                    Dia {rule.firstPenalty.thresholdDay}: {rule.firstPenalty.percent ?? 0}%
+                    <span className="block">
+                      Dia {rule.secondPenalty.thresholdDay}: {rule.secondPenalty.percent ?? 0}%
+                    </span>
                   </td>
-                  <td className="px-5 py-4">
-                    <TextButton onClick={() => onEdit(rule)}>Editar</TextButton>
-                  </td>
+                  {!readOnly && (
+                    <td className="px-5 py-4">
+                      <TextButton onClick={() => onEdit(rule)}>Nova versão</TextButton>
+                    </td>
+                  )}
                 </tr>
-              ))
+                );
+              })
             ) : (
               <tr>
-                <td colSpan={9} className="px-5 py-8 text-center text-slate-500">
-                  Sem regras financeiras.
+                <td colSpan={readOnly ? 8 : 9} className="px-5 py-8 text-center text-slate-500">
+                  Sem políticas de pagamento.
                 </td>
               </tr>
             )}
@@ -1474,14 +1492,14 @@ export function PaymentRulesTable({
 }
 
 export function PaymentRuleDialog({
+  classOptions,
   draft,
-  levelName,
   onChange,
   onClose,
   onSubmit,
 }: {
+  classOptions: Array<{ id: string; name: string; status: EntityStatus }>;
   draft: PaymentRuleDraft | null;
-  levelName: string;
   onChange: (draft: PaymentRuleDraft) => void;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -1492,13 +1510,30 @@ export function PaymentRuleDialog({
     return null;
   }
 
-  const selectedMonths = new Set(draft.coveredMonthKeys);
-  const toggleMonth = (monthKey: string) => {
-    const nextMonths = selectedMonths.has(monthKey)
-      ? draft.coveredMonthKeys.filter((item) => item !== monthKey)
-      : [...draft.coveredMonthKeys, monthKey];
+  const selectedClasses = new Set(draft.educationLevelIds);
+  const startMonth = draft.coveredMonthKeys[0] ?? monthOptions[0].key;
+  const endMonth = draft.coveredMonthKeys.at(-1) ?? monthOptions.at(-1)?.key ?? startMonth;
+  const monthsBetween = (startKey: string, endKey: string) => {
+    const startIndex = monthOptions.findIndex((month) => month.key === startKey);
+    const endIndex = monthOptions.findIndex((month) => month.key === endKey);
 
-    onChange({ ...draft, coveredMonthKeys: nextMonths });
+    if (startIndex < 0 || endIndex < 0) {
+      return [];
+    }
+
+    const range =
+      startIndex <= endIndex
+        ? monthOptions.slice(startIndex, endIndex + 1)
+        : [...monthOptions.slice(startIndex), ...monthOptions.slice(0, endIndex + 1)];
+
+    return range.map((month) => month.key);
+  };
+  const toggleClass = (classId: string) => {
+    const educationLevelIds = selectedClasses.has(classId)
+      ? draft.educationLevelIds.filter((item) => item !== classId)
+      : [...draft.educationLevelIds, classId];
+
+    onChange({ ...draft, educationLevelIds });
   };
 
   return (
@@ -1507,56 +1542,127 @@ export function PaymentRuleDialog({
         <>
           <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
           <PrimaryButton type="submit" form={formId}>
-            Guardar nova versao
+            Guardar política
           </PrimaryButton>
         </>
       }
       onClose={onClose}
       open={Boolean(draft)}
-      subtitle={`${draft.academicYearId} / ${levelName}`}
-      title="Editar regra financeira"
+      subtitle={`${draft.academicYearId} · ${draft.educationLevelIds.length} classe(s) seleccionada(s)`}
+      title={draft.ruleId ? "Nova versão da política" : "Nova política de pagamento"}
     >
       <form id={formId} onSubmit={onSubmit} className="grid min-w-0 gap-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FieldLabel label="Ano lectivo">
-            <input value={draft.academicYearId} className={inputClasses()} disabled readOnly />
+        <div className="grid gap-4 sm:grid-cols-3">
+          <FieldLabel label="Nome da política">
+            <input
+              value={draft.policyName}
+              onChange={(event) => onChange({ ...draft, policyName: event.target.value })}
+              className={inputClasses()}
+              placeholder="Ex.: Ensino Secundário I"
+              required
+            />
           </FieldLabel>
-          <FieldLabel label="Nivel">
-            <input value={levelName} className={inputClasses()} disabled readOnly />
+          <FieldLabel label="Ano lectivo">
+            <input
+              value={draft.academicYearId}
+              onChange={(event) => onChange({ ...draft, academicYearId: event.target.value })}
+              className={inputClasses()}
+              inputMode="numeric"
+              pattern="[0-9]{4}"
+              required
+            />
+          </FieldLabel>
+          <FieldLabel label="Estado">
+            <select
+              value={draft.status}
+              onChange={(event) => onChange({ ...draft, status: event.target.value as EntityStatus })}
+              className={inputClasses()}
+            >
+              <option value="active">Activa</option>
+              <option value="inactive">Inactiva</option>
+            </select>
           </FieldLabel>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <FieldLabel label="Valida a partir de">
-            <input
-              value={draft.validFrom}
-              onChange={(event) => onChange({ ...draft, validFrom: event.target.value })}
-              className={inputClasses()}
-              type="date"
-            />
-          </FieldLabel>
-          <FieldLabel label="Inscricao">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FieldLabel label="Valor da inscrição">
             <input
               value={draft.inscriptionFee}
               onChange={(event) => onChange({ ...draft, inscriptionFee: event.target.value })}
               className={inputClasses()}
               min="0"
+              step="0.01"
               type="number"
             />
           </FieldLabel>
-          <FieldLabel label="Mensalidade">
+          <FieldLabel label="Valor da mensalidade">
             <input
               value={draft.monthlyFee}
               onChange={(event) => onChange({ ...draft, monthlyFee: event.target.value })}
               className={inputClasses()}
               min="0"
+              step="0.01"
               type="number"
             />
           </FieldLabel>
         </div>
 
+        <fieldset className="min-w-0 rounded-lg border border-slate-200 p-4">
+          <legend className="px-1 text-sm font-semibold text-slate-600">
+            Classes abrangidas pela política
+          </legend>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {classOptions.map((schoolClass) => (
+              <label
+                key={schoolClass.id}
+                className="flex min-h-11 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700"
+              >
+                <input
+                  checked={selectedClasses.has(schoolClass.id)}
+                  onChange={() => toggleClass(schoolClass.id)}
+                  type="checkbox"
+                  className="size-5 accent-[#207a70]"
+                />
+                <span>{schoolClass.name}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
         <div className="grid gap-4 sm:grid-cols-3">
-          <FieldLabel label="Vencimento mensal">
+          <FieldLabel label="Mês inicial">
+            <select
+              value={startMonth}
+              onChange={(event) =>
+                onChange({
+                  ...draft,
+                  coveredMonthKeys: monthsBetween(event.target.value, endMonth),
+                })
+              }
+              className={inputClasses()}
+            >
+              {monthOptions.map((month) => (
+                <option key={month.key} value={month.key}>{month.label}</option>
+              ))}
+            </select>
+          </FieldLabel>
+          <FieldLabel label="Mês final">
+            <select
+              value={endMonth}
+              onChange={(event) =>
+                onChange({
+                  ...draft,
+                  coveredMonthKeys: monthsBetween(startMonth, event.target.value),
+                })
+              }
+              className={inputClasses()}
+            >
+              {monthOptions.map((month) => (
+                <option key={month.key} value={month.key}>{month.label}</option>
+              ))}
+            </select>
+          </FieldLabel>
+          <FieldLabel label="Dia limite para pagamento">
             <input
               value={draft.monthlyDueDay}
               onChange={(event) => onChange({ ...draft, monthlyDueDay: event.target.value })}
@@ -1566,68 +1672,25 @@ export function PaymentRuleDialog({
               type="number"
             />
           </FieldLabel>
-          <FieldLabel label="1a multa dia">
-            <input
-              value={draft.firstPenaltyDay}
-              onChange={(event) => onChange({ ...draft, firstPenaltyDay: event.target.value })}
-              className={inputClasses()}
-              max="31"
-              min="1"
-              type="number"
-            />
-          </FieldLabel>
-          <FieldLabel label="1a multa (%)">
-            <input
-              value={draft.firstPenaltyPercent}
-              onChange={(event) => onChange({ ...draft, firstPenaltyPercent: event.target.value })}
-              className={inputClasses()}
-              min="0"
-              type="number"
-            />
-          </FieldLabel>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FieldLabel label="2a multa dia">
-            <input
-              value={draft.secondPenaltyDay}
-              onChange={(event) => onChange({ ...draft, secondPenaltyDay: event.target.value })}
-              className={inputClasses()}
-              max="31"
-              min="1"
-              type="number"
-            />
-          </FieldLabel>
-          <FieldLabel label="2a multa total (%)">
-            <input
-              value={draft.secondPenaltyPercent}
-              onChange={(event) => onChange({ ...draft, secondPenaltyPercent: event.target.value })}
-              className={inputClasses()}
-              min="0"
-              type="number"
-            />
-          </FieldLabel>
         </div>
 
         <fieldset className="min-w-0 rounded-lg border border-slate-200 p-4">
           <legend className="px-1 text-sm font-semibold text-slate-600">
-            Meses cobertos
+            Multas, quando aplicável
           </legend>
-          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-            {monthOptions.map((month) => (
-              <label
-                key={month.key}
-                className="flex min-h-11 items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700"
-              >
-                <input
-                  checked={selectedMonths.has(month.key)}
-                  onChange={() => toggleMonth(month.key)}
-                  type="checkbox"
-                  className="size-5 accent-[#207a70]"
-                />
-                <span>{month.label}</span>
-              </label>
-            ))}
+          <div className="mt-2 grid gap-4 sm:grid-cols-4">
+            <FieldLabel label="1.ª multa — dia">
+              <input value={draft.firstPenaltyDay} onChange={(event) => onChange({ ...draft, firstPenaltyDay: event.target.value })} className={inputClasses()} max="31" min="1" type="number" />
+            </FieldLabel>
+            <FieldLabel label="1.ª multa (%)">
+              <input value={draft.firstPenaltyPercent} onChange={(event) => onChange({ ...draft, firstPenaltyPercent: event.target.value })} className={inputClasses()} min="0" step="any" type="number" />
+            </FieldLabel>
+            <FieldLabel label="2.ª multa — dia">
+              <input value={draft.secondPenaltyDay} onChange={(event) => onChange({ ...draft, secondPenaltyDay: event.target.value })} className={inputClasses()} max="31" min="1" type="number" />
+            </FieldLabel>
+            <FieldLabel label="2.ª multa total (%)">
+              <input value={draft.secondPenaltyPercent} onChange={(event) => onChange({ ...draft, secondPenaltyPercent: event.target.value })} className={inputClasses()} min="0" step="any" type="number" />
+            </FieldLabel>
           </div>
         </fieldset>
       </form>

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import Drawer from "@mui/material/Drawer";
 import {
   initialAcademicStages,
   initialClassDefinitions,
@@ -42,7 +44,7 @@ import {
   buildPaymentRuleDraft,
   buildStudentFinanceProfile,
   correctStudentPayment,
-  createNextPaymentRuleVersion,
+  createPaymentPolicyVersions,
   currentAcademicYear,
   cx,
   financeStatusLabel,
@@ -129,13 +131,17 @@ import {
   type LegacySafetyExport,
 } from "../features/finance/domain/migration";
 import {
+  demoSnapshotVersion,
+  parseDemoSnapshot,
+  serializeDemoSnapshot,
+} from "../features/demo/local-repository";
+import {
   ClassForm,
   CrumbButton,
   EnrollmentForm,
   FieldLabel,
   FinanceCell,
   FinanceCellDialog,
-  FinanceSettingsForm,
   FlowStep,
   GroupForm,
   MetricCard,
@@ -146,11 +152,10 @@ import {
   PaymentReceiptDialog,
   PaymentRuleDialog,
   PaymentRulesTable,
-  PaymentSettingsSummary,
   PrimaryButton,
-  ProfileCard,
   RoomForm,
   SecondaryButton,
+  StateLabel,
   StatusBadge,
   StatusDot,
   StudentFilters,
@@ -182,6 +187,14 @@ function stableNumberLabel(student: Student) {
   return student.stableNumber ?? "Sem numero";
 }
 
+function routeForWorkspaceView(view: WorkspaceView) {
+  if (["classes", "rooms", "groups", "enrollments"].includes(view)) {
+    return "/students";
+  }
+
+  return workspaceNavigation.find((item) => item.id === view)?.href ?? "/dashboard";
+}
+
 function financeCellAriaLabel({
   balance,
   rubric,
@@ -196,7 +209,20 @@ function financeCellAriaLabel({
   return `${rubric}, ${studentName}, ${state}, saldo ${balance}. Abrir detalhe financeiro.`;
 }
 
-export function SchoolAdminDemo() {
+const demoSessionKey = "lss-demo-session-v1";
+const sidebarPreferenceKey = "lss-demo-sidebar-collapsed";
+
+const demoAccounts: Record<ProfileId, { name: string }> = {
+  secretaria: { name: "Marta — Secretaria" },
+  director: { name: "António — Director" },
+};
+
+export function SchoolAdminDemo({
+  initialView = "overview",
+}: {
+  initialView?: WorkspaceView;
+}) {
+  const router = useRouter();
   const firstClassId = initialClasses[0]?.id ?? "";
   const firstGroupId = initialGroups[0]?.id ?? "";
   const firstStudentId = initialStudents[0]?.id ?? "";
@@ -205,7 +231,11 @@ export function SchoolAdminDemo() {
   const firstStageId = initialAcademicStages[0]?.id ?? "";
   const [storageReady, setStorageReady] = useState(false);
   const [activeProfile, setActiveProfile] = useState<ProfileId | null>(null);
-  const [activeView, setActiveView] = useState<WorkspaceView>("overview");
+  const [activeView, setActiveView] = useState<WorkspaceView>(initialView);
+  const [accountName, setAccountName] = useState("");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [storageToolsNotice, setStorageToolsNotice] = useState("");
   const [activePaymentSection, setActivePaymentSection] =
     useState<PaymentWorkspaceSection>("settings");
   const [academicStages, setAcademicStages] =
@@ -352,6 +382,43 @@ export function SchoolAdminDemo() {
     });
 
   useEffect(() => {
+    const restoreSessionId = window.setTimeout(() => {
+      const savedSession = window.sessionStorage.getItem(demoSessionKey);
+      const savedSidebar = window.localStorage.getItem(sidebarPreferenceKey);
+
+      if (savedSession) {
+        try {
+          const session = JSON.parse(savedSession) as {
+            profile?: ProfileId;
+            accountName?: string;
+          };
+          if (session.profile === "secretaria" || session.profile === "director") {
+            setActiveProfile(session.profile);
+            setAccountName(session.accountName ?? "");
+          }
+        } catch {
+          window.sessionStorage.removeItem(demoSessionKey);
+        }
+      }
+
+      setSidebarCollapsed(savedSidebar === "true");
+    }, 0);
+
+    return () => window.clearTimeout(restoreSessionId);
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        sidebarPreferenceKey,
+        String(sidebarCollapsed),
+      );
+    } catch {
+      // A preferência visual é opcional e não deve impedir o uso da demo.
+    }
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
     const loadStateId = window.setTimeout(() => {
       const storedState = loadStoredState();
 
@@ -380,7 +447,13 @@ export function SchoolAdminDemo() {
         storedState.roomDefinitions,
         initialRoomDefinitions,
       );
-      const loadedClasses = storedArray(storedState.classes, initialClasses);
+      const loadedClasses = storedArray(storedState.classes, initialClasses).map(
+        (schoolClass) => ({
+          ...schoolClass,
+          // As políticas v2 são associadas à classe, não ao ciclo de ensino.
+          educationLevelId: schoolClass.id,
+        }),
+      );
       const loadedRooms = storedArray(storedState.rooms, initialRooms);
       const loadedGroups = storedArray(storedState.groups, initialGroups);
       const loadedPaymentSettings =
@@ -391,7 +464,10 @@ export function SchoolAdminDemo() {
       );
       const loadedBaseStudents = normalizeStudentsForEnrollmentPolicy(
         storedArray(storedState.students, initialStudents).map((student) => {
-          return normalizeStudentForPolicy(student, loadedPaymentSettings);
+          return normalizeStudentForPolicy(
+            { ...student, educationLevelId: student.classId },
+            loadedPaymentSettings,
+          );
         }),
         loadedPaymentSettings,
       );
@@ -553,9 +629,12 @@ export function SchoolAdminDemo() {
       },
     );
 
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify({
+    try {
+      window.localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+        schemaVersion: demoSnapshotVersion,
+        savedAt: nowIso(),
         academicStages,
         classDefinitions,
         roomDefinitions,
@@ -570,8 +649,17 @@ export function SchoolAdminDemo() {
         financeBook: migrationResult.financeBook,
         financeMigrationPreview: migrationResult.preview,
         legacySafetyExport: legacySafetyExport ?? migrationResult.safetyExport,
-      } satisfies StoredDemoState),
-    );
+        } satisfies StoredDemoState),
+      );
+    } catch {
+      const noticeId = window.setTimeout(() => {
+        setStorageToolsNotice(
+          "Não foi possível guardar no navegador. Exporte os dados antes de fechar esta página.",
+        );
+      }, 0);
+
+      return () => window.clearTimeout(noticeId);
+    }
   }, [
     academicStages,
     billingRuns,
@@ -588,6 +676,17 @@ export function SchoolAdminDemo() {
     storageReady,
     students,
   ]);
+
+  useEffect(() => {
+    if (!activeProfile) {
+      return;
+    }
+
+    const expectedPath = routeForWorkspaceView(activeView);
+    if (window.location.pathname !== expectedPath) {
+      router.replace(expectedPath);
+    }
+  }, [activeProfile, activeView, router]);
 
   const currentClass =
     classes.find((schoolClass) => schoolClass.id === selectedClassId) ??
@@ -1095,6 +1194,112 @@ export function SchoolAdminDemo() {
     setActiveView(view ?? profile?.defaultView ?? "overview");
   }
 
+  function enterDemo(profile: ProfileId) {
+    const account = demoAccounts[profile];
+    const session = {
+      profile,
+      accountName: account.name,
+    };
+    try {
+      window.sessionStorage.setItem(demoSessionKey, JSON.stringify(session));
+    } catch {
+      setStorageToolsNotice(
+        "A sessão não pôde ser guardada, mas o sistema continua disponível neste ecrã.",
+      );
+    }
+    setAccountName(account.name);
+    enterProfile(profile, initialView);
+    router.replace(routeForWorkspaceView(initialView));
+  }
+
+  function signOut() {
+    window.sessionStorage.removeItem(demoSessionKey);
+    setActiveProfile(null);
+    setAccountName("");
+    setMobileMenuOpen(false);
+    router.replace("/");
+  }
+
+  function navigateTo(view: WorkspaceView, href?: string) {
+    setActiveView(view);
+    setMobileMenuOpen(false);
+    if (href) {
+      router.push(href);
+    }
+  }
+
+  function exportDemoData() {
+    try {
+      const rawState = window.localStorage.getItem(storageKey);
+
+      if (!rawState) {
+        throw new Error("Ainda não existem dados locais para exportar.");
+      }
+
+      const state = parseDemoSnapshot(rawState);
+      const contents = serializeDemoSnapshot(state);
+      const blob = new Blob([contents], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `lss-backup-${today()}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setStorageToolsNotice("Exportação concluída. O ficheiro foi descarregado.");
+    } catch (error) {
+      setStorageToolsNotice(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível exportar os dados.",
+      );
+    }
+  }
+
+  async function importDemoData(file?: File) {
+    if (!file) {
+      return;
+    }
+
+    try {
+      const importedState = parseDemoSnapshot(await file.text());
+      const confirmed = window.confirm(
+        "Importar este ficheiro vai substituir os dados locais actuais. Deseja continuar?",
+      );
+
+      if (!confirmed) {
+        setStorageToolsNotice("Importação cancelada; os dados actuais foram preservados.");
+        return;
+      }
+
+      window.localStorage.setItem(storageKey, JSON.stringify(importedState));
+      window.location.reload();
+    } catch (error) {
+      setStorageToolsNotice(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível importar o ficheiro.",
+      );
+    }
+  }
+
+  function resetDemoData() {
+    const confirmed = window.confirm(
+      "Repor os dados iniciais vai apagar apenas as alterações guardadas neste navegador. Exporte primeiro se quiser conservar uma cópia. Deseja continuar?",
+    );
+
+    if (!confirmed) {
+      setStorageToolsNotice("Reposição cancelada; os dados actuais foram preservados.");
+      return;
+    }
+
+    try {
+      window.localStorage.removeItem(storageKey);
+      window.location.reload();
+    } catch {
+      setStorageToolsNotice("Não foi possível repor os dados no navegador.");
+    }
+  }
+
   function selectClass(classId: string) {
     const nextGroup = groups.find((group) => group.classId === classId);
 
@@ -1526,7 +1731,7 @@ export function SchoolAdminDemo() {
 
   function openMiscellaneousChargeForm() {
     setActiveView("payments");
-    setActivePaymentSection("entry");
+    setActivePaymentSection("settings");
     setSelectedFinanceCell(null);
     setMiscellaneousNotice("");
   }
@@ -1654,7 +1859,7 @@ export function SchoolAdminDemo() {
       stage: stageLabel(academicStages, selectedDefinition.stageId),
       academicYear: currentAcademicYear(),
       academicYearId: currentAcademicYear(),
-      educationLevelId: selectedDefinition.stageId,
+      educationLevelId: selectedDefinition.id,
       status: classDraft.status,
       createdAt: today(),
     };
@@ -1970,7 +2175,35 @@ export function SchoolAdminDemo() {
     }
 
     setFinanceSettingsNotice("");
-    setPaymentRuleDraft(buildPaymentRuleDraft(rule));
+    setPaymentRuleDraft(buildPaymentRuleDraft(rule, effectivePaymentRuleVersions));
+  }
+
+  function openNewPaymentPolicyDialog() {
+    if (!guardMutation("manage-payment-rules", setFinanceSettingsNotice)) {
+      return;
+    }
+
+    const template = effectivePaymentRuleVersions.find(
+      (rule) => rule.status === "active",
+    );
+
+    if (!template) {
+      setFinanceSettingsNotice("Não existe uma regra base para criar a política.");
+      return;
+    }
+
+    setFinanceSettingsNotice("");
+    setPaymentRuleDraft({
+      ...buildPaymentRuleDraft(template, effectivePaymentRuleVersions),
+      ruleId: "",
+      policyId: "",
+      policyName: "",
+      academicYearId: paymentSettings.academicYear,
+      educationLevelId: "",
+      educationLevelIds: [],
+      status: "active",
+      validFrom: `${paymentSettings.academicYear}-01-01`,
+    });
   }
 
   function submitPaymentRule(event: FormEvent<HTMLFormElement>) {
@@ -1984,15 +2217,43 @@ export function SchoolAdminDemo() {
       return;
     }
 
+    if (!paymentRuleDraft.policyName.trim()) {
+      setFinanceSettingsNotice("Informe o nome da política de pagamento.");
+      return;
+    }
+
+    if (!/^\d{4}$/.test(paymentRuleDraft.academicYearId.trim())) {
+      setFinanceSettingsNotice("Informe um ano lectivo válido com quatro dígitos.");
+      return;
+    }
+
+    if (paymentRuleDraft.educationLevelIds.length === 0) {
+      setFinanceSettingsNotice("Seleccione pelo menos uma classe para a política.");
+      return;
+    }
+
+    if (
+      parseMoney(paymentRuleDraft.inscriptionFee) < 0 ||
+      parseMoney(paymentRuleDraft.monthlyFee) < 0
+    ) {
+      setFinanceSettingsNotice("Os valores da política não podem ser negativos.");
+      return;
+    }
+
     setPaymentRuleVersions(
-      createNextPaymentRuleVersion(
+      createPaymentPolicyVersions(
         effectivePaymentRuleVersions,
-        paymentRuleDraft,
+        {
+          ...paymentRuleDraft,
+          validFrom: `${paymentRuleDraft.academicYearId.trim()}-01-01`,
+        },
         today(),
       ),
     );
     setPaymentRuleDraft(null);
-    setFinanceSettingsNotice("Nova versao de regra financeira guardada.");
+    setFinanceSettingsNotice(
+      "Política guardada por classe e ano lectivo. As versões anteriores ficaram no histórico.",
+    );
   }
 
   function paymentRuleLevelLabel(rule: { educationLevelId: string }) {
@@ -2000,14 +2261,14 @@ export function SchoolAdminDemo() {
     const classForLevel = classes.find(
       (schoolClass) => schoolClass.educationLevelId === rule.educationLevelId,
     );
-    const definitionForStage = classDefinitions.find(
-      (definition) => definition.stageId === rule.educationLevelId,
+    const definitionForLevel = classDefinitions.find(
+      (definition) => definition.id === rule.educationLevelId,
     );
 
     return (
+      definitionForLevel?.name ??
+      classForLevel?.name ??
       stage?.name ??
-      classForLevel?.stage ??
-      definitionForStage?.name ??
       (rule.educationLevelId === "default" ? "Padrao" : rule.educationLevelId)
     );
   }
@@ -2330,27 +2591,45 @@ export function SchoolAdminDemo() {
 
   function renderProfilePortal() {
     return (
-      <main className="grid min-h-screen overflow-x-clip bg-[var(--lss-color-primary-soft)] py-8 text-slate-950">
-        <PageContainer className="flex min-h-[calc(100vh-4rem)] flex-col items-center justify-center gap-10">
-          <div className="flex flex-col items-center text-center">
-            <div className="grid size-28 place-items-center rounded-md border-2 border-[#185c54] bg-white text-2xl font-black text-[#185c54] shadow-sm sm:size-32">
+      <main className="grid min-h-screen place-items-center overflow-x-clip bg-[#fbfaf7] px-5 py-12 text-[#0f5d55]">
+        <section aria-label="Acesso ao Liceu São Silvestre" className="w-full max-w-3xl text-center">
+          <div className="mx-auto grid size-36 place-items-center rounded-full border-[4px] border-[#0f5d55] p-2 shadow-[0_14px_40px_rgba(15,93,85,0.12)] sm:size-44">
+            <div className="grid size-full place-items-center rounded-full border-2 border-[#fbfaf7] bg-[radial-gradient(circle_at_35%_28%,#176f64_0%,#0f5d55_48%,#09483f_100%)] text-4xl font-light tracking-[-0.08em] text-white ring-2 ring-[#0f5d55] sm:text-5xl">
               {institutionLogoText}
             </div>
-            <h1 className="mt-5 text-4xl font-black text-slate-950 sm:text-5xl">
-              {institutionName}
-            </h1>
           </div>
 
-          <div className="grid w-full gap-4 md:grid-cols-2">
-            {profiles.map((profile) => (
-              <ProfileCard
-                key={profile.id}
-                profile={profile}
-                onOpen={() => enterProfile(profile.id)}
-              />
-            ))}
+          <h1 className="mt-7 text-4xl font-extrabold tracking-tight text-[#0f5d55] sm:mt-8 sm:text-6xl">
+            {institutionName}
+          </h1>
+
+          <div className="mx-auto mt-12 grid max-w-3xl gap-4 sm:mt-16 sm:grid-cols-2 sm:gap-7">
+            <button
+              type="button"
+              autoFocus
+              onClick={() => enterDemo("secretaria")}
+              className="group flex min-h-24 items-center justify-center gap-5 rounded-xl bg-[linear-gradient(135deg,#10655c,#0a5048)] px-8 text-xl font-bold text-white shadow-[0_12px_28px_rgba(15,93,85,0.2)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(15,93,85,0.26)] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[#70b8ad] sm:text-2xl"
+            >
+              <svg aria-hidden="true" className="size-10 shrink-0" viewBox="0 0 48 48" fill="none">
+                <rect x="6" y="15" width="36" height="26" rx="4" stroke="currentColor" strokeWidth="2.8" />
+                <path d="M17 15v-4a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v4M6 25h36M20 23h8v6h-8z" stroke="currentColor" strokeWidth="2.8" strokeLinejoin="round" />
+              </svg>
+              Secretaria
+            </button>
+
+            <button
+              type="button"
+              onClick={() => enterDemo("director")}
+              className="group flex min-h-24 items-center justify-center gap-5 rounded-xl border-2 border-[#0f5d55] bg-[#fbfaf7] px-8 text-xl font-bold text-[#0f5d55] transition hover:-translate-y-0.5 hover:bg-[#f0f7f5] hover:shadow-[0_12px_28px_rgba(15,93,85,0.12)] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[#70b8ad] sm:text-2xl"
+            >
+              <svg aria-hidden="true" className="size-11 shrink-0" viewBox="0 0 48 48" fill="none">
+                <path d="m24 6 18 10H6L24 6Z" stroke="currentColor" strokeWidth="2.8" strokeLinejoin="round" />
+                <path d="M10 20h28M12 20v17m8-17v17m8-17v17m8-17v17M7 38h34M5 43h38" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" />
+              </svg>
+              Direcção
+            </button>
           </div>
-        </PageContainer>
+        </section>
       </main>
     );
   }
@@ -2359,19 +2638,122 @@ export function SchoolAdminDemo() {
     const visibleNavigation = workspaceNavigation.filter((item) =>
       item.profiles.includes(selectedProfile.id),
     );
+    const activeNavigationView = ["classes", "rooms", "groups"].includes(activeView)
+      ? "enrollments"
+      : activeView;
     const activeNavigation =
-      visibleNavigation.find((item) => item.id === activeView) ??
+      visibleNavigation.find((item) => item.id === activeNavigationView) ??
       visibleNavigation[0] ??
       workspaceNavigation[0];
     const canManageAcademics = selectedProfile.id === "secretaria";
     const canManagePayments = selectedProfile.id === "secretaria";
     const showAcademicContext = selectedProfile.id === "secretaria";
+    const navigationGlyphs: Partial<Record<WorkspaceView, string>> = {
+      overview: "⌂",
+      enrollments: "AL",
+      payments: "MT",
+      reports: "RP",
+      catalog: "⚙",
+    };
+    const navigationPanel = (mobile = false) => (
+      <div className="min-h-full px-3 py-5">
+        {mobile && (
+          <div className="mb-4 flex items-center justify-between">
+            <span className="font-black text-[#185c54]">LSS</span>
+            <button
+              type="button"
+              className="grid size-11 place-items-center rounded-md border border-slate-200"
+              aria-label="Fechar menu"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              ×
+            </button>
+          </div>
+        )}
+        <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
+          <div
+            className={cx(
+              "grid size-10 shrink-0 place-items-center rounded-md text-sm font-black",
+              selectedProfile.surface,
+            )}
+          >
+            {selectedProfile.glyph}
+          </div>
+          <div className={!mobile && sidebarCollapsed ? "hidden" : "min-w-0"}>
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+              Perfil activo
+            </p>
+            <p className="truncate font-bold text-slate-950">
+              {selectedProfile.title}
+            </p>
+          </div>
+        </div>
+
+        <nav className="mt-5 grid gap-2">
+          {visibleNavigation.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-current={activeNavigationView === item.id ? "page" : undefined}
+              onClick={() => navigateTo(item.id, item.href)}
+              title={item.label}
+              className={cx(
+                "flex min-h-11 items-center gap-3 rounded-md px-3 text-left text-sm font-semibold transition-colors",
+                activeNavigationView === item.id
+                  ? "bg-[#e8f5f2] text-[#185c54] ring-1 ring-[#c9e6df]"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-950",
+              )}
+            >
+              <span className="grid size-6 shrink-0 place-items-center text-xs font-black" aria-hidden="true">
+                {navigationGlyphs[item.id] ?? "•"}
+              </span>
+              <span className={!mobile && sidebarCollapsed ? "sr-only" : ""}>
+                {item.label}
+              </span>
+            </button>
+          ))}
+        </nav>
+
+        {showAcademicContext && (mobile || !sidebarCollapsed) && (
+          <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+              Selecção actual
+            </p>
+            <div className="mt-3 grid gap-3 text-sm">
+              <SummaryMini label="Classe" value={currentClass?.name ?? "Sem classe"} />
+              <SummaryMini label="Turma" value={currentGroup?.name ?? "Sem turma"} />
+              <SummaryMini label="Mensalidade" value={formatCurrency(paymentSettings.monthlyFee)} />
+            </div>
+          </div>
+        )}
+
+        {!mobile && (
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((value) => !value)}
+            className="mt-5 min-h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+            aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          >
+            {sidebarCollapsed ? "›" : "‹ Recolher"}
+          </button>
+        )}
+      </div>
+    );
 
     return (
       <main className="min-h-screen overflow-x-clip bg-[#f4f7f8] text-slate-950">
         <div className="border-b border-slate-200 bg-white">
           <PageContainer className="flex flex-wrap items-center justify-between gap-4 py-4">
             <div className="flex min-w-0 items-center gap-4">
+              <button
+                type="button"
+                className="grid size-11 place-items-center rounded-md border border-slate-200 text-lg font-bold lg:hidden"
+                aria-label="Abrir menu"
+                aria-expanded={mobileMenuOpen}
+                onClick={() => setMobileMenuOpen(true)}
+              >
+                ☰
+              </button>
               <div className="grid size-12 shrink-0 place-items-center rounded-md bg-[#185c54] text-sm font-black text-white">
                 {institutionLogoText}
               </div>
@@ -2380,81 +2762,51 @@ export function SchoolAdminDemo() {
                   {institutionName}
                 </p>
                 <h1 className="break-words text-xl font-bold">
-                  {selectedProfile.title}
+                  {activeNavigation.label}
                 </h1>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setActiveProfile(null)}
-              className="min-h-11 rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Sair
-            </button>
+            <div className="flex items-center gap-3">
+              <div className="hidden text-right sm:block">
+                <p className="text-sm font-semibold">{accountName || selectedProfile.title}</p>
+                <p className="text-xs text-slate-500">{selectedProfile.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={signOut}
+                className="min-h-11 rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Sair
+              </button>
+            </div>
           </PageContainer>
         </div>
 
-        <div className="lss-shell-grid mx-auto max-w-[var(--lss-page-max)]">
-          <aside className="min-w-0 border-b border-slate-200 bg-white px-4 py-5 lg:sticky lg:top-0 lg:h-[calc(100vh-81px)] lg:self-start lg:overflow-y-auto lg:border-b-0 lg:border-r">
-            <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
-              <div
-                className={cx(
-                  "grid size-12 place-items-center rounded-md text-sm font-black",
-                  selectedProfile.surface,
-                )}
-              >
-                {selectedProfile.glyph}
-              </div>
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                  Perfil activo
-                </p>
-                <p className="font-bold text-slate-950">
-                  {selectedProfile.title}
-                </p>
-              </div>
-            </div>
+        <Drawer
+          variant="temporary"
+          open={mobileMenuOpen}
+          onClose={() => setMobileMenuOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          aria-label="Navegação principal"
+          sx={{
+            display: { xs: "block", lg: "none" },
+            "& .MuiDrawer-paper": {
+              width: "min(288px, calc(100vw - 48px))",
+            },
+          }}
+        >
+          {navigationPanel(true)}
+        </Drawer>
 
-            <nav className="mt-5 grid gap-2">
-              {visibleNavigation.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  aria-current={activeView === item.id ? "page" : undefined}
-                  onClick={() => setActiveView(item.id)}
-                  className={cx(
-                    "flex min-h-11 items-center rounded-md px-3 text-left text-sm font-semibold transition-colors",
-                    activeView === item.id
-                      ? "bg-[#e8f5f2] text-[#185c54] ring-1 ring-[#c9e6df]"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-950",
-                  )}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-
-            {showAcademicContext && (
-              <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-                  Selecção actual
-                </p>
-                <div className="mt-3 grid gap-3 text-sm">
-                  <SummaryMini
-                    label="Classe"
-                    value={currentClass?.name ?? "Sem classe"}
-                  />
-                  <SummaryMini
-                    label="Turma"
-                    value={currentGroup?.name ?? "Sem turma"}
-                  />
-                  <SummaryMini
-                    label="Mensalidade"
-                    value={formatCurrency(paymentSettings.monthlyFee)}
-                  />
-                </div>
-              </div>
-            )}
+        <div
+          className="lss-shell-grid"
+          data-collapsed={sidebarCollapsed}
+        >
+          <aside
+            aria-label="Navegação principal"
+            className="sticky top-0 hidden h-[calc(100vh-81px)] min-w-0 self-start overflow-y-auto border-r border-slate-200 bg-white lg:block"
+          >
+            {navigationPanel()}
           </aside>
 
           <div className="min-w-0 overflow-x-clip">
@@ -2830,6 +3182,77 @@ export function SchoolAdminDemo() {
     const sortedRoomDefinitions = sortByName(roomDefinitions);
     const selectableStages = activeAcademicStages(academicStages);
 
+    if (selectedProfile.id === "director") {
+      return (
+        <div className="grid gap-6">
+          <div className="lss-card-grid">
+            <MetricCard
+              label="Níveis"
+              value={academicStages.length}
+              supporting={`${selectableStages.length} activos`}
+              accent="border-l-[#8b5cf6]"
+            />
+            <MetricCard
+              label="Classes"
+              value={classDefinitions.length}
+              supporting={`${activeClassDefinitions(classDefinitions, academicStages).length} activas`}
+              accent="border-l-[#178f7f]"
+            />
+            <MetricCard
+              label="Salas"
+              value={roomDefinitions.length}
+              supporting={`${activeRoomDefinitions(roomDefinitions).length} activas`}
+              accent="border-l-[#d08a19]"
+            />
+          </div>
+
+          <section className="lss-responsive-card" data-wide="true">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold">Parâmetros académicos</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Consulta apenas. O perfil Director não altera dados do sistema.
+                </p>
+              </div>
+              <StateLabel tone="muted">Só leitura</StateLabel>
+            </div>
+            <div className="mt-5 grid gap-5 lg:grid-cols-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Níveis
+                </p>
+                <div className="mt-2 grid gap-2">
+                  {sortedStages.map((stage) => (
+                    <SummaryLine key={stage.id} label={stage.name} value={stage.status === "active" ? "Activo" : "Inactivo"} />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Classes
+                </p>
+                <div className="mt-2 grid gap-2">
+                  {sortedClassDefinitions.map((definition) => (
+                    <SummaryLine key={definition.id} label={definition.name} value={stageLabel(academicStages, definition.stageId)} />
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Salas
+                </p>
+                <div className="mt-2 grid gap-2">
+                  {sortedRoomDefinitions.map((room) => (
+                    <SummaryLine key={room.id} label={room.name} value={`${room.block} · ${room.capacity} lugares`} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      );
+    }
+
     return (
       <div className="grid gap-6">
         <div className="lss-card-grid">
@@ -2852,6 +3275,46 @@ export function SchoolAdminDemo() {
             accent="border-l-[#d08a19]"
           />
         </div>
+
+        <section className="lss-responsive-card" data-wide="true">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="text-base font-semibold">Cópia de segurança</h3>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+                Os dados ficam guardados neste navegador. Pode exportar uma cópia,
+                importar um ficheiro compatível ou repor o conjunto inicial.
+              </p>
+            </div>
+            <StateLabel tone="active">Dados guardados</StateLabel>
+          </div>
+          <div className="lss-actions mt-5">
+            <SecondaryButton onClick={exportDemoData}>Exportar JSON</SecondaryButton>
+            <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Importar JSON
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                onChange={(event) => {
+                  void importDemoData(event.target.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={resetDemoData}
+              className="min-h-11 rounded-md border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+            >
+              Repor dados iniciais
+            </button>
+          </div>
+          {storageToolsNotice && (
+            <p className="mt-4 rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200" role="status">
+              {storageToolsNotice}
+            </p>
+          )}
+        </section>
 
         <section className="lss-responsive-card">
           <h3 className="text-base font-semibold">Parametros academicos</h3>
@@ -3547,9 +4010,11 @@ export function SchoolAdminDemo() {
                 {currentGroup?.name ?? "Sem turma"}.
               </p>
             </div>
-            <PrimaryButton onClick={startNewEnrollment}>
-              Matricula
-            </PrimaryButton>
+            {selectedProfile.id === "secretaria" && (
+              <PrimaryButton onClick={startNewEnrollment}>
+                Matrícula
+              </PrimaryButton>
+            )}
           </div>
 
           <StudentFilters
@@ -3655,20 +4120,22 @@ export function SchoolAdminDemo() {
           </div>
         </section>
 
-        <EnrollmentForm
-          classes={classes}
-          draft={enrollmentDraft}
-          groups={draftGroups}
-          notice={enrollmentNotice}
-          onChange={(draft) => {
-            setEnrollmentNotice("");
-            setEnrollmentDraft(draft);
-          }}
-          onClassChange={changeEnrollmentClass}
-          onReset={() => resetEnrollmentDraft(currentClassId, currentGroupId)}
-          onSaveAndPay={saveEnrollmentAndOpenPayment}
-          onSubmit={submitEnrollment}
-        />
+        {selectedProfile.id === "secretaria" && (
+          <EnrollmentForm
+            classes={classes}
+            draft={enrollmentDraft}
+            groups={draftGroups}
+            notice={enrollmentNotice}
+            onChange={(draft) => {
+              setEnrollmentNotice("");
+              setEnrollmentDraft(draft);
+            }}
+            onClassChange={changeEnrollmentClass}
+            onReset={() => resetEnrollmentDraft(currentClassId, currentGroupId)}
+            onSaveAndPay={saveEnrollmentAndOpenPayment}
+            onSubmit={submitEnrollment}
+          />
+        )}
       </div>
     );
   }
@@ -3719,26 +4186,29 @@ export function SchoolAdminDemo() {
         </nav>
 
         {currentPaymentSection?.id === "settings" && (
-          canEditPaymentRules ? (
-            <div className="grid gap-6">
-              <FinanceSettingsForm
-                draft={financeSettingsDraft}
-                notice={financeSettingsNotice}
+          <div className="grid gap-6">
+            <PaymentRulesTable
+              rules={effectivePaymentRuleVersions}
+              levelLabel={paymentRuleLevelLabel}
+              onCreate={openNewPaymentPolicyDialog}
+              onEdit={(rule) => openPaymentRuleDialog(rule.id)}
+              readOnly={!canEditPaymentRules}
+            />
+            {canEditPaymentRules && (
+              <MiscellaneousChargeForm
+                disabled={paymentRows.length === 0}
+                draft={miscellaneousChargeDraft}
+                groupStudentCount={paymentRows.length}
+                notice={miscellaneousNotice}
+                selectedCount={selectedPaymentRows.length}
                 onChange={(draft) => {
-                  setFinanceSettingsNotice("");
-                  setFinanceSettingsDraft(draft);
+                  setMiscellaneousNotice("");
+                  setMiscellaneousChargeDraft(draft);
                 }}
-                onSubmit={submitFinanceSettings}
+                onSubmit={submitMiscellaneousCharge}
               />
-              <PaymentRulesTable
-                rules={effectivePaymentRuleVersions}
-                levelLabel={paymentRuleLevelLabel}
-                onEdit={(rule) => openPaymentRuleDialog(rule.id)}
-              />
-            </div>
-          ) : (
-            <PaymentSettingsSummary settings={paymentSettings} />
-          )
+            )}
+          </div>
         )}
 
         {currentPaymentSection?.id === "student-rules" && canEditPaymentRules && (
@@ -3836,21 +4306,6 @@ export function SchoolAdminDemo() {
                 </div>
               )}
             </section>
-
-            {selectedProfile.id === "secretaria" && (
-              <MiscellaneousChargeForm
-                disabled={paymentRows.length === 0}
-                draft={miscellaneousChargeDraft}
-                groupStudentCount={paymentRows.length}
-                notice={miscellaneousNotice}
-                selectedCount={selectedPaymentRows.length}
-                onChange={(draft) => {
-                  setMiscellaneousNotice("");
-                  setMiscellaneousChargeDraft(draft);
-                }}
-                onSubmit={submitMiscellaneousCharge}
-              />
-            )}
 
             <div className="lss-split-grid">
               <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -4226,12 +4681,8 @@ export function SchoolAdminDemo() {
           onShowReceipt={showPaymentReceipt}
         />
         <PaymentRuleDialog
+          classOptions={classDefinitions}
           draft={paymentRuleDraft}
-          levelName={
-            paymentRuleDraft
-              ? paymentRuleLevelLabel({ educationLevelId: paymentRuleDraft.educationLevelId })
-              : ""
-          }
           onChange={setPaymentRuleDraft}
           onClose={() => setPaymentRuleDraft(null)}
           onSubmit={submitPaymentRule}

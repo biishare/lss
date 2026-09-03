@@ -42,6 +42,8 @@ export type Enrollment = {
 
 export type PaymentRuleVersion = {
   id: string;
+  policyId?: string;
+  policyName?: string;
   academicYearId: string;
   educationLevelId: string;
   version: number;

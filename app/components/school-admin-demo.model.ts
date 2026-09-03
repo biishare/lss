@@ -150,8 +150,12 @@ export type FinanceProfileDraft = {
 
 export type PaymentRuleDraft = {
   ruleId: string;
+  policyId: string;
+  policyName: string;
   academicYearId: string;
   educationLevelId: string;
+  educationLevelIds: string[];
+  status: EntityStatus;
   validFrom: string;
   inscriptionFee: string;
   monthlyFee: string;
@@ -305,6 +309,8 @@ export type PaymentCorrectionResult = {
 };
 
 export type StoredDemoState = {
+  schemaVersion?: 2;
+  savedAt?: string;
   academicStages?: AcademicStageDefinition[];
   classDefinitions?: ClassDefinition[];
   roomDefinitions?: RoomDefinition[];
@@ -356,16 +362,14 @@ export const profiles: ProfileConfig[] = [
 export const workspaceNavigation: Array<{
   id: WorkspaceView;
   label: string;
+  href: string;
   profiles: ProfileId[];
 }> = [
-  { id: "overview", label: "Painel", profiles: ["director", "secretaria"] },
-  { id: "catalog", label: "Académico", profiles: ["secretaria"] },
-  { id: "classes", label: "Classes", profiles: ["secretaria"] },
-  { id: "rooms", label: "Salas", profiles: ["secretaria"] },
-  { id: "groups", label: "Turmas", profiles: ["secretaria"] },
-  { id: "enrollments", label: "Matrículas", profiles: ["secretaria"] },
-  { id: "payments", label: "Financeiro", profiles: ["director", "secretaria"] },
-  { id: "reports", label: "Relatórios", profiles: ["director", "secretaria"] },
+  { id: "overview", label: "Início", href: "/dashboard", profiles: ["director", "secretaria"] },
+  { id: "enrollments", label: "Alunos e turmas", href: "/students", profiles: ["director", "secretaria"] },
+  { id: "payments", label: "Pagamentos", href: "/payments", profiles: ["director", "secretaria"] },
+  { id: "reports", label: "Relatórios", href: "/reports", profiles: ["director", "secretaria"] },
+  { id: "catalog", label: "Configurações", href: "/settings", profiles: ["director", "secretaria"] },
 ];
 
 export const paymentSections: Array<{
@@ -1667,6 +1671,8 @@ export function buildDefaultPaymentRuleVersion(
 ): PaymentRuleVersion {
   return {
     id: paymentRuleVersionId(academicYearId, educationLevelId, version),
+    policyId: `POLICY-${stableRuleCode(academicYearId)}-BASE`,
+    policyName: `Política geral ${academicYearId}`,
     academicYearId,
     educationLevelId,
     version,
@@ -1806,11 +1812,25 @@ function previousDay(dateValue: string) {
   return date.toISOString().slice(0, 10);
 }
 
-export function buildPaymentRuleDraft(rule: PaymentRuleVersion): PaymentRuleDraft {
+export function buildPaymentRuleDraft(
+  rule: PaymentRuleVersion,
+  rules: PaymentRuleVersion[] = [rule],
+): PaymentRuleDraft {
+  const policyId = rule.policyId ?? rule.id;
+  const relatedRules = rule.policyId
+    ? rules.filter((item) => item.policyId === rule.policyId)
+    : [rule];
+
   return {
     ruleId: rule.id,
+    policyId,
+    policyName: rule.policyName ?? `Política ${rule.educationLevelId}`,
     academicYearId: rule.academicYearId,
     educationLevelId: rule.educationLevelId,
+    educationLevelIds: Array.from(
+      new Set(relatedRules.map((item) => item.educationLevelId)),
+    ),
+    status: rule.status,
     validFrom: today(),
     inscriptionFee: String(rule.inscriptionFee),
     monthlyFee: String(rule.monthlyFee),
@@ -1854,10 +1874,12 @@ export function createNextPaymentRuleVersion(
   );
   const nextRule: PaymentRuleVersion = {
     id: paymentRuleVersionId(academicYearId, educationLevelId, nextVersion),
+    policyId: draft.policyId || undefined,
+    policyName: draft.policyName.trim() || undefined,
     academicYearId,
     educationLevelId,
     version: nextVersion,
-    status: "active",
+    status: draft.status,
     inscriptionFee: parseMoney(draft.inscriptionFee),
     monthlyFee,
     coveredMonthKeys: normalizedCoveredMonthKeys(draft.coveredMonthKeys),
@@ -1885,7 +1907,7 @@ export function createNextPaymentRuleVersion(
     ...rules.map((rule) =>
       rule.academicYearId === academicYearId &&
       rule.educationLevelId === educationLevelId &&
-      rule.status === "active"
+      draft.status === "active" && rule.status === "active"
         ? {
             ...rule,
             status: "inactive" as const,
@@ -1899,6 +1921,68 @@ export function createNextPaymentRuleVersion(
       a.academicYearId.localeCompare(b.academicYearId) ||
       a.educationLevelId.localeCompare(b.educationLevelId) ||
       a.version - b.version,
+  );
+}
+
+export function createPaymentPolicyVersions(
+  rules: PaymentRuleVersion[],
+  draft: PaymentRuleDraft,
+  changedAt = today(),
+) {
+  const academicYearId = draft.academicYearId.trim() || currentAcademicYear();
+  const educationLevelIds = Array.from(
+    new Set(
+      (draft.educationLevelIds.length > 0
+        ? draft.educationLevelIds
+        : [draft.educationLevelId]
+      ).filter(Boolean),
+    ),
+  );
+  const policyName = draft.policyName.trim();
+  const policyBaseId = `POLICY-${stableRuleCode(academicYearId)}-${stableRuleCode(
+    policyName,
+  )}`;
+  const existingPolicyIds = new Set(
+    rules.map((rule) => rule.policyId).filter((id): id is string => Boolean(id)),
+  );
+  let nextPolicyId = policyBaseId;
+  let suffix = 2;
+
+  while (existingPolicyIds.has(nextPolicyId)) {
+    nextPolicyId = `${policyBaseId}-${suffix}`;
+    suffix += 1;
+  }
+
+  const policyId = draft.policyId || nextPolicyId;
+  const selectedLevels = new Set(educationLevelIds);
+  const preparedRules = rules.map((rule) =>
+    draft.policyId &&
+    rule.policyId === draft.policyId &&
+    rule.academicYearId === academicYearId &&
+    rule.status === "active" &&
+    (draft.status === "inactive" || !selectedLevels.has(rule.educationLevelId))
+      ? {
+          ...rule,
+          status: "inactive" as const,
+          validUntil: previousDay(draft.validFrom || changedAt),
+        }
+      : rule,
+  );
+
+  return educationLevelIds.reduce(
+    (nextRules, educationLevelId) =>
+      createNextPaymentRuleVersion(
+        nextRules,
+        {
+          ...draft,
+          academicYearId,
+          educationLevelId,
+          policyId,
+          policyName,
+        },
+        changedAt,
+      ),
+    preparedRules,
   );
 }
 export function getPaymentRuleForStudent(
