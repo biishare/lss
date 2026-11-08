@@ -26,11 +26,22 @@ npm ci
 npm run dev
 ```
 
-Abra [http://localhost:3000](http://localhost:3000) e escolha um dos perfis:
+Abra [http://localhost:3000](http://localhost:3000), escolha uma **Conta de exemplo**
+e clique em **Abrir demonstração**. A conta determina o painel e o papel:
 
 - **Secretaria** — pode matricular, configurar regras e registar pagamentos.
 - **Director** — consulta indicadores, alunos, pagamentos, relatórios e
   configurações em modo de leitura.
+
+Estas contas são fictícias e não usam palavra-passe. Sessões e autorização
+reais serão fornecidas pela API posterior.
+
+O layout permanece montado ao navegar pelas cinco áreas. Desktop usa menu
+256/64 px; tablet usa barra de 64 px e expansão sobreposta; telemóvel usa Drawer.
+Na planilha, **Expandir planilha** oculta temporariamente o menu e os blocos
+secundários. **Sair da vista expandida** ou Escape restaura o layout.
+Filtros, pesquisa, selecção e posições da tabela ficam na sessão do mesmo
+cenário. O URL inclui apenas IDs/contexto, sem pesquisa ou contactos.
 
 ## Rotas da demo
 

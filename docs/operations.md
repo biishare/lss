@@ -4,10 +4,30 @@
 
 1. Execute `npm ci` e `npm run dev`.
 2. Abra `http://localhost:3000`.
-3. Entre como **Secretaria** para preparar/operar a demo. No primeiro arranque,
+3. Em **Conta de exemplo**, escolha **Marta — Secretaria** e use **Abrir demonstração**
+   para preparar/operar a demo. No primeiro arranque,
    escolha **Abrir escola de exemplo** ou **Configurar do início**. O Director
    consulta o mesmo cenário depois de preparado, em modo de leitura.
-4. Use **Sair** para trocar de perfil. Os dados locais não são apagados.
+4. Use **Sair** para trocar de conta. **António — Director** abre a consulta.
+   Os dados locais não são apagados. Não há palavra-passe nem autenticação real.
+
+## Navegação e contexto
+
+As cinco áreas partilham o mesmo layout. **Recolher menu** passa de 256 a 64 px
+no desktop (a partir de 1200 px). Entre 768 e 1199 px a barra começa compacta e
+**Expandir menu** abre uma sobreposição sem alterar a preferência desktop.
+No telemóvel, **Abrir menu** mostra o Drawer. Escape, destino, toque fora e
+**Fechar menu** fecham a sobreposição; o foco regressa à abertura.
+
+**Pagamentos** abre a planilha. **Expandir planilha** oculta o menu e os blocos
+secundários, conservando filtros, selecção e rascunho. A saída restaura o layout.
+Enquanto o atendimento no modal não estiver concluído na fase 5, **Registar
+pagamento** no detalhe sai da vista expandida e prepara o formulário existente.
+
+Voltar, Avançar e recarregar recuperam os IDs de classe/turma, mês e área no URL.
+Pesquisa, selecção em lote e posições de scroll ficam na sessão do cenário,
+sem colocar nomes ou contactos no URL. O ano mostrado é o ano operacional
+existente; a organização e selecção de vários anos pertencem à fase 3.
 
 ## Roteiro sugerido
 

@@ -1,7 +1,7 @@
 import "./dom-environment";
 import assert from "node:assert/strict";
 import { after, afterEach, beforeEach, test } from "node:test";
-import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, within, act } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { SchoolAdminDemo } from "../app/components/school-admin-demo";
 import { createDemoState, demoStorageKey } from "../app/features/demo/demo-state";
@@ -32,6 +32,7 @@ const router: AppRouterInstance = {
 };
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   storage = new TestStorage();
   const seed = createDemoState("example", { now: "2026-11-08T12:00:00.000Z", datasetId: "ui-scenario" });
   storage.values.set(demoStorageKey, JSON.stringify({ ...seed, revision: 1 }));
@@ -181,4 +182,150 @@ test("matrícula conserva formulário em falha e guarda aluno e financeiro junto
   assert.ok(student);
   assert.ok(state.paymentRecords.find((record: { studentId: string }) => record.studentId === student.id));
   assert.equal(state.students.length, 13);
+});
+
+function mainNavigation() {
+  return within(screen.getByRole("complementary", { name: "Navegação principal" }));
+}
+
+test("entrada única de demonstração abre o papel da conta e sair conserva a escola", async () => {
+  const raw = storage.getItem(demoStorageKey);
+  window.sessionStorage.removeItem("lss-demo-session-v1");
+  open();
+  await screen.findByRole("heading", { name: "Entrar no LSS" });
+  fireEvent.change(screen.getByRole("combobox", { name: "Conta de exemplo" }), { target: { value: "demo-director" } });
+  fireEvent.click(screen.getByRole("button", { name: "Abrir demonstração" }));
+  await screen.findByRole("heading", { level: 1, name: "Início" });
+  assert.ok(screen.getByText("António — Director"));
+  fireEvent.click(mainNavigation().getByRole("button", { name: "Pagamentos" }));
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  assert.equal(screen.queryByRole("button", { name: "Confirmar pagamento" }), null);
+  fireEvent.click(screen.getByRole("button", { name: "Sair" }));
+  await screen.findByRole("heading", { name: "Entrar no LSS" });
+  assert.equal(storage.getItem(demoStorageKey), raw);
+  assert.equal(storage.financialWrites, 0);
+  assert.equal(window.sessionStorage.getItem("lss-demo-session-v1"), null);
+});
+
+test("layout partilhado conserva pesquisa, selecção e rascunho entre áreas", async () => {
+  open("payments");
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Ana" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Ana Júlia Mucavele" }));
+  fireEvent.change(screen.getByLabelText("Valor recebido"), { target: { value: "1234" } });
+  fireEvent.click(mainNavigation().getByRole("button", { name: "Relatórios" }));
+  await screen.findByRole("heading", { level: 1, name: "Relatórios" });
+  assert.equal(window.location.pathname, "/reports");
+  assert.ok(!window.location.href.includes("Ana"));
+  fireEvent.click(mainNavigation().getByRole("button", { name: "Pagamentos" }));
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  assert.equal((screen.getByRole("searchbox") as HTMLInputElement).value, "Ana");
+  assert.equal((screen.getByRole("checkbox", { name: "Seleccionar Ana Júlia Mucavele" }) as HTMLInputElement).checked, true);
+  assert.equal((screen.getByLabelText("Valor recebido") as HTMLInputElement).value, "1234");
+  assert.equal(storage.financialWrites, 0);
+});
+
+test("recarregar recupera classe, turma, pesquisa, selecção e rascunho da mesma sessão", async () => {
+  const page = open("payments");
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Bruno" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Bruno Ernesto Macamo" }));
+  fireEvent.change(screen.getByLabelText("Valor recebido"), { target: { value: "567" } });
+  const href = window.location.href;
+  page.unmount();
+  open();
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  assert.equal(window.location.href, href);
+  assert.equal((screen.getByRole("searchbox") as HTMLInputElement).value, "Bruno");
+  assert.equal((screen.getByRole("checkbox", { name: "Seleccionar Bruno Ernesto Macamo" }) as HTMLInputElement).checked, true);
+  assert.equal((screen.getByLabelText("Valor recebido") as HTMLInputElement).value, "567");
+  assert.equal(storage.financialWrites, 0);
+});
+
+test("Voltar e Avançar recuperam as áreas sem repor os dados ou perder o filtro", async () => {
+  open("payments");
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Ana" } });
+  fireEvent.click(mainNavigation().getByRole("button", { name: "Relatórios" }));
+  await screen.findByRole("heading", { level: 1, name: "Relatórios" });
+  await act(async () => { window.history.back(); });
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  assert.equal((screen.getByRole("searchbox") as HTMLInputElement).value, "Ana");
+  await act(async () => { window.history.forward(); });
+  await screen.findByRole("heading", { level: 1, name: "Relatórios" });
+  assert.equal(storage.financialWrites, 0);
+});
+
+test("vista expandida e Escape conservam a selecção, o formulário e a preferência desktop", async () => {
+  storage.values.set("lss-demo-sidebar-collapsed", "false");
+  open("payments");
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Carla" } });
+  fireEvent.change(screen.getByLabelText("Valor recebido"), { target: { value: "987" } });
+  const region = screen.getByRole("region", { name: "Tabela com deslocamento horizontal" });
+  region.scrollLeft = 250;
+  fireEvent.click(screen.getByRole("button", { name: "Expandir planilha" }));
+  assert.ok(screen.getByRole("button", { name: "Sair da vista expandida" }));
+  assert.equal(region.scrollLeft, 250);
+  fireEvent.keyDown(window, { key: "Escape" });
+  assert.ok(screen.getByRole("button", { name: "Expandir planilha" }));
+  assert.equal((screen.getByRole("searchbox") as HTMLInputElement).value, "Carla");
+  assert.equal((screen.getByLabelText("Valor recebido") as HTMLInputElement).value, "987");
+  assert.equal(storage.getItem("lss-demo-sidebar-collapsed"), "false");
+});
+
+test("Drawer fecha por Escape, por destino e por toque fora, devolvendo o foco", async () => {
+  storage.values.set("lss-demo-sidebar-collapsed", "true");
+  open();
+  await screen.findByRole("heading", { level: 1, name: "Início" });
+  const trigger = screen.getByRole("button", { name: "Abrir menu" });
+  act(() => trigger.focus());
+  fireEvent.click(trigger);
+  let drawer = await screen.findByRole("dialog", { name: "Navegação" });
+  assert.equal(drawer.getAttribute("aria-modal"), "true");
+  fireEvent.keyDown(drawer, { key: "Escape" });
+  await waitFor(() => assert.equal(Boolean(screen.queryByRole("dialog", { name: "Navegação" })), false));
+  assert.ok(document.activeElement === trigger, "o foco deve regressar ao botão de abertura");
+  fireEvent.click(trigger);
+  drawer = await screen.findByRole("dialog", { name: "Navegação" });
+  fireEvent.click(within(drawer).getByRole("button", { name: "Pagamentos" }));
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  await waitFor(() => assert.equal(Boolean(screen.queryByRole("dialog", { name: "Navegação" })), false));
+  fireEvent.click(trigger);
+  await screen.findByRole("dialog", { name: "Navegação" });
+  const backdrop = document.querySelector(".MuiDrawer-root .MuiBackdrop-root");
+  assert.ok(backdrop);
+  fireEvent.click(backdrop);
+  await waitFor(() => assert.equal(Boolean(screen.queryByRole("dialog", { name: "Navegação" })), false));
+  assert.equal(storage.getItem("lss-demo-sidebar-collapsed"), "true");
+  assert.equal(storage.financialWrites, 0);
+});
+
+test("ligação directa recupera os IDs da turma; parâmetro de papel não permite escrita pelo Director", async () => {
+  const state = JSON.parse(storage.getItem(demoStorageKey)!);
+  const selectedClass = state.classes[1];
+  const group = state.groups.find((group: { classId: string }) => group.classId === selectedClass.id);
+  window.history.replaceState(null, "", `/payments?class=${selectedClass.id}&group=${group.id}&month=jun&section=settings&role=secretaria`);
+  window.sessionStorage.setItem("lss-demo-session-v1", JSON.stringify({ source: "demo", accountId: "demo-director" }));
+  open();
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  assert.equal((screen.getByLabelText("Filtrar por classe") as HTMLSelectElement).value, selectedClass.id);
+  assert.equal((screen.getByLabelText("Filtrar por turma") as HTMLSelectElement).value, group.id);
+  assert.equal(screen.queryByRole("button", { name: "Confirmar pagamento" }), null);
+  assert.equal(storage.financialWrites, 0);
+});
+
+test("posição horizontal da planilha é restaurada depois de visitar outra área", async () => {
+  open("payments");
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  await act(async () => { await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve())); });
+  const region = screen.getByRole("region", { name: "Tabela com deslocamento horizontal" });
+  region.scrollLeft = 420;
+  fireEvent.scroll(region);
+  fireEvent.click(mainNavigation().getByRole("button", { name: "Relatórios" }));
+  await screen.findByRole("heading", { level: 1, name: "Relatórios" });
+  fireEvent.click(mainNavigation().getByRole("button", { name: "Pagamentos" }));
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  await waitFor(() => assert.equal(screen.getByRole("region", { name: "Tabela com deslocamento horizontal" }).scrollLeft, 420));
+  assert.equal(storage.financialWrites, 0);
 });

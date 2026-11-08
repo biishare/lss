@@ -12,7 +12,7 @@ previam PostgreSQL e servidor nesta etapa.
 | --- | --- | --- |
 | 0 - Diagnóstico | Concluída | Base e PDF lidos; código, testes e diferenças inventariados; âmbito actualizado. |
 | 1 - Estado e serviços locais | Concluída no âmbito local autorizado | Repositório local, snapshot v3, validação, revisão, comandos, recuperação, recibo persistido e rascunhos ligados à UI; 59 testes aprovados. |
-| 2 - Entrada e shell | Pendente | Preparar entrada/integração futura, MUI, navegação, largura útil e contexto recuperável. Autenticação real aguarda a API. |
+| 2 - Entrada e shell | Implementada; revisão visual pendente | Entrada demo por conta, layout partilhado MUI, cinco áreas, sidebar/Drawer, expansão e contexto recuperável. Autenticação real aguarda a API. |
 | 3 - Académico | Pendente | Ficha única, pessoa/matrícula/colocação, renovação, transferência, vagas e configuração guiada. |
 | 4 - Regras | Pendente | Dinheiro exacto, emissão, benefícios e cálculos de multas conforme v3. |
 | 5 - Atendimento | Pendente | Pagamento inteiramente no modal, conferência, crédito, devoluções e série de recibos. |
@@ -47,7 +47,7 @@ previam PostgreSQL e servidor nesta etapa.
   metadados do ano activo/próximo. Números repetidos no formato antigo são
   conservados com aviso, para revisão académica explícita na fase 3.
 
-## Validação desta entrega
+## Validação da fase 1
 
 | Comando | Resultado observado |
 | --- | --- |
@@ -78,8 +78,55 @@ Contas reais, autenticação, validação no servidor, backups centrais e crité
 P01-P12 de produção dependem da API dedicada posterior. Exportar JSON não
 substitui esses backups.
 
-O trabalho fica numa branch para revisão. `main` e a publicação não são alteradas
-como parte desta fase.
+A fase 1 foi integrada em `main` na PR #2 (commit `9bf73ce`) por instrução do
+utilizador. O deploy de produção da Vercel passou; início, planilha e detalhe
+foram verificados com o cenário anterior preservado. Publicar a demo não a
+transforma num sistema com autenticação ou dados centrais.
+
+## Fase 2: entrada, shell e contexto
+
+Branch: `codex/lss-v3-navigation`, a partir da `main` publicada na fase 1.
+
+- Entrada única de demonstração, com duas contas fixas. O papel deriva da conta;
+  sessões antigas são reconhecidas, sem aceitar nome ou papel arbitrários.
+  Não há formulário de credenciais simulado, palavra-passe ou backend.
+- Layout partilhado entre as rotas reais do Next.js. Navegar não desmonta o
+  estado de atendimento. A navegação usa a History API integrada no App Router.
+- Cinco áreas, topo de 64/56 px, ano e conta. Retirados o cartão de perfil, a
+  mensalidade global e o cabeçalho de atalhos repetidos. Atendimento fica no Início.
+- Sidebar desktop de 256/64 px (1200+), barra compacta no tablet e expansão
+  sobreposta, Drawer móvel até 288 px com pelo menos 48 px livres. Tooltips e
+  nomes acessíveis nas acções compactas, foco e fechos do MUI preservados.
+- Planilha pode ocupar toda a largura disponível, sem limite global de 90rem.
+  A vista expandida oculta navegação/resumos/formulário sem remontar a tabela
+  nem escrever a preferência permanente. Escape respeita um diálogo aberto.
+- Classe/turma, mês e área/separador no URL; pesquisa e selecção apenas na sessão
+  do cenário. Recuperação valida IDs e relações. Voltar, Avançar, recarregar e
+  mudar de área conservam contexto, rascunhos e posições da planilha.
+- A entrada e a sessão de exemplo estão isoladas em adaptadores próprios;
+  autenticação, permissões de servidor e P01/P02/P11 continuam para a API.
+
+Validação automatizada desta fase: 55 testes de domínio/persistência e 18 de UI
+(73 no total), incluindo contas, compatibilidade, URL sem pesquisa pessoal,
+links directos, retorno/reabertura, rascunho, selecção, scroll, Drawer e Escape.
+Lint sem erros/avisos, `npx tsc --noEmit`, `git diff --check` e `npm run build` aprovados. Todas as rotas foram geradas na compilação de produção.
+
+PR #3: https://github.com/biishare/lss/pull/3. O commit de código `5e97eca`
+foi publicado com árvore Git idêntica à testada localmente. O check Vercel
+terminou em `success`; o bot confirmou o preview como Ready, deployment
+`J8fu7s5gwwScXh7yVMaTZUA7XuS4`.
+
+A abertura do preview neste navegador foi redireccionada para o login da Vercel.
+O navegador também não alcança o servidor local deste ambiente (`localhost:3000`).
+Por isso, **não foi concluída a revisão visual das oito larguras** nem a medição
+real dos 192 px libertados. Não foram alteradas protecções ou acesso do preview.
+O comportamento de retorno, scroll, foco/Escape e fechos foi verificado no DOM
+simulado, sem o apresentar como ensaio visual ou de teclado virtual. A PR permanece
+em draft para essa revisão; isto não bloqueia a consulta do código e dos resultados.
+
+A fase 2 não altera `main` nem promove produção automaticamente.
+O atendimento completo no Dialog, Mês/Trimestre/Ano e a impressão ficam na
+fase 5; a configuração única e os vários anos ficam na fase 3.
 
 ## Evidência histórica
 
