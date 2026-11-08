@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Drawer from "@mui/material/Drawer";
 import {
@@ -8,7 +8,6 @@ import {
   initialClassDefinitions,
   initialClasses,
   initialGroups,
-  initialPaymentRecords,
   initialPaymentSettings,
   initialRoomDefinitions,
   initialRooms,
@@ -17,16 +16,13 @@ import {
   type ClassDefinition,
   type ClassGroup,
   type EntityStatus,
-  type PaymentSettings,
   type RoomDefinition,
   type SchoolClass,
   type SchoolRoom,
   type Student,
-  type StudentPaymentRecord,
 } from "../lib/school-demo-data";
 import {
   addMiscellaneousCharge,
-  applyStudentPaymentPreview,
   activeAcademicStages,
   activeClassDefinitions,
   activeRoomDefinitions,
@@ -38,7 +34,6 @@ import {
   buildDefaultPaymentRuleVersions,
   buildGroupId,
   buildLedger,
-  buildPaymentReceipt,
   buildPaymentReceiptFromRecord,
   buildPaymentRecord,
   buildPaymentRuleDraft,
@@ -66,7 +61,6 @@ import {
   inputClasses,
   institutionLogoText,
   institutionName,
-  loadStoredState,
   monthByKey,
   monthLabel,
   nextId,
@@ -75,8 +69,6 @@ import {
   nextStableNumberForGroup,
   nextStageDefinitionId,
   normalizePaymentRecord,
-  normalizeStudentForPolicy,
-  normalizeStudentsForEnrollmentPolicy,
   normalizeText,
   nowIso,
   paidOnToIso,
@@ -93,8 +85,6 @@ import {
   sortStudents,
   stageLabel,
   statusOptions,
-  storageKey,
-  storedArray,
   summarizePaymentRows,
   today,
   workspaceNavigation,
@@ -118,7 +108,6 @@ import {
   type RoomDefinitionDraft,
   type RoomDraft,
   type StudentLedgerRow,
-  type StoredDemoState,
   type WorkspaceView,
 } from "./school-admin-demo.model";
 import {
@@ -126,15 +115,14 @@ import {
   type FinanceAction,
 } from "../features/finance/domain/access-control";
 import {
-  createLegacySafetyExport,
-  migrateLegacyStoredState,
-  type LegacySafetyExport,
-} from "../features/finance/domain/migration";
-import {
-  demoSnapshotVersion,
-  parseDemoSnapshot,
-  serializeDemoSnapshot,
+  createLocalDemoRepository, parseDemoSnapshot, serializeDemoSnapshot,
+  type DemoRepository,
 } from "../features/demo/local-repository";
+import {
+  createDemoState, emptyDemoData, hydrateDemoState, type DemoData, type DemoState,
+} from "../features/demo/demo-state";
+import { confirmDemoPayment } from "../features/demo/payment-command";
+import { readDemoDrafts, writeDemoDrafts } from "../features/demo/draft-storage";
 import {
   ClassForm,
   CrumbButton,
@@ -238,32 +226,18 @@ export function SchoolAdminDemo({
   const [storageToolsNotice, setStorageToolsNotice] = useState("");
   const [activePaymentSection, setActivePaymentSection] =
     useState<PaymentWorkspaceSection>("settings");
-  const [academicStages, setAcademicStages] =
-    useState<AcademicStageDefinition[]>(initialAcademicStages);
-  const [classDefinitions, setClassDefinitions] =
-    useState<ClassDefinition[]>(initialClassDefinitions);
-  const [roomDefinitions, setRoomDefinitions] =
-    useState<RoomDefinition[]>(initialRoomDefinitions);
-  const [classes, setClasses] = useState<SchoolClass[]>(initialClasses);
-  const [rooms, setRooms] = useState<SchoolRoom[]>(initialRooms);
-  const [groups, setGroups] = useState<ClassGroup[]>(initialGroups);
-  const [students, setStudents] = useState<Student[]>(initialStudents);
-  const [paymentSettings, setPaymentSettings] =
-    useState<PaymentSettings>(initialPaymentSettings);
-  const [paymentRuleVersions, setPaymentRuleVersions] = useState(() =>
-    buildDefaultPaymentRuleVersions(
-      initialStudents,
-      initialClasses,
-      initialPaymentSettings,
-    ),
-  );
-  const [paymentRecords, setPaymentRecords] =
-    useState<StudentPaymentRecord[]>(initialPaymentRecords);
-  const [billingRuns, setBillingRuns] = useState<BillingRun[]>([]);
-  const [migrationValidationTimestamp, setMigrationValidationTimestamp] =
-    useState(() => nowIso());
-  const [legacySafetyExport, setLegacySafetyExport] =
-    useState<LegacySafetyExport | null>(null);
+  const [demoState, setDemoState] = useState<DemoState | null>(null);
+  const [storageLoadError, setStorageLoadError] = useState("");
+  const [originalStorageRaw, setOriginalStorageRaw] = useState<string | undefined>();
+  const [storageToolsError, setStorageToolsError] = useState(false);
+  const [draftStorageNotice, setDraftStorageNotice] = useState("");
+  const repositoryRef = useRef<DemoRepository | null>(null);
+  const paymentCommandRef = useRef<string | null>(null);
+  const [preferencesReady, setPreferencesReady] = useState(false);
+  const {
+    academicStages, classDefinitions, roomDefinitions, classes, rooms, groups,
+    students, paymentSettings, paymentRuleVersions, paymentRecords, billingRuns,
+  } = useMemo(() => demoState ?? emptyDemoData(), [demoState]);
   const [selectedClassId, setSelectedClassId] = useState(firstClassId);
   const [selectedGroupId, setSelectedGroupId] = useState(firstGroupId);
   const [studentSearch, setStudentSearch] = useState("");
@@ -288,7 +262,7 @@ export function SchoolAdminDemo({
   );
   const [paymentAlertFilter, setPaymentAlertFilter] =
     useState<PaymentAlertFilter>("all");
-  const [financeSettingsDraft, setFinanceSettingsDraft] =
+  const [, setFinanceSettingsDraft] =
     useState<FinanceSettingsDraft>(() => buildFinanceSettingsDraft(initialPaymentSettings));
   const [academicStageDraft, setAcademicStageDraft] = useState<AcademicStageDraft>({
     name: "",
@@ -383,8 +357,12 @@ export function SchoolAdminDemo({
 
   useEffect(() => {
     const restoreSessionId = window.setTimeout(() => {
-      const savedSession = window.sessionStorage.getItem(demoSessionKey);
-      const savedSidebar = window.localStorage.getItem(sidebarPreferenceKey);
+      let savedSession: string | null = null;
+      let savedSidebar: string | null = null;
+      try {
+        savedSession = window.sessionStorage.getItem(demoSessionKey);
+        savedSidebar = window.localStorage.getItem(sidebarPreferenceKey);
+      } catch { /* As preferências não substituem a leitura obrigatória dos dados. */ }
 
       if (savedSession) {
         try {
@@ -397,17 +375,19 @@ export function SchoolAdminDemo({
             setAccountName(session.accountName ?? "");
           }
         } catch {
-          window.sessionStorage.removeItem(demoSessionKey);
+          try { window.sessionStorage.removeItem(demoSessionKey); } catch { /* Sessão opcional. */ }
         }
       }
 
       setSidebarCollapsed(savedSidebar === "true");
+      setPreferencesReady(true);
     }, 0);
 
     return () => window.clearTimeout(restoreSessionId);
   }, []);
 
   useEffect(() => {
+    if (!preferencesReady) return;
     try {
       window.localStorage.setItem(
         sidebarPreferenceKey,
@@ -416,105 +396,31 @@ export function SchoolAdminDemo({
     } catch {
       // A preferência visual é opcional e não deve impedir o uso da demo.
     }
-  }, [sidebarCollapsed]);
+  }, [sidebarCollapsed, preferencesReady]);
 
   useEffect(() => {
     const loadStateId = window.setTimeout(() => {
-      const storedState = loadStoredState();
-
-      if (!storedState) {
+      const repository = createLocalDemoRepository({
+        getItem: (key) => window.localStorage.getItem(key),
+        setItem: (key, value) => window.localStorage.setItem(key, value),
+      });
+      repositoryRef.current = repository;
+      const loaded = repository.load();
+      if (loaded.status !== "ready") {
+        if (loaded.status === "error") {
+          setStorageLoadError(loaded.message);
+          setOriginalStorageRaw(loaded.originalRaw);
+        }
         setStorageReady(true);
         return;
       }
-
-      const loadedMigrationTimestamp =
-        storedState.financeMigrationPreview?.createdAt ?? nowIso();
-      const loadedSafetyExport =
-        storedState.legacySafetyExport ??
-        createLegacySafetyExport(storedState, {
-          storageKey,
-          migratedAt: loadedMigrationTimestamp,
-        });
-      const loadedAcademicStages = storedArray(
-        storedState.academicStages,
-        initialAcademicStages,
-      );
-      const loadedClassDefinitions = storedArray(
-        storedState.classDefinitions,
-        initialClassDefinitions,
-      );
-      const loadedRoomDefinitions = storedArray(
-        storedState.roomDefinitions,
-        initialRoomDefinitions,
-      );
-      const loadedClasses = storedArray(storedState.classes, initialClasses).map(
-        (schoolClass) => ({
-          ...schoolClass,
-          // As políticas v2 são associadas à classe, não ao ciclo de ensino.
-          educationLevelId: schoolClass.id,
-        }),
-      );
-      const loadedRooms = storedArray(storedState.rooms, initialRooms);
-      const loadedGroups = storedArray(storedState.groups, initialGroups);
-      const loadedPaymentSettings =
-        storedState.paymentSettings ?? initialPaymentSettings;
-      const rawPaymentRecords = storedArray(
-        storedState.paymentRecords,
-        initialPaymentRecords,
-      );
-      const loadedBaseStudents = normalizeStudentsForEnrollmentPolicy(
-        storedArray(storedState.students, initialStudents).map((student) => {
-          return normalizeStudentForPolicy(
-            { ...student, educationLevelId: student.classId },
-            loadedPaymentSettings,
-          );
-        }),
-        loadedPaymentSettings,
-      );
-      const loadedPaymentMonths = getMonthsInRange(
-        loadedPaymentSettings.startMonth,
-        loadedPaymentSettings.endMonth,
-      );
-      const loadedPaymentRuleVersions = buildDefaultPaymentRuleVersions(
-        loadedBaseStudents,
-        loadedClasses,
-        loadedPaymentSettings,
-        storedArray(storedState.paymentRuleVersions, []),
-      );
-      const loadedPaymentRecords = loadedBaseStudents.map((student) => {
-        const rawRecord =
-          rawPaymentRecords.find((record) => record.studentId === student.id) ??
-          buildPaymentRecord(student.id);
-
-        return normalizePaymentRecord(
-          rawRecord,
-          student,
-          loadedPaymentMonths,
-          loadedPaymentSettings,
-          loadedPaymentRuleVersions,
-        );
-      });
-      const loadedStudents = loadedBaseStudents.map((student) => {
-        const paymentRecord =
-          loadedPaymentRecords.find((record) => record.studentId === student.id) ??
-          buildPaymentRecord(student.id);
-        const ledger = buildLedger(
-          student,
-          paymentRecord,
-          loadedPaymentMonths,
-          loadedPaymentSettings,
-          undefined,
-          loadedPaymentRuleVersions,
-        );
-        const registrationStatus: Student["registrationStatus"] =
-          ledger.registrationBalance === 0 ? "paid" : "pending";
-
-        return {
-          ...student,
-          registrationStatus,
-        };
-      });
-      const loadedBillingRuns = storedArray(storedState.billingRuns, []);
+      const state = loaded.state;
+      setDemoState(state);
+      const {
+        academicStages: loadedAcademicStages, classDefinitions: loadedClassDefinitions,
+        roomDefinitions: loadedRoomDefinitions, classes: loadedClasses, rooms: loadedRooms,
+        groups: loadedGroups, students: loadedStudents, paymentSettings: loadedPaymentSettings,
+      } = state;
       const loadedFirstClassId = loadedClasses[0]?.id ?? "";
       const loadedFirstGroupId =
         loadedGroups.find((group) => group.classId === loadedFirstClassId)?.id ??
@@ -524,19 +430,6 @@ export function SchoolAdminDemo({
       const loadedFirstRoom = activeRooms(loadedRooms)[0];
       const loadedFirstStageId = loadedAcademicStages[0]?.id ?? "";
 
-      setAcademicStages(loadedAcademicStages);
-      setClassDefinitions(loadedClassDefinitions);
-      setRoomDefinitions(loadedRoomDefinitions);
-      setClasses(loadedClasses);
-      setRooms(loadedRooms);
-      setGroups(loadedGroups);
-      setStudents(loadedStudents);
-      setPaymentSettings(loadedPaymentSettings);
-      setPaymentRuleVersions(loadedPaymentRuleVersions);
-      setPaymentRecords(loadedPaymentRecords);
-      setBillingRuns(loadedBillingRuns);
-      setMigrationValidationTimestamp(loadedMigrationTimestamp);
-      setLegacySafetyExport(loadedSafetyExport);
       setSelectedClassId(loadedFirstClassId);
       setSelectedGroupId(loadedFirstGroupId);
       setBillingMonthKey(loadedPaymentSettings.startMonth);
@@ -586,11 +479,43 @@ export function SchoolAdminDemo({
         paidOn: draft.paidOn || today(),
         allowFutureAllocation: false,
       }));
+      const drafts = readDemoDrafts({
+        getItem: (key) => window.sessionStorage.getItem(key),
+        setItem: (key, value) => window.sessionStorage.setItem(key, value),
+      }, state.datasetId);
+      if (drafts) {
+        setPaymentDraft(drafts.payment);
+        setEnrollmentDraft(drafts.enrollment);
+        paymentCommandRef.current = drafts.paymentCommandId;
+      }
       setStorageReady(true);
     }, 0);
 
     return () => window.clearTimeout(loadStateId);
   }, []);
+
+  useEffect(() => {
+    if (!storageReady || !demoState || activeProfile !== "secretaria") return;
+    const saveDraft = () => writeDemoDrafts(window.sessionStorage, {
+      datasetId: demoState.datasetId, payment: paymentDraft, enrollment: enrollmentDraft,
+      paymentCommandId: paymentCommandRef.current,
+    });
+    const timer = window.setTimeout(() => {
+      try {
+        saveDraft();
+        setDraftStorageNotice("");
+      } catch {
+        setDraftStorageNotice("O rascunho permanece neste ecrã, mas não pôde ser guardado para reabertura.");
+      }
+    }, 0);
+    const flush = () => { try { saveDraft(); } catch { /* O formulário continua conservado em memória. */ } };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [storageReady, demoState, activeProfile, paymentDraft, enrollmentDraft]);
 
   const effectivePaymentRuleVersions = useMemo(
     () =>
@@ -602,80 +527,6 @@ export function SchoolAdminDemo({
       ),
     [classes, paymentRuleVersions, paymentSettings, students],
   );
-
-  useEffect(() => {
-    if (!storageReady) {
-      return;
-    }
-
-    const migrationResult = migrateLegacyStoredState(
-      {
-        academicStages,
-        classDefinitions,
-        roomDefinitions,
-        classes,
-        rooms,
-        groups,
-        students,
-        paymentSettings,
-        paymentRuleVersions: effectivePaymentRuleVersions,
-        paymentRecords,
-        billingRuns,
-      },
-      {
-        storageKey,
-        migratedAt: migrationValidationTimestamp,
-        recordedBy: "Sistema",
-      },
-    );
-
-    try {
-      window.localStorage.setItem(
-        storageKey,
-        JSON.stringify({
-        schemaVersion: demoSnapshotVersion,
-        savedAt: nowIso(),
-        academicStages,
-        classDefinitions,
-        roomDefinitions,
-        classes,
-        rooms,
-        groups,
-        students,
-        paymentSettings,
-        paymentRuleVersions: effectivePaymentRuleVersions,
-        paymentRecords,
-        billingRuns,
-        financeBook: migrationResult.financeBook,
-        financeMigrationPreview: migrationResult.preview,
-        legacySafetyExport: legacySafetyExport ?? migrationResult.safetyExport,
-        } satisfies StoredDemoState),
-      );
-    } catch {
-      const noticeId = window.setTimeout(() => {
-        setStorageToolsNotice(
-          "Não foi possível guardar no navegador. Exporte os dados antes de fechar esta página.",
-        );
-      }, 0);
-
-      return () => window.clearTimeout(noticeId);
-    }
-  }, [
-    academicStages,
-    billingRuns,
-    classDefinitions,
-    classes,
-    effectivePaymentRuleVersions,
-    groups,
-    paymentRecords,
-    paymentSettings,
-    legacySafetyExport,
-    migrationValidationTimestamp,
-    roomDefinitions,
-    rooms,
-    storageReady,
-    students,
-  ]);
 
   useEffect(() => {
     if (!activeProfile) {
@@ -1213,7 +1064,7 @@ export function SchoolAdminDemo({
   }
 
   function signOut() {
-    window.sessionStorage.removeItem(demoSessionKey);
+    try { window.sessionStorage.removeItem(demoSessionKey); } catch { /* Sair continua disponível. */ }
     setActiveProfile(null);
     setAccountName("");
     setMobileMenuOpen(false);
@@ -1228,76 +1079,104 @@ export function SchoolAdminDemo({
     }
   }
 
-  function exportDemoData() {
+  function showStorageError(error: unknown, onError = setStorageToolsNotice) {
+    const message = error instanceof Error ? error.message : "Não foi possível guardar os dados.";
+    setStorageToolsError(true);
+    setStorageToolsNotice(message);
+    onError(message);
+  }
+
+  function commitChanges(patch: Partial<DemoData>, action: FinanceAction = "manage-academic-structure") {
     try {
-      const rawState = window.localStorage.getItem(storageKey);
-
-      if (!rawState) {
-        throw new Error("Ainda não existem dados locais para exportar.");
+      if (!repositoryRef.current || !demoState || activeProfile !== "secretaria") {
+        throw new Error("Entre como Secretaria e aguarde o carregamento dos dados.");
       }
-
-      const state = parseDemoSnapshot(rawState);
-      const contents = serializeDemoSnapshot(state);
-      const blob = new Blob([contents], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `lss-backup-${today()}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-      setStorageToolsNotice("Exportação concluída. O ficheiro foi descarregado.");
+      const result = repositoryRef.current.commit({
+        role: activeProfile, action, expected: demoState,
+        command: { id: crypto.randomUUID(), payload: { revision: demoState.revision, fields: Object.keys(patch) } },
+        change: () => ({ patch }),
+      });
+      setDemoState(result.state);
+      setStorageToolsError(false);
+      setStorageToolsNotice("");
+      return true;
     } catch (error) {
-      setStorageToolsNotice(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível exportar os dados.",
-      );
+      showStorageError(error);
+      return false;
     }
   }
 
-  async function importDemoData(file?: File) {
-    if (!file) {
-      return;
-    }
+  function updateValue<T,>(current: T, update: T | ((value: T) => T)): T {
+    return typeof update === "function" ? (update as (value: T) => T)(current) : update;
+  }
 
+  function downloadJson(contents: string, filename: string) {
+    const blob = new Blob([contents], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportDemoData() {
     try {
-      const importedState = parseDemoSnapshot(await file.text());
-      const confirmed = window.confirm(
-        "Importar este ficheiro vai substituir os dados locais actuais. Deseja continuar?",
-      );
+      if (originalStorageRaw !== undefined && storageLoadError) {
+        downloadJson(originalStorageRaw, `lss-original-${today()}.json`);
+        return;
+      }
+      const loaded = repositoryRef.current?.load();
+      if (!loaded || loaded.status !== "ready") throw new Error("Não existem dados legíveis para exportar.");
+      downloadJson(serializeDemoSnapshot(loaded.state), `lss-backup-${today()}.json`);
+      setStorageToolsError(false);
+      setStorageToolsNotice("Exportação concluída. O ficheiro foi descarregado.");
+    } catch (error) { showStorageError(error); }
+  }
 
+  async function importDemoData(file?: File) {
+    if (!file || activeProfile !== "secretaria" || !repositoryRef.current) return;
+    try {
+      const raw = await file.text();
+      const incoming = hydrateDemoState(parseDemoSnapshot(raw), raw, nowIso(), crypto.randomUUID());
+      const confirmed = window.confirm(
+        `O ficheiro contém ${incoming.students.length} alunos, ${incoming.groups.length} turmas e ${incoming.paymentRecords.length} registos financeiros. ` +
+        "Vai substituir o cenário local. O original ilegível, se existir, será conservado. Deseja continuar?",
+      );
       if (!confirmed) {
         setStorageToolsNotice("Importação cancelada; os dados actuais foram preservados.");
         return;
       }
-
-      window.localStorage.setItem(storageKey, JSON.stringify(importedState));
+      const next = demoState
+        ? repositoryRef.current.replace(demoState, incoming, activeProfile)
+        : originalStorageRaw !== undefined
+          ? repositoryRef.current.recover(originalStorageRaw, incoming, activeProfile)
+          : repositoryRef.current.initialize(incoming);
+      setDemoState(next);
       window.location.reload();
-    } catch (error) {
-      setStorageToolsNotice(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível importar o ficheiro.",
-      );
-    }
+    } catch (error) { showStorageError(error); }
+  }
+
+  function initializeDemo(kind: "example" | "empty") {
+    try {
+      if (!repositoryRef.current || activeProfile !== "secretaria") return;
+      const state = createDemoState(kind, { now: nowIso(), datasetId: crypto.randomUUID() });
+      setDemoState(repositoryRef.current.initialize(state));
+      window.location.reload();
+    } catch (error) { showStorageError(error); }
   }
 
   function resetDemoData() {
-    const confirmed = window.confirm(
-      "Repor os dados iniciais vai apagar apenas as alterações guardadas neste navegador. Exporte primeiro se quiser conservar uma cópia. Deseja continuar?",
-    );
-
-    if (!confirmed) {
+    if (!demoState || activeProfile !== "secretaria" || !repositoryRef.current) return;
+    if (!window.confirm("Repor a demo vai substituir o cenário local. Exporte primeiro para conservar uma cópia. Deseja continuar?")) {
       setStorageToolsNotice("Reposição cancelada; os dados actuais foram preservados.");
       return;
     }
-
     try {
-      window.localStorage.removeItem(storageKey);
+      const incoming = createDemoState("example", { now: nowIso(), datasetId: crypto.randomUUID() });
+      setDemoState(repositoryRef.current.replace(demoState, incoming, activeProfile));
       window.location.reload();
-    } catch {
-      setStorageToolsNotice("Não foi possível repor os dados no navegador.");
-    }
+    } catch (error) { showStorageError(error); }
   }
 
   function selectClass(classId: string) {
@@ -1474,7 +1353,7 @@ export function SchoolAdminDemo({
     };
     const nextStages = [...academicStages, newStage];
 
-    setAcademicStages(nextStages);
+    if (!commitChanges({ academicStages: updateValue(academicStages, nextStages) }, "manage-academic-structure")) return;
     setClassDefinitionDraft((draft) => ({
       ...draft,
       stageId: draft.stageId || newStage.id,
@@ -1520,7 +1399,7 @@ export function SchoolAdminDemo({
     };
     const nextDefinitions = [...classDefinitions, newDefinition];
 
-    setClassDefinitions(nextDefinitions);
+    if (!commitChanges({ classDefinitions: updateValue(classDefinitions, nextDefinitions) }, "manage-academic-structure")) return;
     setClassDraft((draft) => ({
       ...draft,
       definitionId: draft.definitionId || newDefinition.id,
@@ -1563,7 +1442,7 @@ export function SchoolAdminDemo({
     };
     const nextDefinitions = [...roomDefinitions, newDefinition];
 
-    setRoomDefinitions(nextDefinitions);
+    if (!commitChanges({ roomDefinitions: updateValue(roomDefinitions, nextDefinitions) }, "manage-academic-structure")) return;
     setRoomDraft((draft) => ({
       ...draft,
       definitionId: draft.definitionId || newDefinition.id,
@@ -1576,7 +1455,7 @@ export function SchoolAdminDemo({
       return;
     }
 
-    setAcademicStages((items) =>
+    if (!commitChanges({ academicStages: updateValue(academicStages, (items) =>
       items.map((stage) =>
         stage.id === stageId
           ? {
@@ -1584,8 +1463,7 @@ export function SchoolAdminDemo({
               status: stage.status === "active" ? "inactive" : "active",
             }
           : stage,
-      ),
-    );
+      )) }, "manage-academic-structure")) return;
   }
 
   function toggleClassDefinitionStatus(definitionId: string) {
@@ -1593,7 +1471,7 @@ export function SchoolAdminDemo({
       return;
     }
 
-    setClassDefinitions((items) =>
+    if (!commitChanges({ classDefinitions: updateValue(classDefinitions, (items) =>
       items.map((definition) =>
         definition.id === definitionId
           ? {
@@ -1601,8 +1479,7 @@ export function SchoolAdminDemo({
               status: definition.status === "active" ? "inactive" : "active",
             }
           : definition,
-      ),
-    );
+      )) }, "manage-academic-structure")) return;
   }
 
   function toggleRoomDefinitionStatus(definitionId: string) {
@@ -1610,7 +1487,7 @@ export function SchoolAdminDemo({
       return;
     }
 
-    setRoomDefinitions((items) =>
+    if (!commitChanges({ roomDefinitions: updateValue(roomDefinitions, (items) =>
       items.map((definition) =>
         definition.id === definitionId
           ? {
@@ -1618,8 +1495,7 @@ export function SchoolAdminDemo({
               status: definition.status === "active" ? "inactive" : "active",
             }
           : definition,
-      ),
-    );
+      )) }, "manage-academic-structure")) return;
   }
 
   function submitRoom(event: FormEvent<HTMLFormElement>) {
@@ -1656,7 +1532,7 @@ export function SchoolAdminDemo({
     };
     const nextRooms = [...rooms, newRoom];
 
-    setRooms(nextRooms);
+    if (!commitChanges({ rooms: updateValue(rooms, nextRooms) }, "manage-academic-structure")) return;
     setGroupDraft((draft) => ({
       ...draft,
       roomId: draft.roomId || newRoom.id,
@@ -1666,6 +1542,7 @@ export function SchoolAdminDemo({
   }
 
   function openPaymentEntry(studentId?: string) {
+    paymentCommandRef.current = null;
     setActiveView("payments");
     setActivePaymentSection("entry");
 
@@ -1713,6 +1590,7 @@ export function SchoolAdminDemo({
       studentId: string;
     },
   ) {
+    paymentCommandRef.current = null;
     setActiveView("payments");
     setActivePaymentSection("entry");
     setSelectedFinanceCell(null);
@@ -1784,7 +1662,7 @@ export function SchoolAdminDemo({
 
     const createdAt = nowIso();
 
-    setPaymentRecords((records) => {
+    if (!commitChanges({ paymentRecords: updateValue(paymentRecords, (records) => {
       const nextRecords = [...records];
 
       targetRows.forEach((row) => {
@@ -1810,7 +1688,7 @@ export function SchoolAdminDemo({
       });
 
       return nextRecords;
-    });
+    }) }, "publish-charges")) return;
     setMiscellaneousNotice(
       `${targetRows.length} cobranças criadas. Total previsto: ${formatCurrency(
         targetRows.length * amount,
@@ -1865,7 +1743,7 @@ export function SchoolAdminDemo({
     };
     const nextClasses = [...classes, newClass];
 
-    setClasses(nextClasses);
+    if (!commitChanges({ classes: updateValue(classes, nextClasses) }, "manage-academic-structure")) return;
     setSelectedClassId(newClass.id);
     setSelectedGroupId("");
     resetGroupDraft(newClass.id);
@@ -1907,7 +1785,7 @@ export function SchoolAdminDemo({
       createdAt: today(),
     };
 
-    setGroups((items) => [...items, newGroup]);
+    if (!commitChanges({ groups: updateValue(groups, (items) => [...items, newGroup]) }, "manage-academic-structure")) return;
     setSelectedClassId(newGroup.classId);
     setSelectedGroupId(newGroup.id);
     setEnrollmentDraft((draft) => ({
@@ -2006,8 +1884,11 @@ export function SchoolAdminDemo({
       registrationStatus: registrationBalance <= 0 ? "paid" : "pending",
     };
 
-    setStudents((items) => [...items, newStudent]);
-    setPaymentRecords((items) => [...items, initialLedger.normalizedRecord]);
+    if (!commitChanges({
+      students: [...students, newStudent],
+      paymentRecords: [...paymentRecords, initialLedger.normalizedRecord],
+    }, "manage-enrollment")) return;
+    paymentCommandRef.current = null;
     setPaymentDraft((draft) => ({
       ...draft,
       studentId: newStudent.id,
@@ -2053,7 +1934,7 @@ export function SchoolAdminDemo({
       return;
     }
 
-    setClasses((items) =>
+    if (!commitChanges({ classes: updateValue(classes, (items) =>
       items.map((schoolClass) =>
         schoolClass.id === classId
           ? {
@@ -2061,8 +1942,7 @@ export function SchoolAdminDemo({
               status: schoolClass.status === "active" ? "inactive" : "active",
             }
           : schoolClass,
-      ),
-    );
+      )) }, "manage-academic-structure")) return;
   }
 
   function toggleGroupStatus(groupId: string) {
@@ -2070,7 +1950,7 @@ export function SchoolAdminDemo({
       return;
     }
 
-    setGroups((items) =>
+    if (!commitChanges({ groups: updateValue(groups, (items) =>
       items.map((group) =>
         group.id === groupId
           ? {
@@ -2078,8 +1958,7 @@ export function SchoolAdminDemo({
               status: group.status === "active" ? "inactive" : "active",
             }
           : group,
-      ),
-    );
+      )) }, "manage-academic-structure")) return;
   }
 
   function toggleRoomStatus(roomId: string) {
@@ -2087,7 +1966,7 @@ export function SchoolAdminDemo({
       return;
     }
 
-    setRooms((items) =>
+    if (!commitChanges({ rooms: updateValue(rooms, (items) =>
       items.map((room) =>
         room.id === roomId
           ? {
@@ -2095,8 +1974,7 @@ export function SchoolAdminDemo({
               status: room.status === "active" ? "inactive" : "active",
             }
           : room,
-      ),
-    );
+      )) }, "manage-academic-structure")) return;
   }
 
   function changeEnrollmentClass(classId: string) {
@@ -2107,59 +1985,6 @@ export function SchoolAdminDemo({
       classId,
       groupId: nextGroup?.id ?? "",
     }));
-  }
-
-  function submitFinanceSettings(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!guardMutation("manage-payment-rules", setFinanceSettingsNotice)) {
-      return;
-    }
-
-    const nextSettings: PaymentSettings = {
-      academicYear: financeSettingsDraft.academicYear.trim() || "2026",
-      inscriptionRenewalFee: parseMoney(
-        financeSettingsDraft.inscriptionRenewalFee,
-      ),
-      monthlyFee: parseMoney(financeSettingsDraft.monthlyFee),
-      startMonth: financeSettingsDraft.startMonth,
-      endMonth: financeSettingsDraft.endMonth,
-      firstPenaltyDay: Math.max(
-        1,
-        Math.min(31, Number(financeSettingsDraft.firstPenaltyDay) || 1),
-      ),
-      firstPenaltyAmount: parseMoney(financeSettingsDraft.firstPenaltyAmount),
-      secondPenaltyDay: Math.max(
-        1,
-        Math.min(31, Number(financeSettingsDraft.secondPenaltyDay) || 1),
-      ),
-      secondPenaltyAmount: parseMoney(financeSettingsDraft.secondPenaltyAmount),
-    };
-
-    setPaymentSettings(nextSettings);
-    setPaymentRuleVersions(
-      buildDefaultPaymentRuleVersions(
-        students,
-        classes,
-        nextSettings,
-        paymentRuleVersions,
-      ),
-    );
-    setBillingMonthKey(nextSettings.startMonth);
-    setPaymentDraft((draft) => ({
-      ...draft,
-      monthKey: nextSettings.startMonth,
-      targetChargeId: draft.category === "miscellaneous" ? draft.targetChargeId : "",
-      amount:
-        draft.category === "tuition"
-          ? String(nextSettings.monthlyFee)
-          : draft.category === "registration"
-            ? String(nextSettings.inscriptionRenewalFee)
-            : draft.amount,
-    }));
-    setFinanceSettingsNotice(
-      "Parametros padrao actualizados; regras por nivel mantem versoes historicas.",
-    );
   }
 
   function openPaymentRuleDialog(ruleId: string) {
@@ -2240,16 +2065,14 @@ export function SchoolAdminDemo({
       return;
     }
 
-    setPaymentRuleVersions(
-      createPaymentPolicyVersions(
+    if (!commitChanges({ paymentRuleVersions: updateValue(paymentRuleVersions, createPaymentPolicyVersions(
         effectivePaymentRuleVersions,
         {
           ...paymentRuleDraft,
           validFrom: `${paymentRuleDraft.academicYearId.trim()}-01-01`,
         },
         today(),
-      ),
-    );
+      )) }, "manage-payment-rules")) return;
     setPaymentRuleDraft(null);
     setFinanceSettingsNotice(
       "Política guardada por classe e ano lectivo. As versões anteriores ficaram no histórico.",
@@ -2307,7 +2130,7 @@ export function SchoolAdminDemo({
       nowIso(),
     );
 
-    setStudents((items) =>
+    if (!commitChanges({ students: updateValue(students, (items) =>
       items.map((student) =>
         student.id === financeProfileDraft.studentId
           ? {
@@ -2315,8 +2138,7 @@ export function SchoolAdminDemo({
               financialProfile: nextProfile,
             }
           : student,
-      ),
-    );
+      )) }, "manage-financial-aid")) return;
     setFinanceProfileDraft((draft) => ({
       ...draft,
       discountPercent: String(nextProfile.discountPercent),
@@ -2369,8 +2191,7 @@ export function SchoolAdminDemo({
       createdAt: nowIso(),
     };
 
-    setBillingRuns((items) => [newRun, ...items]);
-    setPaymentRecords((items) => {
+    const nextRecords = updateValue(paymentRecords, (items) => {
       const nextItems = [...items];
 
       [...chargedRows, ...exemptedRows].forEach((row) => {
@@ -2395,6 +2216,7 @@ export function SchoolAdminDemo({
 
       return nextItems;
     });
+    if (!commitChanges({ billingRuns: [newRun, ...billingRuns], paymentRecords: nextRecords }, "publish-charges")) return;
     setBillingNotice(
       `${selectedMonth?.label ?? "Mes"} gerado: ${newRun.studentIds.length} alunos cobrados e ${newRun.exemptedStudentIds.length} isentos.`,
     );
@@ -2402,9 +2224,9 @@ export function SchoolAdminDemo({
 
   function showPaymentReceipt(studentId: string, paymentId: string) {
     const row = allPaymentRows.find((item) => item.student.id === studentId);
-    const receipt = row
+    const receipt = demoState?.receipts.find((item) => item.studentId === studentId && item.paymentId === paymentId) ?? (row
       ? buildPaymentReceiptFromRecord(row.student, row.record, paymentId)
-      : undefined;
+      : undefined);
 
     if (!receipt) {
       setBillingNotice("Recibo indisponivel para este pagamento.");
@@ -2476,13 +2298,12 @@ export function SchoolAdminDemo({
       return;
     }
 
-    setPaymentRecords((items) =>
+    if (!commitChanges({ paymentRecords: updateValue(paymentRecords, (items) =>
       items.some((record) => record.studentId === row.student.id)
         ? items.map((record) =>
             record.studentId === row.student.id ? result.record : record,
           )
-        : [...items, result.record],
-    );
+        : [...items, result.record]) }, "correct-payment")) return;
     setPaymentCorrectionTarget(null);
     setPaymentCorrectionDraft({ paymentId: "", amount: "0", reason: "" });
     setBillingNotice(
@@ -2490,101 +2311,69 @@ export function SchoolAdminDemo({
     );
   }
 
+  function changePaymentDraft(draft: PaymentLaunchDraft) {
+    paymentCommandRef.current = null;
+    setPaymentDraft(draft);
+  }
+
   function launchPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!guardMutation("record-payment", setBillingNotice)) return;
+    try {
+      if (!repositoryRef.current || !demoState || activeProfile !== "secretaria") return;
+      paymentCommandRef.current ??= crypto.randomUUID();
+      const committed = confirmDemoPayment(repositoryRef.current, {
+        expected: demoState, role: activeProfile, commandId: paymentCommandRef.current,
+        draft: paymentDraft, recordedAt: nowIso(),
+      });
+      setDemoState(committed.state);
+      setStorageToolsError(false);
+      setStorageToolsNotice("");
+      setPaymentReceipt(committed.receipt);
+      setBillingNotice(`Pagamento registado. Recibo ${committed.receipt.id} disponível.`);
+      setPaymentDraft((draft) => ({ ...draft, amount: "0", description: "", allowFutureAllocation: false }));
+    } catch (error) { showStorageError(error, setBillingNotice); }
+  }
 
-    if (!guardMutation("record-payment", setBillingNotice)) {
-      return;
-    }
-
-    const amount = parseMoney(paymentDraft.amount);
-    const student = students.find((item) => item.id === paymentDraft.studentId);
-    const paidOn = paymentDraft.paidOn || today();
-
-    if (!paymentDraft.studentId || amount <= 0 || !student) {
-      return;
-    }
-
-    if (paidOn > today()) {
-      setBillingNotice("A data efectiva do pagamento nao pode estar no futuro.");
-      return;
-    }
-
-    const existingRecord =
-      paymentRecords.find((record) => record.studentId === paymentDraft.studentId) ??
-      buildPaymentRecord(paymentDraft.studentId);
-    const recordedAt = nowIso();
-    const preview = previewStudentPayment({
-      record: existingRecord,
-      student,
-      months: paymentMonths,
-      settings: paymentSettings,
-      paymentRuleVersions: effectivePaymentRuleVersions,
-      category: paymentDraft.category,
-      monthKey: paymentDraft.monthKey,
-      targetChargeId: paymentDraft.targetChargeId,
-      amount,
-      paidOn,
-      effectivePaymentDate: paidOn,
-      recordedAt,
-      recordedBy: selectedProfile.title,
-      method: paymentDraft.method,
-      description: paymentDraft.description.trim(),
-      allowFutureAllocation: paymentDraft.allowFutureAllocation,
-    });
-    const nextRecord = applyStudentPaymentPreview(preview);
-    const receipt = buildPaymentReceipt(student, preview);
-
-    setPaymentRecords((items) => {
-      if (items.some((record) => record.studentId === paymentDraft.studentId)) {
-        return items.map((record) =>
-          record.studentId === paymentDraft.studentId ? nextRecord : record,
-        );
-      }
-
-      return [...items, nextRecord];
-    });
-
-    const registrationStatus: Student["registrationStatus"] =
-      buildLedger(
-        student,
-        nextRecord,
-        paymentMonths,
-        paymentSettings,
-        undefined,
-        effectivePaymentRuleVersions,
-      ).registrationBalance === 0
-        ? "paid"
-        : "pending";
-
-    setStudents((items) =>
-      items.map((item) =>
-        item.id === paymentDraft.studentId
-          ? { ...item, registrationStatus }
-          : item,
-      ),
-    );
-
-    setPaymentReceipt(receipt);
-    setBillingNotice(
-      `Pagamento ${preview.payment.id} registado. Recibo ${receipt.id} disponivel.`,
-    );
-    setPaymentDraft((draft) => ({
-      ...draft,
-      amount:
-        draft.category === "tuition"
-          ? String(paymentSettings.monthlyFee)
-          : draft.category === "registration"
-            ? String(paymentSettings.inscriptionRenewalFee)
-            : "0",
-      targetChargeId: "",
-      paidOn: today(),
-      description: draft.category === "miscellaneous" ? "" : draft.description,
-      allowFutureAllocation: false,
-    }));
+  if (!storageReady) {
+    return <main className="grid min-h-screen place-items-center p-6" role="status">A carregar os dados do LSS…</main>;
   }
   if (!activeProfile) {
     return renderProfilePortal();
+  }
+
+  if (storageLoadError || !demoState) {
+    return (
+      <main className="grid min-h-screen place-items-center bg-slate-50 p-6">
+        <section className="lss-responsive-card" aria-label="Preparar dados do LSS">
+          <h1 className="text-xl font-bold">{storageLoadError ? "Não foi possível abrir os dados" : "Preparar o LSS"}</h1>
+          <p className="mt-3 text-sm text-slate-600">
+            {storageLoadError || "Escolha uma escola de exemplo ou comece uma configuração vazia. Os dados ficam neste navegador."}
+          </p>
+          {storageLoadError && <p className="mt-3 text-sm">O original foi conservado. Pode descarregá-lo e importar uma cópia válida.</p>}
+          {activeProfile === "secretaria" ? (
+            <div className="lss-actions mt-5">
+              {!storageLoadError && <>
+                <PrimaryButton onClick={() => initializeDemo("example")}>Abrir escola de exemplo</PrimaryButton>
+                <SecondaryButton onClick={() => initializeDemo("empty")}>Configurar do início</SecondaryButton>
+              </>}
+              {originalStorageRaw !== undefined && <SecondaryButton onClick={exportDemoData}>Descarregar original</SecondaryButton>}
+              <label className="inline-flex min-h-11 cursor-pointer items-center rounded-md border p-3 text-sm font-semibold">
+                Importar cópia válida
+                <input className="sr-only" type="file" accept="application/json,.json" onChange={(event) => {
+                  void importDemoData(event.target.files?.[0]); event.currentTarget.value = "";
+                }} />
+              </label>
+            </div>
+          ) : <p className="mt-4 text-sm">A Secretaria deve preparar ou recuperar o cenário antes da consulta pelo Director.</p>}
+          {storageToolsNotice && <p role="alert" className="mt-4 text-sm text-rose-800">{storageToolsNotice}</p>}
+          <div className="lss-actions mt-4">
+            <SecondaryButton onClick={() => window.location.reload()}>Tentar novamente</SecondaryButton>
+            <SecondaryButton onClick={signOut}>Sair</SecondaryButton>
+          </div>
+        </section>
+      </main>
+    );
   }
 
   return renderWorkspace();
@@ -2602,6 +2391,7 @@ export function SchoolAdminDemo({
           <h1 className="mt-7 text-4xl font-extrabold tracking-tight text-[#0f5d55] sm:mt-8 sm:text-6xl">
             {institutionName}
           </h1>
+          <p className="mt-4 text-sm text-slate-600">Demonstração com contas de exemplo. Os dados ficam neste navegador.</p>
 
           <div className="mx-auto mt-12 grid max-w-3xl gap-4 sm:mt-16 sm:grid-cols-2 sm:gap-7">
             <button
@@ -2767,6 +2557,7 @@ export function SchoolAdminDemo({
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <StateLabel tone="info">Demo</StateLabel>
               <div className="hidden text-right sm:block">
                 <p className="text-sm font-semibold">{accountName || selectedProfile.title}</p>
                 <p className="text-xs text-slate-500">{selectedProfile.title}</p>
@@ -2866,6 +2657,10 @@ export function SchoolAdminDemo({
             </header>
 
             <div className="min-w-0 px-4 py-6 sm:px-6 lg:px-8">
+              {storageToolsError && <p role="alert" className="mb-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">{storageToolsNotice}</p>}
+              {draftStorageNotice && <p role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{draftStorageNotice}</p>}
+              {financeSettingsNotice && <p role="status" className="mb-4 rounded-md bg-slate-50 p-3 text-sm">{financeSettingsNotice}</p>}
+              {demoState?.migrationWarnings?.map((warning) => <p key={warning} role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{warning}</p>)}
               {activeView === "overview" && renderOverview()}
               {activeView === "catalog" && renderCatalog()}
               {activeView === "classes" && renderClasses()}
@@ -3285,7 +3080,7 @@ export function SchoolAdminDemo({
                 importar um ficheiro compatível ou repor o conjunto inicial.
               </p>
             </div>
-            <StateLabel tone="active">Dados guardados</StateLabel>
+            <StateLabel tone={storageToolsError ? "warning" : "active"}>{storageToolsError ? "Dados anteriores conservados" : "Dados guardados"}</StateLabel>
           </div>
           <div className="lss-actions mt-5">
             <SecondaryButton onClick={exportDemoData}>Exportar JSON</SecondaryButton>
@@ -4239,6 +4034,7 @@ export function SchoolAdminDemo({
                   <select
                     value={billingMonthKey}
                     onChange={(event) => {
+                      paymentCommandRef.current = null;
                       setBillingMonthKey(event.target.value);
                       setPaymentDraft((draft) => ({
                         ...draft,
@@ -4657,7 +4453,7 @@ export function SchoolAdminDemo({
                   selectedRow={selectedPaymentRow}
                   selectedStudent={selectedPaymentStudent}
                   settings={paymentSettings}
-                  onChange={setPaymentDraft}
+                  onChange={changePaymentDraft}
                   onSubmit={launchPayment}
                 />
               )}

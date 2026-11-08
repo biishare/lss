@@ -309,7 +309,7 @@ export type PaymentCorrectionResult = {
 };
 
 export type StoredDemoState = {
-  schemaVersion?: 2;
+  schemaVersion?: 2 | 3;
   savedAt?: string;
   academicStages?: AcademicStageDefinition[];
   classDefinitions?: ClassDefinition[];
@@ -437,13 +437,8 @@ export function cx(...classes: Array<string | false | null | undefined>) {
 }
 
 export function loadStoredState() {
-  try {
-    const rawState = window.localStorage.getItem(storageKey);
-
-    return rawState ? (JSON.parse(rawState) as StoredDemoState) : null;
-  } catch {
-    return null;
-  }
+  const rawState = window.localStorage.getItem(storageKey);
+  return rawState === null ? null : (JSON.parse(rawState) as StoredDemoState);
 }
 
 export function storedArray<T>(items: T[] | undefined, fallback: T[]) {

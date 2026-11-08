@@ -14,7 +14,7 @@ const sampleState = {
   paymentSettings: { academicYear: "2026" },
 };
 
-test("exporta e reimporta um snapshot v2 sem alterar os dados", () => {
+test("exporta e reimporta um snapshot v3 sem alterar os dados", () => {
   const exportedAt = "2026-09-03T12:00:00.000Z";
   const raw = serializeDemoSnapshot(sampleState, exportedAt);
   const envelope = JSON.parse(raw) as Record<string, unknown>;
@@ -23,6 +23,11 @@ test("exporta e reimporta um snapshot v2 sem alterar os dados", () => {
   assert.equal(envelope.version, demoSnapshotVersion);
   assert.equal(envelope.exportedAt, exportedAt);
   assert.deepEqual(parseDemoSnapshot(raw), sampleState);
+});
+
+test("continua a aceitar o envelope de exportação v2", () => {
+  assert.deepEqual(parseDemoSnapshot(JSON.stringify({ schema: demoSnapshotSchema, version: 2,
+    exportedAt: "2026-09-03T12:00:00.000Z", data: sampleState })), sampleState);
 });
 
 test("aceita o formato local antigo para preservar trabalho existente", () => {

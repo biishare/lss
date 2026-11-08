@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test --experimental-strip-types --loader ./tests/ts-extension-loader.mjs tests/*.test.ts"
+    "test": "npm run test:domain && npm run test:ui",
+    "test:domain": "node --test --experimental-strip-types --loader ./tests/ts-extension-loader.mjs tests/*.test.ts",
+    "test:ui": "node --import tsx --test tests/*.test.tsx"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
@@ -21,12 +23,15 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
+    "happy-dom": "^21.0.4",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5"
   }
 }
