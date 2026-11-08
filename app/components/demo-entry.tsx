@@ -46,12 +46,12 @@ export function DemoEntry({ onEnter }: { onEnter: (accountId: string) => void })
             label="Utilizador" name="username" value={username}
             onChange={(event) => { setUsername(event.target.value); setError(""); }}
             autoComplete="username" autoCapitalize="none" spellCheck={false}
-            required fullWidth error={Boolean(error)}
+            required fullWidth size="medium" error={Boolean(error)}
           />
           <TextField
             label="Palavra-passe" name="password" type="password" value={password}
             onChange={(event) => { setPassword(event.target.value); setError(""); }}
-            autoComplete="current-password" required fullWidth error={Boolean(error)}
+            autoComplete="current-password" required fullWidth size="medium" error={Boolean(error)}
           />
           {error && <Alert severity="error">{error}</Alert>}
           <Button type="submit" variant="contained" fullWidth disabled={submitting}>{submitting ? "A entrar…" : "Entrar"}</Button>
