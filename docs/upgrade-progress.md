@@ -145,6 +145,8 @@ Limite da revisão visual: `sites-preview start` acrescentou `--host 127.0.0.1 -
 
 Autorização de entrega: o primeiro envio da branch foi bloqueado pela revisão automática por falta de autorização explícita reconhecida para transmitir o código privado ao GitHub. Em 08/11/2026, o utilizador autorizou expressamente: **«Envia para main»**. Essa instrução autoriza enviar a branch a `biishare/lss`, abrir a PR, integrar a alteração testada e acompanhar a publicação Vercel. O estado final da integração e do deploy deve ser confirmado no GitHub/Vercel. As alterações académicas da outra branch permanecem intactas e fora desta entrega.
 
+A PR #4 foi integrada na `main` pelo commit `699ced4`; o preview e a publicação de produção terminaram em sucesso. O endereço `https://lss-iota.vercel.app/` mostrou o novo formulário sem rótulos de demo. A primeira inspecção visual encontrou campos com apenas 23 px: o reset global `box-sizing: border-box`, fora das camadas, sobrepunha o `content-box` dos inputs MUI e absorvia o padding. A correcção em `codex/lss-login-layout` coloca os resets de elementos na camada `base`, abaixo de `mui`, e usa campos de tamanho médio no login. A revisão das oito larguras, teclado virtual e percursos completos continua pendente; não foi declarado login de servidor ou segurança de produção.
+
 ## Evidência histórica
 
 A implementação anterior declarava as oito fases da demo v2 concluídas e tinha
