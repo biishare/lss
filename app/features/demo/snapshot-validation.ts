@@ -1,3 +1,5 @@
+import { validateAcademicState } from "../academics/validation";
+
 type JsonObject = Record<string, unknown>;
 
 export const demoCollections = [
@@ -106,15 +108,16 @@ export function validateDemoState(value: unknown): asserts value is JsonObject {
   linked("billingRuns", "groupId", "groups");
   const groups = new Map((collections.get("groups") ?? []).map((group) => [group.id, group]));
   const stableNumbers = new Set<string>();
-  const permanentNumbers = new Set<string>();
+  const permanentNumbers = new Map<string, string>();
   for (const student of collections.get("students") ?? []) {
     if (typeof student.fullName !== "string" || !student.fullName.trim()) fail("o aluno não tem nome.");
     const group = groups.get(student.groupId);
     if (group && group.classId !== student.classId) fail("a turma não pertence à classe do aluno.");
     if (student.registrationNumber) {
       const legacy = value.schemaVersion !== 3 || (isObject(value.scenario) && value.scenario.kind === "legacy");
-      if (!legacy && permanentNumbers.has(String(student.registrationNumber))) fail("o número permanente do aluno está repetido.");
-      permanentNumbers.add(String(student.registrationNumber));
+      const owner = String(student.personId ?? student.id);
+      if (!legacy && permanentNumbers.has(String(student.registrationNumber)) && permanentNumbers.get(String(student.registrationNumber)) !== owner) fail("o número permanente do aluno está repetido.");
+      permanentNumbers.set(String(student.registrationNumber), owner);
     }
     if (student.stableNumber) {
       const key = `${student.academicYearId ?? ""}:${student.groupId}:${student.stableNumber}`;
@@ -126,6 +129,7 @@ export function validateDemoState(value: unknown): asserts value is JsonObject {
     fail("as configurações de pagamento são inválidas.");
   }
   validateNumbers(value);
+  if (value.academic !== undefined) validateAcademicState(value.academic, value);
 
   for (const record of collections.get("paymentRecords") ?? []) {
     if (record.monthlyPayments !== undefined && !isObject(record.monthlyPayments)) fail("as mensalidades antigas são inválidas.");

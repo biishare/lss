@@ -31,3 +31,18 @@ test("rascunho inválido ou armazenamento bloqueado não altera dados nem impede
   const invalid = JSON.stringify({ ...drafts, version: 1, payment: { amount: [] } });
   assert.equal(readDemoDrafts({ ...storage, getItem: (key) => key === demoDraftKey ? invalid : null }, "scenario-a"), null);
 });
+
+test("rascunhos de pagamentos de anos diferentes mantêm aluno, valor e ID separados", () => {
+  const values = new Map<string, string>();
+  const storage = { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); } };
+  writeDemoDrafts(storage, { ...drafts, paymentByYear: {
+    "2026": { payment: drafts.payment, paymentCommandId: "attempt-2026" },
+    "2027": { payment: { ...drafts.payment, studentId: "enrollment-2027", amount: "500" }, paymentCommandId: "attempt-2027" },
+  } });
+  const restored = readDemoDrafts(storage, "scenario-a")!;
+  assert.equal(restored.paymentByYear?.["2026"].payment.amount, "1234");
+  assert.equal(restored.paymentByYear?.["2027"].payment.studentId, "enrollment-2027");
+  assert.equal(restored.paymentByYear?.["2027"].paymentCommandId, "attempt-2027");
+  values.set(demoDraftKey, JSON.stringify({ ...drafts, version: 1, paymentByYear: { "2027": { payment: { amount: "500" }, paymentCommandId: "attempt" } } }));
+  assert.equal(readDemoDrafts(storage, "scenario-a"), null);
+});

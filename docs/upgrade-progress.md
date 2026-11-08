@@ -13,7 +13,7 @@ previam PostgreSQL e servidor nesta etapa.
 | 0 - Confirmar base e rever o plano | Diagnóstico realizado | Base, código, testes e diferenças inventariados. |
 | 1 - Dados e serviços fiáveis | Parcial face à v3 integral; âmbito local entregue na main | Snapshot v3, validação, revisão, comandos, recuperação, recibo persistido e rascunhos. Base central, transacções e backups adiados para a API. |
 | 2 - Login, MUI e navegação | Parte local implementada; fase integral parcial | Login e navegação de apresentação com cinco áreas. Autenticação/recuperação/autorização reais adiadas. Revisão visual pendente. |
-| 3 - Alunos e estrutura | Iniciada noutra branch; não integrada na main | Trabalho académico em curso preservado, sem o incluir nesta alteração. |
+| 3 - Alunos e estrutura | Implementada e validada no âmbito local; revisão visual pendente | Ficha permanente, matrículas anuais, configuração guiada, vagas, pautas, rascunhos, renovação, transferência e saída. Validação de servidor aguarda a API. |
 | 4 - Regras e cobranças | Pendente | Emissão, benefícios, dinheiro exacto e multas conforme v3. |
 | 5 - Atendimento, crédito e recibos | Pendente | Modal completo, conferência, crédito, devoluções e série de recibos. |
 | 6 - Relatórios, caixa e continuidade | Pendente | Totais detalháveis, CSV/PDF, caixa e fechos; backups centrais para a API. |
@@ -146,6 +146,23 @@ Limite da revisão visual: `sites-preview start` acrescentou `--host 127.0.0.1 -
 Autorização de entrega: o primeiro envio da branch foi bloqueado pela revisão automática por falta de autorização explícita reconhecida para transmitir o código privado ao GitHub. Em 08/11/2026, o utilizador autorizou expressamente: **«Envia para main»**. Essa instrução autoriza enviar a branch a `biishare/lss`, abrir a PR, integrar a alteração testada e acompanhar a publicação Vercel. O estado final da integração e do deploy deve ser confirmado no GitHub/Vercel. As alterações académicas da outra branch permanecem intactas e fora desta entrega.
 
 A PR #4 foi integrada na `main` pelo commit `699ced4`; o preview e a publicação de produção terminaram em sucesso. O endereço `https://lss-iota.vercel.app/` mostrou o novo formulário sem rótulos de demo. A primeira inspecção visual encontrou campos com apenas 23 px: o reset global `box-sizing: border-box`, fora das camadas, sobrepunha o `content-box` dos inputs MUI e absorvia o padding. A correcção em `codex/lss-login-layout` coloca os resets de elementos na camada `base`, abaixo de `mui`, e usa campos de tamanho médio no login. A revisão das oito larguras, teclado virtual e percursos completos continua pendente; não foi declarado login de servidor ou segurança de produção.
+
+## Fase 3 — Alunos e estrutura
+
+Branch: `codex/lss-v3-academics-complete`, criada a partir da `main` `61bf511`. O trabalho académico anterior em `/workspace/scratch/d3e2d31e9a05/lss` foi preservado. O modelo iniciado foi aproveitado e revisto; os ficheiros originais não foram substituídos.
+
+A experiência permanece normal para o cliente, sem rótulos de demo ou pormenores de armazenamento. A implementação é local, conforme a decisão de adiar a API.
+
+- Pessoa permanente separada da matrícula anual e das colocações datadas. Números de pauta reservados, sem renumerar nem reutilizar após transferência/saída. Fichas anteriores derivadas em leitura, com eventos de origem anterior sem inventar autores/instantes.
+- Ficha com Dados, Matrículas, Financeiro, Comprovativos e Histórico. Pesquisa geral ignora acentos, encontra contactos/números, e fica na sessão. IDs de ficha, ano, separador e página recuperam-se pelo URL; paginação de 50 alunos.
+- Matrícula em três passos com identificação, colocação e condições/revisão. Correspondências existentes podem ser reutilizadas; outra pessoa com o mesmo nome exige revisão explícita. Rascunho não cria pessoa, matrícula, vaga ocupada ou cobranças.
+- Guardar permite pagar depois. Guardar e pagar abre a inscrição correcta num Dialog; pagamento/recibo usam o serviço comum. Uma inscrição coberta integralmente não cria recebimento fictício. Rascunhos de matrícula e inscrição são retomáveis; os pagamentos de anos diferentes mantêm contexto/ID separados.
+- Configuração guiada em cinco etapas, catálogo de níveis/classes e salas, oferta anual e turmas num único percurso. Validar capacidade inteira, limite da sala, datas, dias/horas e conflitos de sala. Avisar aos 90%; bloquear turma cheia no serviço local.
+- Preparar ano conserva o actual; iniciar exige encerrar o anterior e confirmar o calendário. Encerramento conserva cobranças, dívida, crédito e recibos. Novo calendário não exclui matrículas/cobranças existentes; valor zero é distinto de campo em falta.
+- Renovação reutiliza pessoa e cria vínculo/financeiro do novo ano. Transferência conserva matrícula, números anteriores e movimentos. A colocação futura é projectada pela data de efeito. Saída mantém o mês corrente devido, anula futuros por ajustamento e liberta aplicações como crédito, conservando recebimentos, originais, multas e recibos.
+- Comandos passam pela mesma revisão, autorização local, ID estável e gravação única. JSON com versão académica desconhecida, relações partidas, matrícula duplicada ou colocações sobrepostas é recusado. Director tem consulta na UI e é recusado também no serviço local.
+
+Ver [registo detalhado e limites](phase-3-2026-11-08.md). Validação: 107 testes aprovados (75 domínio/persistência e 32 UI), TypeScript, lint sem avisos, diff check e build aprovados. O primeiro envio foi bloqueado pela revisão automática. O utilizador autorizou posteriormente a integração com «Pode colocar no main», incluindo envio para `biishare/lss`, PR e publicação ligada à Vercel. A integração e o deploy devem ser confirmados externamente. Os critérios de servidor/piloto continuam pendentes da API.
 
 ## Evidência histórica
 

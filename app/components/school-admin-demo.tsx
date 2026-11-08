@@ -148,6 +148,9 @@ import { WorkspaceShell } from "./workspace-shell";
 import { demoSessionFor, demoSessionKey, readDemoSession, saveDemoSession } from "../features/demo/demo-session";
 import { useWorkspaceContext } from "../features/demo/use-workspace-context";
 import { useWorkspaceScroll } from "../features/demo/use-workspace-scroll";
+import { AcademicWorkspace } from "../features/academics/academic-workspace";
+import { academicStateFor, projectStudents, schoolDate } from "../features/academics/model";
+import { executeAcademic, type AcademicCommand } from "../features/academics/operations";
 
 function stableNumberSortValue(stableNumber?: string) {
   const parsed = Number(stableNumber);
@@ -212,15 +215,23 @@ export function SchoolAdminDemo({
   const [draftStorageNotice, setDraftStorageNotice] = useState("");
   const repositoryRef = useRef<DemoRepository | null>(null);
   const paymentCommandRef = useRef<string | null>(null);
+  const paymentDraftsByYear = useRef<Record<string, { payment: PaymentLaunchDraft; paymentCommandId: string | null }>>({});
+  const paymentDraftYear = useRef<string | null>(null);
   const [preferencesReady, setPreferencesReady] = useState(false);
   const {
     academicStages, classDefinitions, roomDefinitions, classes, rooms, groups,
-    students, paymentSettings, paymentRuleVersions, paymentRecords, billingRuns,
+    students: storedStudents, paymentSettings: operationalSettings, paymentRuleVersions, paymentRecords, billingRuns,
   } = useMemo(() => demoState ?? emptyDemoData(), [demoState]);
-  const workspace = useWorkspaceContext(demoState?.datasetId, paymentSettings.academicYear, {
+  const academic = useMemo(() => demoState ? academicStateFor(demoState) : null, [demoState]);
+  const academicToday = schoolDate(nowIso());
+  const students = useMemo(() => demoState && academic ? projectStudents(demoState, academic, academicToday) : storedStudents, [demoState, academic, academicToday, storedStudents]);
+  const workspace = useWorkspaceContext(demoState?.datasetId, operationalSettings.academicYear, {
     classes, groups, students,
-    months: getMonthsInRange(paymentSettings.startMonth, paymentSettings.endMonth).map((month) => month.key),
-  }, initialView);
+    years: academic?.years, people: academic?.people, defaultYearId: operationalSettings.academicYear,
+    months: getMonthsInRange(operationalSettings.startMonth, operationalSettings.endMonth).map((month) => month.key),
+  }, initialView, switchPaymentDraftYear);
+  const selectedYearId = workspace.context.yearId || operationalSettings.academicYear;
+  const paymentSettings = academic?.years.find((year) => year.id === selectedYearId)?.settings ?? operationalSettings;
   const { view: activeView, classId: selectedClassId, groupId: selectedGroupId,
     search: studentSearch, month: billingMonthKey, paymentSection: activePaymentSection,
     alertFilter: paymentAlertFilter, selectedStudentIds: selectedPaymentStudentIds } = workspace.context;
@@ -467,6 +478,7 @@ export function SchoolAdminDemo({
         setItem: (key, value) => window.sessionStorage.setItem(key, value),
       }, state.datasetId);
       if (drafts) {
+        paymentDraftsByYear.current = drafts.paymentByYear ?? {};
         setPaymentDraft(drafts.payment);
         setEnrollmentDraft(drafts.enrollment);
         paymentCommandRef.current = drafts.paymentCommandId;
@@ -482,6 +494,7 @@ export function SchoolAdminDemo({
     const saveDraft = () => writeDemoDrafts(window.sessionStorage, {
       datasetId: demoState.datasetId, payment: paymentDraft, enrollment: enrollmentDraft,
       paymentCommandId: paymentCommandRef.current,
+      paymentByYear: paymentDraftsByYear.current,
     });
     const timer = window.setTimeout(() => {
       try {
@@ -511,9 +524,11 @@ export function SchoolAdminDemo({
     [classes, paymentRuleVersions, paymentSettings, students],
   );
 
+  const yearClasses = useMemo(() => classes.filter((item) => item.academicYear === selectedYearId), [classes, selectedYearId]);
+  const yearStudents = useMemo(() => students.filter((item) => (item.academicYearId ?? operationalSettings.academicYear) === selectedYearId && item.enrollmentStatus !== "cancelled"), [students, selectedYearId, operationalSettings.academicYear]);
   const currentClass =
-    classes.find((schoolClass) => schoolClass.id === selectedClassId) ??
-    classes[0];
+    yearClasses.find((schoolClass) => schoolClass.id === selectedClassId) ??
+    yearClasses[0];
   const currentClassId = currentClass?.id ?? "";
   const groupsForCurrentClass = useMemo(
     () => sortByName(groups.filter((group) => group.classId === currentClassId)),
@@ -524,13 +539,13 @@ export function SchoolAdminDemo({
     groupsForCurrentClass[0];
   const currentGroupId = currentGroup?.id ?? "";
   const paymentMonths = useMemo(
-    () => getMonthsInRange(paymentSettings.startMonth, paymentSettings.endMonth),
-    [paymentSettings.startMonth, paymentSettings.endMonth],
+    () => getMonthsInRange(paymentSettings.startMonth, paymentSettings.endMonth).filter((month) => !academic || academic.years.find((year) => year.id === selectedYearId)?.billingMonths.includes(month.key)),
+    [paymentSettings.startMonth, paymentSettings.endMonth, academic, selectedYearId],
   );
 
   const classesWithStats = useMemo(
     () =>
-      sortClasses(classes).map((schoolClass) => {
+      sortClasses(yearClasses).map((schoolClass) => {
         const classGroups = groups.filter(
           (group) => group.classId === schoolClass.id,
         );
@@ -544,7 +559,7 @@ export function SchoolAdminDemo({
           studentsTotal: classStudents.length,
         };
       }),
-    [classes, groups, students],
+    [yearClasses, groups, students],
   );
 
   const groupsWithStats = useMemo(
@@ -573,8 +588,8 @@ export function SchoolAdminDemo({
   };
 
   const allStudentsAlphabetically = useMemo(
-    () => sortStudents(students),
-    [students],
+    () => sortStudents(students.filter((student) => (student.academicYearId ?? operationalSettings.academicYear) === selectedYearId)),
+    [students, selectedYearId, operationalSettings.academicYear],
   );
 
   const visibleStudents = useMemo(() => {
@@ -1021,6 +1036,31 @@ export function SchoolAdminDemo({
     setAccountName(session.account.name);
     setActiveProfile(session.account.role);
     workspace.update({ view: activeView }, true);
+  }
+
+  function switchPaymentDraftYear(yearId: string) {
+    const sourceYear = students.find((item) => item.id === paymentDraft.studentId)?.academicYearId ?? paymentDraftYear.current ?? operationalSettings.academicYear;
+    if (!yearId || sourceYear === yearId) { paymentDraftYear.current = yearId || sourceYear; return; }
+    paymentDraftsByYear.current[sourceYear] = { payment: paymentDraft, paymentCommandId: paymentCommandRef.current };
+    const saved = paymentDraftsByYear.current[yearId];
+    const settings = academic?.years.find((year) => year.id === yearId)?.settings ?? operationalSettings;
+    const student = students.find((item) => item.academicYearId === yearId);
+    setPaymentDraft(saved?.payment ?? { ...paymentDraft, studentId: student?.id ?? "", category: "tuition", monthKey: settings.startMonth, targetChargeId: "", amount: student ? String(settings.monthlyFee) : "0", paidOn: today(), description: "", allowFutureAllocation: false });
+    paymentCommandRef.current = saved?.paymentCommandId ?? null;
+    paymentDraftYear.current = yearId;
+    setSelectedFinanceCell(null);
+  }
+
+  function executeAcademicCommand(command: AcademicCommand, id: string) {
+    if (!repositoryRef.current || !demoState || !activeProfile) throw new Error("Entre na sua conta e aguarde os dados.");
+    const result = executeAcademic(repositoryRef.current, demoState, command, { id, role: activeProfile, recordedAt: nowIso() });
+    setDemoState(result.state); setStorageToolsError(false); setStorageToolsNotice(""); return result;
+  }
+
+  function confirmAcademicPayment(draft: PaymentLaunchDraft, id: string) {
+    if (!repositoryRef.current || !demoState || !activeProfile) throw new Error("Entre na sua conta e aguarde os dados.");
+    const result = confirmDemoPayment(repositoryRef.current, { expected: demoState, role: activeProfile, commandId: id, draft, recordedAt: nowIso() });
+    setDemoState(result.state); setStorageToolsError(false); setStorageToolsNotice(""); return result;
   }
 
   function signOut() {
@@ -2289,7 +2329,7 @@ export function SchoolAdminDemo({
     return <main className="grid min-h-screen place-items-center p-6" role="status">A carregar os dados do LSS…</main>;
   }
   if (!activeProfile) {
-    return <DemoEntry onEnter={enterDemo} />;
+    return <DemoEntry onEnter={enterDemo} schoolName={academic?.institution.name} logoText={academic?.institution.logoText} />;
   }
 
   if (storageLoadError || !demoState) {
@@ -2335,13 +2375,14 @@ export function SchoolAdminDemo({
     return (
       <WorkspaceShell
         activeView={activeView} accountName={accountName || selectedProfile.title}
+        institutionLabel={academic?.institution.name}
         roleLabel={selectedProfile.title} year={paymentSettings.academicYear}
         collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed}
         onNavigate={navigateTo} onSignOut={signOut}
         expandable={financeTableVisible} expanded={financeTableVisible && expandedTable}
         onExpandedChange={setExpandedTable}
       >
-        {academicArea && <nav aria-label="Organização dos alunos" className="mb-5 flex flex-wrap gap-2">
+        {academicArea && developerToolsEnabled && !demoState?.academic && <nav aria-label="Ferramentas académicas anteriores" className="mb-5 flex flex-wrap gap-2">
           {([ ["enrollments", "Alunos"], ["groups", "Turmas"], ["classes", "Classes"], ["rooms", "Salas"] ] as const).map(([view, label]) => (
             <SecondaryButton key={view} onClick={() => setActiveView(view)}>{label}</SecondaryButton>
           ))}
@@ -2351,11 +2392,12 @@ export function SchoolAdminDemo({
         {financeSettingsNotice && <p role="status" className="mb-4 rounded-md bg-slate-50 p-3 text-sm">{financeSettingsNotice}</p>}
         {developerToolsEnabled && demoState?.migrationWarnings?.map((warning) => <p key={warning} role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{warning}</p>)}
         {activeView === "overview" && renderOverview()}
-        {activeView === "catalog" && renderCatalog()}
-        {activeView === "classes" && renderClasses()}
-        {activeView === "rooms" && renderRooms()}
-        {activeView === "groups" && renderGroups()}
-        {activeView === "enrollments" && renderEnrollments()}
+        {demoState && activeProfile && <AcademicWorkspace state={demoState} role={activeProfile} context={workspace.context} onContext={workspace.update} execute={executeAcademicCommand} confirmPayment={confirmAcademicPayment}/>}
+        {developerToolsEnabled && activeView === "catalog" && (demoState?.academic ? renderDeveloperTools() : renderCatalog())}
+        {developerToolsEnabled && !demoState?.academic && activeView === "classes" && renderClasses()}
+        {developerToolsEnabled && !demoState?.academic && activeView === "rooms" && renderRooms()}
+        {developerToolsEnabled && !demoState?.academic && activeView === "groups" && renderGroups()}
+        {developerToolsEnabled && !demoState?.academic && activeView === "enrollments" && renderEnrollments()}
         {activeView === "payments" && renderPayments()}
         {activeView === "reports" && renderReports()}
       </WorkspaceShell>
@@ -2372,7 +2414,7 @@ export function SchoolAdminDemo({
           <div className="lss-card-grid">
             <MetricCard
               label="Alunos matriculados"
-              value={students.length}
+              value={yearStudents.length}
               supporting="Total registado"
               accent="border-l-[#2867d8]"
             />
@@ -2435,7 +2477,7 @@ export function SchoolAdminDemo({
             />
             <MetricCard
               label="Matriculas"
-              value={students.length}
+              value={yearStudents.length}
               supporting={`${visibleStudents.length} na turma actual`}
               accent="border-l-[#2867d8]"
             />
@@ -2602,6 +2644,51 @@ export function SchoolAdminDemo({
           </div>
         </section>
       </div>
+    );
+  }
+
+  function renderDeveloperTools() {
+    if (activeProfile !== "secretaria") return null;
+    return (
+<section className="lss-responsive-card" data-wide="true">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="text-base font-semibold">Ferramentas de desenvolvimento</h3>
+              <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
+                Os dados ficam guardados neste navegador. Pode exportar uma cópia,
+                importar um ficheiro compatível ou repor o conjunto inicial.
+              </p>
+            </div>
+            <StateLabel tone={storageToolsError ? "warning" : "active"}>{storageToolsError ? "Dados anteriores conservados" : "Dados guardados"}</StateLabel>
+          </div>
+          <div className="lss-actions mt-5">
+            <SecondaryButton onClick={exportDemoData}>Exportar JSON</SecondaryButton>
+            <label className="inline-flex min-h-11 cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Importar JSON
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="sr-only"
+                onChange={(event) => {
+                  void importDemoData(event.target.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={resetDemoData}
+              className="min-h-11 rounded-md border border-rose-200 bg-white px-4 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+            >
+              Repor dados iniciais
+            </button>
+          </div>
+          {storageToolsNotice && (
+            <p className="mt-4 rounded-md bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-700 ring-1 ring-slate-200" role="status">
+              {storageToolsNotice}
+            </p>
+          )}
+        </section>
     );
   }
 
@@ -3404,7 +3491,7 @@ export function SchoolAdminDemo({
         </section>
 
         <GroupForm
-          classes={classes}
+          classes={yearClasses}
           draft={groupDraft}
           error={groupError}
           rooms={activeRooms(rooms)}
@@ -3443,7 +3530,7 @@ export function SchoolAdminDemo({
           </div>
 
           <StudentFilters
-            classes={classes}
+            classes={yearClasses}
             currentClassId={currentClassId}
             currentGroupId={currentGroupId}
             groupsForCurrentClass={groupsForCurrentClass}
@@ -3547,7 +3634,7 @@ export function SchoolAdminDemo({
 
         {selectedProfile.id === "secretaria" && (
           <EnrollmentForm
-            classes={classes}
+            classes={yearClasses}
             draft={enrollmentDraft}
             groups={draftGroups}
             notice={enrollmentNotice}
@@ -3779,7 +3866,7 @@ export function SchoolAdminDemo({
                 </div>
 
                 <StudentFilters
-                  classes={classes}
+                  classes={yearClasses}
                   currentClassId={currentClassId}
                   currentGroupId={currentGroupId}
                   groupsForCurrentClass={groupsForCurrentClass}

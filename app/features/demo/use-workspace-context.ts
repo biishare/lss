@@ -9,13 +9,13 @@ import type { WorkspaceView } from "../../components/school-admin-demo.model";
 
 type ContextData = Parameters<typeof validateWorkspaceContext>[1];
 
-export function useWorkspaceContext(datasetId: string | undefined, year: string, data: ContextData, initialView: WorkspaceView) {
+export function useWorkspaceContext(datasetId: string | undefined, year: string, data: ContextData, initialView: WorkspaceView, onYearChange?: (yearId: string) => void) {
   const [context, setContext] = useState(() => defaultWorkspaceContext(initialView));
   const [readyDataset, setReadyDataset] = useState<string | null>(null);
   const contextRef = useRef(context);
-  const dataRef = useRef({ data, datasetId, year });
+  const dataRef = useRef({ data, datasetId, year, onYearChange });
   const readyRef = useRef<string | null>(null);
-  useEffect(() => { dataRef.current = { data, datasetId, year }; }, [data, datasetId, year]);
+  useEffect(() => { dataRef.current = { data, datasetId, year, onYearChange }; }, [data, datasetId, year, onYearChange]);
 
   useEffect(() => {
     if (!datasetId) return;
@@ -27,6 +27,7 @@ export function useWorkspaceContext(datasetId: string | undefined, year: string,
       const path = window.location.pathname === "/" && initialView !== "overview"
         ? workspacePaths[initialView] : window.location.pathname;
       const incoming = validateWorkspaceContext(contextFromLocation(path, window.location.search, fallback), dataRef.current.data);
+      if (incoming.yearId !== contextRef.current.yearId) dataRef.current.onYearChange?.(incoming.yearId);
       contextRef.current = incoming;
       readyRef.current = datasetId;
       setContext(incoming);
@@ -40,6 +41,7 @@ export function useWorkspaceContext(datasetId: string | undefined, year: string,
 
   const update = useCallback((patch: Partial<WorkspaceContext>, push = false) => {
     const next = { ...contextRef.current, ...patch };
+    if (next.yearId !== contextRef.current.yearId) dataRef.current.onYearChange?.(next.yearId);
     contextRef.current = next;
     setContext(next);
     const current = dataRef.current;

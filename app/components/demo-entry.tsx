@@ -7,7 +7,7 @@ import Alert from "@mui/material/Alert";
 import { authenticateDemoSession } from "../features/demo/demo-auth";
 import { institutionLogoText, institutionName } from "./school-admin-demo.model";
 
-export function DemoEntry({ onEnter }: { onEnter: (accountId: string) => void }) {
+export function DemoEntry({ onEnter, schoolName = institutionName, logoText = institutionLogoText }: { onEnter: (accountId: string) => void; schoolName?: string; logoText?: string }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -37,8 +37,8 @@ export function DemoEntry({ onEnter }: { onEnter: (accountId: string) => void })
   return (
     <main className="grid min-h-dvh place-items-center bg-slate-50 px-4 py-10 text-slate-950">
       <section aria-labelledby="entry-title" className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-        <div aria-hidden="true" className="mb-6 grid size-14 place-items-center rounded-lg bg-[#185c54] text-lg font-bold text-white">{institutionLogoText}</div>
-        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#185c54]">{institutionName}</p>
+        <div aria-hidden="true" className="mb-6 grid size-14 place-items-center rounded-lg bg-[#185c54] text-lg font-bold text-white">{logoText}</div>
+        <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#185c54]">{schoolName}</p>
         <h1 id="entry-title" className="mt-3 text-2xl font-bold">Entrar no LSS</h1>
         <p className="mt-3 text-sm leading-6 text-slate-600">Matrículas, pagamentos e acompanhamento da escola.</p>
         <form onSubmit={submit} className="mt-7 grid gap-5" aria-busy={submitting}>

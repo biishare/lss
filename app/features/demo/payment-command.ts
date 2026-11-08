@@ -5,6 +5,7 @@ import {
 } from "../../components/school-admin-demo.model";
 import type { DemoState } from "./demo-state";
 import type { DemoCommit, DemoRepository } from "./local-repository";
+import { academicStateFor, projectStudents } from "../academics/model";
 
 export function confirmDemoPayment(repository: DemoRepository, input: {
   expected: DemoState;
@@ -31,9 +32,9 @@ export function confirmDemoPayment(repository: DemoRepository, input: {
     role: input.role, action: "record-payment", expected: input.expected,
     command: { id: input.commandId, payload: { ...draft, amount } },
     change(current) {
-      const student = current.students.find((student) => student.id === draft.studentId);
+      const student = projectStudents(current, academicStateFor(current), referenceDate).find((student) => student.id === draft.studentId);
       if (!student) throw new Error("Seleccione um aluno válido.");
-      const settings = current.paymentSettings;
+      const settings = current.academic?.years.find((year) => year.id === student.academicYearId)?.settings ?? current.paymentSettings;
       const months = getMonthsInRange(settings.startMonth, settings.endMonth);
       const rules = buildDefaultPaymentRuleVersions(current.students, current.classes, settings, current.paymentRuleVersions);
       const record = current.paymentRecords.find((record) => record.studentId === student.id) ?? buildPaymentRecord(student.id);

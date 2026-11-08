@@ -10,6 +10,7 @@ import {
 } from "../../components/school-admin-demo.model";
 import { migrateLegacyStoredState } from "../finance/domain/migration";
 import { validateDemoState } from "./snapshot-validation";
+import { academicStateFor, type AcademicState } from "../academics/model";
 
 export const demoStateVersion = 3;
 export const demoStorageKey = "gestao-academica-demo-state-v2";
@@ -19,7 +20,7 @@ export type DemoData = Required<Pick<StoredDemoState,
   "academicStages" | "classDefinitions" | "roomDefinitions" | "classes" |
   "rooms" | "groups" | "students" | "paymentSettings" | "paymentRuleVersions" |
   "paymentRecords" | "billingRuns"
->> & { receipts: PaymentReceipt[] };
+>> & { receipts: PaymentReceipt[]; academic?: AcademicState };
 
 export type DemoOperation = {
   id: string;
@@ -107,6 +108,7 @@ export function createDemoState(kind: "example" | "empty", { now, datasetId }: {
     scenario: { kind, version: 1, baseDate: exampleBaseDate,
       years: [{ id: "2026", status: "active" }, { id: "2027", status: "preparing" }] },
   }, `${exampleBaseDate}T08:00:00.000Z`);
+  state.academic = academicStateFor(state);
   validateDemoState(state);
   return state;
 }
