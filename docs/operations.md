@@ -99,3 +99,15 @@ na página actual.
 Por decisão do utilizador, esta etapa não cria uma base real ou backend. A API
 dedicada posterior fornecerá autenticação, autorização, base central e backups.
 Os perfis de exemplo e a exportação local não são esses mecanismos de produção.
+
+## Alunos e estrutura — fase 3
+
+Em **Configurações**, percorra Escola, Ano e calendário, Níveis e classes, Salas e turmas e Regras de pagamento. A classe é cadastrada uma vez e disponibilizada no ano escolhido; a sala é cadastrada uma vez e aparece logo nas turmas. Uma turma valida vaga/capacidade, sala e horário. Escolha **Ano de consulta** para preparar/consultar outro ano sem apagar o actual. O ano seguinte só pode tornar-se operacional depois de encerrar o anterior.
+
+Em **Alunos e turmas**, use **Nova matrícula** e os três passos. Complete o nome, reveja as correspondências, escolha ano/turma e as condições. Pode guardar um rascunho, confirmar e pagar depois, ou **Guardar e pagar** para abrir a inscrição correcta. O formulário conserva o preenchimento em falha. Rascunho não é matrícula confirmada.
+
+O nome abre a ficha permanente. Dados/contactos corrigidos pedem motivo e mantêm anterior/novo no Histórico. **Renovar matrícula** reutiliza a pessoa para outro ano. No separador Matrículas, **Transferir de turma** e **Registar saída** apresentam a data e o efeito antes da confirmação. O número anterior da pauta permanece no histórico. Pagamentos e recibos anteriores conservam-se; antecipações de obrigações anuladas ficam como crédito identificado, sem devolução automática.
+
+A ficha reúne todos os anos. **Abrir pagamentos de [ano]** leva à planilha com o ano, classe e turma correspondentes. Comprovativos mostra os pagamentos/referências e recibos já guardados; não inventa recibos de movimentos antigos sem snapshot. A gestão completa de conferência/anexos, crédito/devolução e impressão pertence à fase 5.
+
+Os calendários desta etapa usam os meses de um ano civil identificado por quatro algarismos. A vigência de novos preços por nível, emissão automática e precisão/multas completas continuam para a fase 4. Contas reais e validação central/concorrência entre postos dependem da API posterior.

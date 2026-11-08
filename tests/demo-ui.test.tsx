@@ -137,7 +137,7 @@ test("erro de importação não substitui o estado nem pede confirmação", asyn
   open("catalog", true);
   const input = await screen.findByLabelText("Importar JSON");
   fireEvent.change(input, { target: { files: [new File(["{invalid"], "invalid.json", { type: "application/json" })] } });
-  await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /JSON válido/));
+  await waitFor(() => assert.ok(screen.getAllByRole("alert").some((alert) => /JSON válido/.test(alert.textContent ?? ""))));
   assert.equal(confirmations, 0);
   assert.equal(storage.getItem(demoStorageKey), raw);
 });
@@ -167,15 +167,19 @@ test("preferência de menu é lida antes de qualquer gravação da preferência"
 test("matrícula conserva formulário em falha e guarda aluno e financeiro juntos", async () => {
   const raw = storage.getItem(demoStorageKey);
   open("enrollments");
+  fireEvent.click(await screen.findByRole("button", { name: /^Nova matrícula$/ }));
   const name = await screen.findByLabelText("Nome completo do aluno");
   fireEvent.change(name, { target: { value: "Aluno Novo Exemplo" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Continuar$/ }));
+  fireEvent.change(screen.getByLabelText("Turma da matrícula"), { target: { value: "7A2026" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Continuar$/ }));
   storage.failed = true;
-  fireEvent.click(screen.getByRole("button", { name: "Guardar matricula" }));
-  await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /Não foi possível guardar/));
-  assert.equal((name as HTMLInputElement).value, "Aluno Novo Exemplo");
+  fireEvent.click(screen.getByRole("button", { name: /^Guardar matrícula$/ }));
+  await waitFor(() => assert.ok(screen.getAllByRole("alert").some((alert) => /Não foi possível guardar/.test(alert.textContent ?? ""))));
+  assert.match(screen.getByRole("dialog").textContent ?? "", /Aluno Novo Exemplo/);
   assert.equal(storage.getItem(demoStorageKey), raw);
   storage.failed = false;
-  fireEvent.click(screen.getByRole("button", { name: "Guardar matricula" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Guardar matrícula$/ }));
   await waitFor(() => assert.equal(storage.financialWrites, 1));
   const state = JSON.parse(storage.getItem(demoStorageKey)!);
   const student = state.students.find((student: { fullName: string }) => student.fullName === "Aluno Novo Exemplo");

@@ -8,6 +8,7 @@ export type DemoDrafts = {
   payment: PaymentLaunchDraft;
   enrollment: EnrollmentDraft;
   paymentCommandId: string | null;
+  paymentByYear?: Record<string, { payment: PaymentLaunchDraft; paymentCommandId: string | null }>;
 };
 
 const paymentStrings = ["studentId", "category", "monthKey", "targetChargeId", "amount", "paidOn", "method", "description"];
@@ -28,6 +29,15 @@ export function readDemoDrafts(storage: DemoStorage, datasetId: string): DemoDra
         !["new", "renewal"].includes(String(enrollment.enrollmentType)) ||
         !["regular", "scholarship", "partial_scholarship", "exception", "weighted"].includes(String(enrollment.financeStatus)) ||
         (value.paymentCommandId !== null && typeof value.paymentCommandId !== "string")) return null;
+    if (value.paymentByYear !== undefined) {
+      if (!isObject(value.paymentByYear) || Object.keys(value.paymentByYear).length > 100) return null;
+      for (const [year, entry] of Object.entries(value.paymentByYear)) {
+        if (!/^\d{4}$/.test(year) || !isObject(entry) || !isObject(entry.payment) ||
+            paymentStrings.some((key) => typeof (entry.payment as Record<string, unknown>)[key] !== "string") ||
+            typeof entry.payment.allowFutureAllocation !== "boolean" ||
+            (entry.paymentCommandId !== null && typeof entry.paymentCommandId !== "string")) return null;
+      }
+    }
     return value as unknown as DemoDrafts;
   } catch { return null; }
 }

@@ -2138,6 +2138,9 @@ export function isTuitionMonthApplicable(
   settings: PaymentSettings,
   paymentRuleVersions: PaymentRuleVersion[] = [],
 ) {
+  if (student.enrollmentStatus === "cancelled") return false;
+  if (student.billingMonths && !student.billingMonths.includes(monthKey)) return false;
+  if (student.tuitionEndMonth && monthIndex(monthKey) > monthIndex(student.tuitionEndMonth)) return false;
   const rule = getPaymentRuleForStudent(student, settings, paymentRuleVersions);
   const months = ruleMonthKeys(rule, settings);
   const currentIndex = months.findIndex((item) => item === monthKey);

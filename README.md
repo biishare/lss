@@ -95,3 +95,15 @@ e o guia de operação em [`docs/operations.md`](docs/operations.md).
 `npm test` executa testes do domínio/repositório e testes de interface num DOM
 simulado. Estes últimos verificam interacções e falhas de armazenamento, mas
 não substituem a revisão visual num navegador.
+
+## Alunos e estrutura
+
+A fase 3 acrescenta ficha permanente, matrícula anual em três passos, rascunhos,
+renovação, transferência, saída e configuração guiada de anos/classes/salas/turmas.
+A pesquisa encontra nome, número e contacto; a lista pagina 50 alunos e conserva
+ficha/separador/ano/página ao regressar ou recarregar. Guardar e pagar abre a
+inscrição correcta num Dialog; operações e recibo usam o repositório comum.
+
+O [registo da fase 3](docs/phase-3-2026-11-08.md) descreve compatibilidade, 107
+testes, medições sintéticas e limites. A revisão visual completa, as vigências
+financeiras da fase 4 e os requisitos centrais da API continuam separados.

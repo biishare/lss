@@ -36,6 +36,7 @@ export type StudentFinancialProfile = {
 };
 
 export type SchoolClass = {
+  definitionId?: string;
   id: string;
   name: string;
   stage: string;
@@ -71,6 +72,7 @@ export type RoomDefinition = {
 };
 
 export type ClassGroup = {
+  schedule?: { days: number[]; startsAt: string; endsAt: string };
   id: string;
   name: string;
   classId: string;
@@ -90,6 +92,10 @@ export type SchoolRoom = {
 };
 
 export type Student = {
+  personId?: string;
+  enrollmentStatus?: "active" | "withdrawn" | "completed" | "cancelled";
+  tuitionEndMonth?: string;
+  billingMonths?: string[];
   id: string;
   enrollmentId?: string;
   academicYearId?: string;
@@ -161,6 +167,7 @@ export type PaymentEntry = {
 export type ChargeCategory = "registration" | "tuition" | "miscellaneous";
 
 export type Charge = {
+  academicCancellation?: { eventId: string; previousDue: number; recordedAt: string; reason: string };
   id: string;
   studentId: string;
   category: ChargeCategory;
@@ -179,6 +186,7 @@ export type Charge = {
 export type PenaltyStage = "first" | "second";
 
 export type PenaltyCharge = {
+  academicCancellation?: { eventId: string; previousDue: number; recordedAt: string; reason: string };
   id: string;
   studentId: string;
   baseChargeId: string;
@@ -229,6 +237,7 @@ export type PaymentCorrection = {
 };
 
 export type StudentPaymentRecord = {
+  academicAdjustments?: Array<{ id: string; chargeId: string; amount: number; reason: string; recordedAt: string; releasedAllocations: PaymentAllocation[] }>;
   studentId: string;
   charges: Charge[];
   penaltyCharges?: PenaltyCharge[];

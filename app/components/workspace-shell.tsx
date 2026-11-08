@@ -27,8 +27,10 @@ function NavigationIcon({ view }: { view: WorkspaceView | "menu" | "close" | "co
 export function WorkspaceShell({
   children, activeView, accountName, roleLabel, year, collapsed, onCollapsedChange,
   onNavigate, onSignOut, expandable = false, expanded, onExpandedChange,
+  institutionLabel = institutionName,
 }: {
   children: ReactNode;
+  institutionLabel?: string;
   activeView: WorkspaceView;
   accountName: string;
   roleLabel: string;
@@ -97,7 +99,7 @@ export function WorkspaceShell({
           {!expanded && <IconButton ref={triggerRef} className="lss-mobile-menu-button" onClick={() => setDrawerOpen(true)} aria-label="Abrir menu" aria-expanded={drawerOpen} aria-controls={drawerOpen ? "workspace-menu" : undefined}><NavigationIcon view="menu"/></IconButton>}
           <span className="lss-brand-mark" aria-hidden="true">LSS</span>
           <div className="min-w-0">
-            <p className="lss-institution-label">{institutionName}</p>
+            <p className="lss-institution-label">{institutionLabel}</p>
             <h1 className="truncate text-base font-bold sm:text-lg">{title}</h1>
           </div>
         </div>
