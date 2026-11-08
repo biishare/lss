@@ -39,6 +39,9 @@ const theme = createTheme({
     },
   },
   components: {
+    MuiIconButton: {
+      styleOverrides: { root: { minWidth: 44, minHeight: 44 } },
+    },
     MuiButtonBase: {
       defaultProps: {
         disableRipple: false,

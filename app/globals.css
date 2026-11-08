@@ -32,13 +32,11 @@
 
 html {
   min-width: 0;
-  overflow-x: clip;
   background: var(--background);
 }
 
 body {
   min-width: 0;
-  overflow-x: clip;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans-stack);
@@ -98,9 +96,8 @@ textarea:focus-visible,
 
 .lss-shell-grid {
   width: 100%;
-  min-height: calc(100vh - 81px);
+  min-height: calc(100dvh - 56px);
   grid-template-columns: minmax(0, 1fr);
-  transition: grid-template-columns 180ms ease;
 }
 
 .lss-section-grid,
@@ -114,7 +111,11 @@ textarea:focus-visible,
   min-width: 0;
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 768px) {
+  .lss-shell-grid { grid-template-columns: 64px minmax(0, 1fr); }
+}
+
+@media (min-width: 1200px) {
   .lss-shell-grid {
     grid-template-columns: 256px minmax(0, 1fr);
   }
@@ -375,9 +376,54 @@ textarea:focus-visible,
     max-height: calc(100dvh - 1rem);
   }
 
-  .table-scroll {
-    margin-inline: -1rem;
-    max-width: calc(100% + 2rem);
-    padding-inline: 1rem;
-  }
 }
+
+.lss-workspace-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 56px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--lss-color-border);
+  background: white;
+}
+
+.lss-brand-mark { display: none; }
+.lss-institution-label { display: none; }
+.lss-account-label { display: none; }
+.lss-workspace-sidebar { display: none; }
+.lss-workspace-content { min-width: 0; padding: 16px; }
+.lss-expansion-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; margin-bottom: 16px; }
+.lss-expansion-toolbar p { margin-right: auto; }
+.lss-navigation-item[data-active="true"] { background: var(--lss-color-primary-soft); color: var(--lss-color-primary); }
+.lss-navigation-item { white-space: nowrap; min-height: 44px; }
+.lss-sidebar-toggle { margin-top: auto; align-self: center; }
+
+.lss-skip-link { position: fixed; top: -100px; left: 16px; z-index: 1500; padding: 12px; border-radius: 6px; background: white; color: var(--lss-color-primary); }
+.lss-skip-link:focus { top: 8px; }
+
+@media (min-width: 600px) {
+  .lss-brand-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 6px; background: var(--lss-color-primary); color: white; font-size: 12px; font-weight: 700; }
+  .lss-account-label { display: block; }
+}
+
+@media (min-width: 768px) {
+  .lss-workspace-topbar { height: 64px; padding-inline: 20px; }
+  .lss-shell-grid { min-height: calc(100dvh - 64px); }
+  .lss-mobile-menu-button { display: none; }
+  .lss-institution-label { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; color: var(--lss-color-primary); }
+  .lss-workspace-content { padding: 24px; }
+  .lss-workspace-sidebar { position: sticky; top: 64px; display: flex; flex-direction: column; gap: 24px; align-self: start; height: calc(100dvh - 64px); min-width: 0; overflow-y: auto; padding: 16px 10px; border-right: 1px solid var(--lss-color-border); background: white; }
+}
+
+@media (min-width: 1280px) {
+  .lss-workspace[data-expanded="true"] .lss-payment-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+.lss-workspace[data-expanded="true"] .lss-shell-grid { grid-template-columns: minmax(0, 1fr); }
+.lss-workspace[data-expanded="true"] .lss-workspace-sidebar,
+.lss-workspace[data-expanded="true"] [data-workspace-secondary] { display: none; }

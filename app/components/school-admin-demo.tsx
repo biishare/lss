@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useRouter } from "next/navigation";
-import Drawer from "@mui/material/Drawer";
 import {
   initialAcademicStages,
   initialClassDefinitions,
@@ -59,8 +57,6 @@ import {
   getStudentTuitionStartMonth,
   getTuitionInstallmentNumber,
   inputClasses,
-  institutionLogoText,
-  institutionName,
   monthByKey,
   monthLabel,
   nextId,
@@ -87,7 +83,6 @@ import {
   statusOptions,
   summarizePaymentRows,
   today,
-  workspaceNavigation,
   type AcademicStageDraft,
   type BillingRun,
   type ClassDefinitionDraft,
@@ -103,7 +98,6 @@ import {
   type PaymentReceipt,
   type PaymentRuleDraft,
   type PaymentAlertFilter,
-  type PaymentWorkspaceSection,
   type ProfileId,
   type RoomDefinitionDraft,
   type RoomDraft,
@@ -125,16 +119,13 @@ import { confirmDemoPayment } from "../features/demo/payment-command";
 import { readDemoDrafts, writeDemoDrafts } from "../features/demo/draft-storage";
 import {
   ClassForm,
-  CrumbButton,
   EnrollmentForm,
   FieldLabel,
   FinanceCell,
   FinanceCellDialog,
-  FlowStep,
   GroupForm,
   MetricCard,
   MiscellaneousChargeForm,
-  PageContainer,
   PaymentCorrectionDialog,
   PaymentForm,
   PaymentReceiptDialog,
@@ -149,9 +140,14 @@ import {
   StudentFilters,
   StudentFinanceForm,
   SummaryLine,
-  SummaryMini,
   TextButton,
 } from "./school-admin-demo.components";
+
+import { DemoEntry } from "./demo-entry";
+import { WorkspaceShell } from "./workspace-shell";
+import { demoSessionFor, demoSessionKey, readDemoSession, saveDemoSession } from "../features/demo/demo-session";
+import { useWorkspaceContext } from "../features/demo/use-workspace-context";
+import { useWorkspaceScroll } from "../features/demo/use-workspace-scroll";
 
 function stableNumberSortValue(stableNumber?: string) {
   const parsed = Number(stableNumber);
@@ -175,14 +171,6 @@ function stableNumberLabel(student: Student) {
   return student.stableNumber ?? "Sem numero";
 }
 
-function routeForWorkspaceView(view: WorkspaceView) {
-  if (["classes", "rooms", "groups", "enrollments"].includes(view)) {
-    return "/students";
-  }
-
-  return workspaceNavigation.find((item) => item.id === view)?.href ?? "/dashboard";
-}
-
 function financeCellAriaLabel({
   balance,
   rubric,
@@ -197,20 +185,13 @@ function financeCellAriaLabel({
   return `${rubric}, ${studentName}, ${state}, saldo ${balance}. Abrir detalhe financeiro.`;
 }
 
-const demoSessionKey = "lss-demo-session-v1";
 const sidebarPreferenceKey = "lss-demo-sidebar-collapsed";
-
-const demoAccounts: Record<ProfileId, { name: string }> = {
-  secretaria: { name: "Marta — Secretaria" },
-  director: { name: "António — Director" },
-};
 
 export function SchoolAdminDemo({
   initialView = "overview",
 }: {
   initialView?: WorkspaceView;
 }) {
-  const router = useRouter();
   const firstClassId = initialClasses[0]?.id ?? "";
   const firstGroupId = initialGroups[0]?.id ?? "";
   const firstStudentId = initialStudents[0]?.id ?? "";
@@ -219,13 +200,9 @@ export function SchoolAdminDemo({
   const firstStageId = initialAcademicStages[0]?.id ?? "";
   const [storageReady, setStorageReady] = useState(false);
   const [activeProfile, setActiveProfile] = useState<ProfileId | null>(null);
-  const [activeView, setActiveView] = useState<WorkspaceView>(initialView);
   const [accountName, setAccountName] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [storageToolsNotice, setStorageToolsNotice] = useState("");
-  const [activePaymentSection, setActivePaymentSection] =
-    useState<PaymentWorkspaceSection>("settings");
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const [storageLoadError, setStorageLoadError] = useState("");
   const [originalStorageRaw, setOriginalStorageRaw] = useState<string | undefined>();
@@ -238,9 +215,26 @@ export function SchoolAdminDemo({
     academicStages, classDefinitions, roomDefinitions, classes, rooms, groups,
     students, paymentSettings, paymentRuleVersions, paymentRecords, billingRuns,
   } = useMemo(() => demoState ?? emptyDemoData(), [demoState]);
-  const [selectedClassId, setSelectedClassId] = useState(firstClassId);
-  const [selectedGroupId, setSelectedGroupId] = useState(firstGroupId);
-  const [studentSearch, setStudentSearch] = useState("");
+  const workspace = useWorkspaceContext(demoState?.datasetId, paymentSettings.academicYear, {
+    classes, groups, students,
+    months: getMonthsInRange(paymentSettings.startMonth, paymentSettings.endMonth).map((month) => month.key),
+  }, initialView);
+  const { view: activeView, classId: selectedClassId, groupId: selectedGroupId,
+    search: studentSearch, month: billingMonthKey, paymentSection: activePaymentSection,
+    alertFilter: paymentAlertFilter, selectedStudentIds: selectedPaymentStudentIds } = workspace.context;
+  const setActiveView = workspace.field("view", true);
+  const setSelectedClassId = workspace.field("classId");
+  const setSelectedGroupId = workspace.field("groupId");
+  const setStudentSearch = workspace.field("search");
+  const setBillingMonthKey = workspace.field("month");
+  const setActivePaymentSection = workspace.field("paymentSection", true);
+  const setPaymentAlertFilter = workspace.field("alertFilter");
+  const setSelectedPaymentStudentIds = workspace.field("selectedStudentIds");
+  const [expandedTable, setExpandedTable] = useState(false);
+  const financeTableVisible = activeView === "payments" && (activePaymentSection === "entry"
+    || (activeProfile === "director" && activePaymentSection !== "reports"));
+  const workspacePositionKey = [activeView, activePaymentSection, selectedClassId, selectedGroupId].join(":");
+  useWorkspaceScroll(workspacePositionKey, activeProfile ? demoState?.datasetId : undefined);
   const [stageDefinitionError, setStageDefinitionError] = useState("");
   const [classDefinitionError, setClassDefinitionError] = useState("");
   const [roomDefinitionError, setRoomDefinitionError] = useState("");
@@ -252,16 +246,8 @@ export function SchoolAdminDemo({
   const [financeSettingsNotice, setFinanceSettingsNotice] = useState("");
   const [financeNotice, setFinanceNotice] = useState("");
   const [miscellaneousNotice, setMiscellaneousNotice] = useState("");
-  const [selectedPaymentStudentIds, setSelectedPaymentStudentIds] = useState<
-    string[]
-  >([]);
   const [selectedFinanceCell, setSelectedFinanceCell] =
     useState<FinanceCellSelection | null>(null);
-  const [billingMonthKey, setBillingMonthKey] = useState(
-    initialPaymentSettings.startMonth,
-  );
-  const [paymentAlertFilter, setPaymentAlertFilter] =
-    useState<PaymentAlertFilter>("all");
   const [, setFinanceSettingsDraft] =
     useState<FinanceSettingsDraft>(() => buildFinanceSettingsDraft(initialPaymentSettings));
   const [academicStageDraft, setAcademicStageDraft] = useState<AcademicStageDraft>({
@@ -357,27 +343,15 @@ export function SchoolAdminDemo({
 
   useEffect(() => {
     const restoreSessionId = window.setTimeout(() => {
-      let savedSession: string | null = null;
       let savedSidebar: string | null = null;
       try {
-        savedSession = window.sessionStorage.getItem(demoSessionKey);
+        const session = readDemoSession(window.sessionStorage);
+        if (session) {
+          setActiveProfile(session.account.role);
+          setAccountName(`${session.account.name} — ${session.account.roleLabel}`);
+        }
         savedSidebar = window.localStorage.getItem(sidebarPreferenceKey);
       } catch { /* As preferências não substituem a leitura obrigatória dos dados. */ }
-
-      if (savedSession) {
-        try {
-          const session = JSON.parse(savedSession) as {
-            profile?: ProfileId;
-            accountName?: string;
-          };
-          if (session.profile === "secretaria" || session.profile === "director") {
-            setActiveProfile(session.profile);
-            setAccountName(session.accountName ?? "");
-          }
-        } catch {
-          try { window.sessionStorage.removeItem(demoSessionKey); } catch { /* Sessão opcional. */ }
-        }
-      }
 
       setSidebarCollapsed(savedSidebar === "true");
       setPreferencesReady(true);
@@ -430,9 +404,6 @@ export function SchoolAdminDemo({
       const loadedFirstRoom = activeRooms(loadedRooms)[0];
       const loadedFirstStageId = loadedAcademicStages[0]?.id ?? "";
 
-      setSelectedClassId(loadedFirstClassId);
-      setSelectedGroupId(loadedFirstGroupId);
-      setBillingMonthKey(loadedPaymentSettings.startMonth);
       setFinanceSettingsDraft(buildFinanceSettingsDraft(loadedPaymentSettings));
       setClassDefinitionDraft((draft) => ({
         ...draft,
@@ -527,17 +498,6 @@ export function SchoolAdminDemo({
       ),
     [classes, paymentRuleVersions, paymentSettings, students],
   );
-
-  useEffect(() => {
-    if (!activeProfile) {
-      return;
-    }
-
-    const expectedPath = routeForWorkspaceView(activeView);
-    if (window.location.pathname !== expectedPath) {
-      router.replace(expectedPath);
-    }
-  }, [activeProfile, activeView, router]);
 
   const currentClass =
     classes.find((schoolClass) => schoolClass.id === selectedClassId) ??
@@ -1038,45 +998,28 @@ export function SchoolAdminDemo({
     }
   }
 
-  function enterProfile(profileId: ProfileId, view?: WorkspaceView) {
-    const profile = profiles.find((item) => item.id === profileId);
-
-    setActiveProfile(profileId);
-    setActiveView(view ?? profile?.defaultView ?? "overview");
-  }
-
-  function enterDemo(profile: ProfileId) {
-    const account = demoAccounts[profile];
-    const session = {
-      profile,
-      accountName: account.name,
-    };
-    try {
-      window.sessionStorage.setItem(demoSessionKey, JSON.stringify(session));
-    } catch {
-      setStorageToolsNotice(
-        "A sessão não pôde ser guardada, mas o sistema continua disponível neste ecrã.",
-      );
-    }
-    setAccountName(account.name);
-    enterProfile(profile, initialView);
-    router.replace(routeForWorkspaceView(initialView));
+  function enterDemo(accountId: string) {
+    const session = demoSessionFor(accountId);
+    if (!session) return;
+    try { saveDemoSession(window.sessionStorage, session); }
+    catch { setStorageToolsNotice("A sessão não pôde ser guardada, mas a demonstração continua neste ecrã."); }
+    setAccountName(`${session.account.name} — ${session.account.roleLabel}`);
+    setActiveProfile(session.account.role);
+    workspace.update({ view: activeView }, true);
   }
 
   function signOut() {
     try { window.sessionStorage.removeItem(demoSessionKey); } catch { /* Sair continua disponível. */ }
     setActiveProfile(null);
     setAccountName("");
-    setMobileMenuOpen(false);
-    router.replace("/");
+    setExpandedTable(false);
+    window.history.replaceState(null, "", "/");
   }
 
-  function navigateTo(view: WorkspaceView, href?: string) {
+  function navigateTo(view: WorkspaceView) {
+    setSelectedFinanceCell(null);
+    setExpandedTable(false);
     setActiveView(view);
-    setMobileMenuOpen(false);
-    if (href) {
-      router.push(href);
-    }
   }
 
   function showStorageError(error: unknown, onError = setStorageToolsNotice) {
@@ -1215,8 +1158,7 @@ export function SchoolAdminDemo({
   function openPaymentAlert(filter: PaymentAlertFilter) {
     setStudentSearch("");
     setPaymentAlertFilter(filter);
-    setActiveView("payments");
-    setActivePaymentSection("entry");
+    workspace.update({ view: "payments", paymentSection: "entry" }, true);
   }
 
   function openCapacityAlert() {
@@ -1310,11 +1252,6 @@ export function SchoolAdminDemo({
       classId,
       groupId,
     });
-  }
-
-  function startNewGroup() {
-    setActiveView("groups");
-    resetGroupDraft(currentClassId);
   }
 
   function startNewEnrollment() {
@@ -1542,9 +1479,9 @@ export function SchoolAdminDemo({
   }
 
   function openPaymentEntry(studentId?: string) {
+    setExpandedTable(false);
     paymentCommandRef.current = null;
-    setActiveView("payments");
-    setActivePaymentSection("entry");
+    workspace.update({ view: "payments", paymentSection: "entry" }, true);
 
     if (studentId) {
       const student = students.find((item) => item.id === studentId);
@@ -1590,9 +1527,9 @@ export function SchoolAdminDemo({
       studentId: string;
     },
   ) {
+    setExpandedTable(false);
     paymentCommandRef.current = null;
-    setActiveView("payments");
-    setActivePaymentSection("entry");
+    workspace.update({ view: "payments", paymentSection: "entry" }, true);
     setSelectedFinanceCell(null);
     setPaymentDraft((currentDraft) => ({
       ...currentDraft,
@@ -1608,8 +1545,7 @@ export function SchoolAdminDemo({
   }
 
   function openMiscellaneousChargeForm() {
-    setActiveView("payments");
-    setActivePaymentSection("settings");
+    workspace.update({ view: "payments", paymentSection: "settings" }, true);
     setSelectedFinanceCell(null);
     setMiscellaneousNotice("");
   }
@@ -1905,8 +1841,7 @@ export function SchoolAdminDemo({
     resetEnrollmentDraft(newStudent.classId, newStudent.groupId);
 
     if (openPaymentAfterSave && registrationBalance > 0) {
-      setActiveView("payments");
-      setActivePaymentSection("entry");
+      workspace.update({ view: "payments", paymentSection: "entry" }, true);
       setBillingNotice(
         `${newStudent.registrationNumber} pronta para pagamento de inscricao: ${formatCurrency(registrationBalance)}.`,
       );
@@ -2335,11 +2270,11 @@ export function SchoolAdminDemo({
     } catch (error) { showStorageError(error, setBillingNotice); }
   }
 
-  if (!storageReady) {
+  if (!storageReady || (demoState && !workspace.ready)) {
     return <main className="grid min-h-screen place-items-center p-6" role="status">A carregar os dados do LSS…</main>;
   }
   if (!activeProfile) {
-    return renderProfilePortal();
+    return <DemoEntry onEnter={enterDemo} />;
   }
 
   if (storageLoadError || !demoState) {
@@ -2378,301 +2313,35 @@ export function SchoolAdminDemo({
 
   return renderWorkspace();
 
-  function renderProfilePortal() {
-    return (
-      <main className="grid min-h-screen place-items-center overflow-x-clip bg-[#fbfaf7] px-5 py-12 text-[#0f5d55]">
-        <section aria-label="Acesso ao Liceu São Silvestre" className="w-full max-w-3xl text-center">
-          <div className="mx-auto grid size-36 place-items-center rounded-full border-[4px] border-[#0f5d55] p-2 shadow-[0_14px_40px_rgba(15,93,85,0.12)] sm:size-44">
-            <div className="grid size-full place-items-center rounded-full border-2 border-[#fbfaf7] bg-[radial-gradient(circle_at_35%_28%,#176f64_0%,#0f5d55_48%,#09483f_100%)] text-4xl font-light tracking-[-0.08em] text-white ring-2 ring-[#0f5d55] sm:text-5xl">
-              {institutionLogoText}
-            </div>
-          </div>
-
-          <h1 className="mt-7 text-4xl font-extrabold tracking-tight text-[#0f5d55] sm:mt-8 sm:text-6xl">
-            {institutionName}
-          </h1>
-          <p className="mt-4 text-sm text-slate-600">Demonstração com contas de exemplo. Os dados ficam neste navegador.</p>
-
-          <div className="mx-auto mt-12 grid max-w-3xl gap-4 sm:mt-16 sm:grid-cols-2 sm:gap-7">
-            <button
-              type="button"
-              autoFocus
-              onClick={() => enterDemo("secretaria")}
-              className="group flex min-h-24 items-center justify-center gap-5 rounded-xl bg-[linear-gradient(135deg,#10655c,#0a5048)] px-8 text-xl font-bold text-white shadow-[0_12px_28px_rgba(15,93,85,0.2)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_34px_rgba(15,93,85,0.26)] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[#70b8ad] sm:text-2xl"
-            >
-              <svg aria-hidden="true" className="size-10 shrink-0" viewBox="0 0 48 48" fill="none">
-                <rect x="6" y="15" width="36" height="26" rx="4" stroke="currentColor" strokeWidth="2.8" />
-                <path d="M17 15v-4a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v4M6 25h36M20 23h8v6h-8z" stroke="currentColor" strokeWidth="2.8" strokeLinejoin="round" />
-              </svg>
-              Secretaria
-            </button>
-
-            <button
-              type="button"
-              onClick={() => enterDemo("director")}
-              className="group flex min-h-24 items-center justify-center gap-5 rounded-xl border-2 border-[#0f5d55] bg-[#fbfaf7] px-8 text-xl font-bold text-[#0f5d55] transition hover:-translate-y-0.5 hover:bg-[#f0f7f5] hover:shadow-[0_12px_28px_rgba(15,93,85,0.12)] focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-[#70b8ad] sm:text-2xl"
-            >
-              <svg aria-hidden="true" className="size-11 shrink-0" viewBox="0 0 48 48" fill="none">
-                <path d="m24 6 18 10H6L24 6Z" stroke="currentColor" strokeWidth="2.8" strokeLinejoin="round" />
-                <path d="M10 20h28M12 20v17m8-17v17m8-17v17m8-17v17M7 38h34M5 43h38" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" />
-              </svg>
-              Direcção
-            </button>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
   function renderWorkspace() {
-    const visibleNavigation = workspaceNavigation.filter((item) =>
-      item.profiles.includes(selectedProfile.id),
-    );
-    const activeNavigationView = ["classes", "rooms", "groups"].includes(activeView)
-      ? "enrollments"
-      : activeView;
-    const activeNavigation =
-      visibleNavigation.find((item) => item.id === activeNavigationView) ??
-      visibleNavigation[0] ??
-      workspaceNavigation[0];
-    const canManageAcademics = selectedProfile.id === "secretaria";
-    const canManagePayments = selectedProfile.id === "secretaria";
-    const showAcademicContext = selectedProfile.id === "secretaria";
-    const navigationGlyphs: Partial<Record<WorkspaceView, string>> = {
-      overview: "⌂",
-      enrollments: "AL",
-      payments: "MT",
-      reports: "RP",
-      catalog: "⚙",
-    };
-    const navigationPanel = (mobile = false) => (
-      <div className="min-h-full px-3 py-5">
-        {mobile && (
-          <div className="mb-4 flex items-center justify-between">
-            <span className="font-black text-[#185c54]">LSS</span>
-            <button
-              type="button"
-              className="grid size-11 place-items-center rounded-md border border-slate-200"
-              aria-label="Fechar menu"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              ×
-            </button>
-          </div>
-        )}
-        <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-3 ring-1 ring-slate-200">
-          <div
-            className={cx(
-              "grid size-10 shrink-0 place-items-center rounded-md text-sm font-black",
-              selectedProfile.surface,
-            )}
-          >
-            {selectedProfile.glyph}
-          </div>
-          <div className={!mobile && sidebarCollapsed ? "hidden" : "min-w-0"}>
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-              Perfil activo
-            </p>
-            <p className="truncate font-bold text-slate-950">
-              {selectedProfile.title}
-            </p>
-          </div>
-        </div>
-
-        <nav className="mt-5 grid gap-2">
-          {visibleNavigation.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-current={activeNavigationView === item.id ? "page" : undefined}
-              onClick={() => navigateTo(item.id, item.href)}
-              title={item.label}
-              className={cx(
-                "flex min-h-11 items-center gap-3 rounded-md px-3 text-left text-sm font-semibold transition-colors",
-                activeNavigationView === item.id
-                  ? "bg-[#e8f5f2] text-[#185c54] ring-1 ring-[#c9e6df]"
-                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-950",
-              )}
-            >
-              <span className="grid size-6 shrink-0 place-items-center text-xs font-black" aria-hidden="true">
-                {navigationGlyphs[item.id] ?? "•"}
-              </span>
-              <span className={!mobile && sidebarCollapsed ? "sr-only" : ""}>
-                {item.label}
-              </span>
-            </button>
-          ))}
-        </nav>
-
-        {showAcademicContext && (mobile || !sidebarCollapsed) && (
-          <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
-              Selecção actual
-            </p>
-            <div className="mt-3 grid gap-3 text-sm">
-              <SummaryMini label="Classe" value={currentClass?.name ?? "Sem classe"} />
-              <SummaryMini label="Turma" value={currentGroup?.name ?? "Sem turma"} />
-              <SummaryMini label="Mensalidade" value={formatCurrency(paymentSettings.monthlyFee)} />
-            </div>
-          </div>
-        )}
-
-        {!mobile && (
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed((value) => !value)}
-            className="mt-5 min-h-11 w-full rounded-md border border-slate-200 px-3 text-sm font-semibold text-slate-600 hover:bg-slate-50"
-            aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
-          >
-            {sidebarCollapsed ? "›" : "‹ Recolher"}
-          </button>
-        )}
-      </div>
-    );
-
+    const academicArea = ["classes", "rooms", "groups", "enrollments"].includes(activeView);
     return (
-      <main className="min-h-screen overflow-x-clip bg-[#f4f7f8] text-slate-950">
-        <div className="border-b border-slate-200 bg-white">
-          <PageContainer className="flex flex-wrap items-center justify-between gap-4 py-4">
-            <div className="flex min-w-0 items-center gap-4">
-              <button
-                type="button"
-                className="grid size-11 place-items-center rounded-md border border-slate-200 text-lg font-bold lg:hidden"
-                aria-label="Abrir menu"
-                aria-expanded={mobileMenuOpen}
-                onClick={() => setMobileMenuOpen(true)}
-              >
-                ☰
-              </button>
-              <div className="grid size-12 shrink-0 place-items-center rounded-md bg-[#185c54] text-sm font-black text-white">
-                {institutionLogoText}
-              </div>
-              <div className="min-w-0 overflow-x-clip">
-                <p className="break-words text-xs font-bold uppercase tracking-[0.18em] text-[#185c54]">
-                  {institutionName}
-                </p>
-                <h1 className="break-words text-xl font-bold">
-                  {activeNavigation.label}
-                </h1>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <StateLabel tone="info">Demo</StateLabel>
-              <div className="hidden text-right sm:block">
-                <p className="text-sm font-semibold">{accountName || selectedProfile.title}</p>
-                <p className="text-xs text-slate-500">{selectedProfile.title}</p>
-              </div>
-              <button
-                type="button"
-                onClick={signOut}
-                className="min-h-11 rounded-md border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-              >
-                Sair
-              </button>
-            </div>
-          </PageContainer>
-        </div>
-
-        <Drawer
-          variant="temporary"
-          open={mobileMenuOpen}
-          onClose={() => setMobileMenuOpen(false)}
-          ModalProps={{ keepMounted: true }}
-          aria-label="Navegação principal"
-          sx={{
-            display: { xs: "block", lg: "none" },
-            "& .MuiDrawer-paper": {
-              width: "min(288px, calc(100vw - 48px))",
-            },
-          }}
-        >
-          {navigationPanel(true)}
-        </Drawer>
-
-        <div
-          className="lss-shell-grid"
-          data-collapsed={sidebarCollapsed}
-        >
-          <aside
-            aria-label="Navegação principal"
-            className="sticky top-0 hidden h-[calc(100vh-81px)] min-w-0 self-start overflow-y-auto border-r border-slate-200 bg-white lg:block"
-          >
-            {navigationPanel()}
-          </aside>
-
-          <div className="min-w-0 overflow-x-clip">
-            <header className="border-b border-slate-200 bg-white px-4 py-5 sm:px-6 lg:px-8">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#185c54]">
-                    {selectedProfile.title}
-                  </p>
-                  <h2 className="mt-1 text-2xl font-bold text-slate-950">
-                    {activeNavigation.label}
-                  </h2>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {canManageAcademics && (
-                    <>
-                      <SecondaryButton onClick={startNewGroup}>
-                        Nova turma
-                      </SecondaryButton>
-                      <SecondaryButton onClick={startNewEnrollment}>
-                        Matricula
-                      </SecondaryButton>
-                    </>
-                  )}
-                  {canManagePayments && (
-                    <PrimaryButton
-                      onClick={() => {
-                        setActiveView("payments");
-                        setActivePaymentSection("entry");
-                      }}
-                    >
-                      Mensalidades
-                    </PrimaryButton>
-                  )}
-                </div>
-              </div>
-
-              {showAcademicContext && (
-                <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
-                  <CrumbButton onClick={() => setActiveView("classes")}>
-                    {currentClass?.name ?? "Classe"}
-                  </CrumbButton>
-                  <span className="text-slate-400">/</span>
-                  <CrumbButton onClick={() => setActiveView("groups")}>
-                    {currentGroup?.name ?? "Turma"}
-                  </CrumbButton>
-                  <span className="text-slate-400">/</span>
-                  <CrumbButton onClick={() => setActiveView("enrollments")}>
-                    Matriculas
-                  </CrumbButton>
-                  <span className="text-slate-400">/</span>
-                  <CrumbButton onClick={() => setActiveView("payments")}>
-                    Mensalidades
-                  </CrumbButton>
-                </div>
-              )}
-            </header>
-
-            <div className="min-w-0 px-4 py-6 sm:px-6 lg:px-8">
-              {storageToolsError && <p role="alert" className="mb-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">{storageToolsNotice}</p>}
-              {draftStorageNotice && <p role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{draftStorageNotice}</p>}
-              {financeSettingsNotice && <p role="status" className="mb-4 rounded-md bg-slate-50 p-3 text-sm">{financeSettingsNotice}</p>}
-              {demoState?.migrationWarnings?.map((warning) => <p key={warning} role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{warning}</p>)}
-              {activeView === "overview" && renderOverview()}
-              {activeView === "catalog" && renderCatalog()}
-              {activeView === "classes" && renderClasses()}
-              {activeView === "rooms" && renderRooms()}
-              {activeView === "groups" && renderGroups()}
-              {activeView === "enrollments" && renderEnrollments()}
-              {activeView === "payments" && renderPayments()}
-              {activeView === "reports" && renderReports()}
-            </div>
-          </div>
-        </div>
-      </main>
+      <WorkspaceShell
+        activeView={activeView} accountName={accountName || selectedProfile.title}
+        roleLabel={selectedProfile.title} year={paymentSettings.academicYear}
+        collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed}
+        onNavigate={navigateTo} onSignOut={signOut}
+        expandable={financeTableVisible} expanded={financeTableVisible && expandedTable}
+        onExpandedChange={setExpandedTable}
+      >
+        {academicArea && <nav aria-label="Organização dos alunos" className="mb-5 flex flex-wrap gap-2">
+          {([ ["enrollments", "Alunos"], ["groups", "Turmas"], ["classes", "Classes"], ["rooms", "Salas"] ] as const).map(([view, label]) => (
+            <SecondaryButton key={view} onClick={() => setActiveView(view)}>{label}</SecondaryButton>
+          ))}
+        </nav>}
+        {storageToolsError && <p role="alert" className="mb-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">{storageToolsNotice}</p>}
+        {draftStorageNotice && <p role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{draftStorageNotice}</p>}
+        {financeSettingsNotice && <p role="status" className="mb-4 rounded-md bg-slate-50 p-3 text-sm">{financeSettingsNotice}</p>}
+        {demoState?.migrationWarnings?.map((warning) => <p key={warning} role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{warning}</p>)}
+        {activeView === "overview" && renderOverview()}
+        {activeView === "catalog" && renderCatalog()}
+        {activeView === "classes" && renderClasses()}
+        {activeView === "rooms" && renderRooms()}
+        {activeView === "groups" && renderGroups()}
+        {activeView === "enrollments" && renderEnrollments()}
+        {activeView === "payments" && renderPayments()}
+        {activeView === "reports" && renderReports()}
+      </WorkspaceShell>
     );
   }
 
@@ -2807,66 +2476,14 @@ export function SchoolAdminDemo({
         </section>
 
         <div className="lss-split-grid">
-          <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-              <div>
-                <h3 className="text-base font-semibold">
-                  {canManageAcademics ? "Académico" : "Consulta"}
-                </h3>
-              </div>
-              {canManagePayments && (
-                <PrimaryButton
-                  onClick={() => {
-                    setActiveView("payments");
-                    setActivePaymentSection("entry");
-                  }}
-                >
-                  Gerar mensalidades
-                </PrimaryButton>
-              )}
-            </div>
-            <div className="grid gap-3 p-5 md:grid-cols-5">
-              {canManageAcademics && (
-                <>
-                  <FlowStep
-                    number="01"
-                    title="Classes"
-                    onClick={() => setActiveView("classes")}
-                  />
-                  <FlowStep
-                    number="02"
-                    title="Salas"
-                    onClick={() => setActiveView("rooms")}
-                  />
-                  <FlowStep
-                    number="03"
-                    title="Turmas"
-                    onClick={() => setActiveView("groups")}
-                  />
-                  <FlowStep
-                    number="04"
-                    title="Matriculas"
-                    onClick={() => setActiveView("enrollments")}
-                  />
-                </>
-              )}
-              {canManagePayments && (
-                <FlowStep
-                  number={canManageAcademics ? "05" : "01"}
-                  title="Mensalidades"
-                  onClick={() => {
-                    setActiveView("payments");
-                    setActivePaymentSection("entry");
-                  }}
-                />
-              )}
-              {!canManageAcademics && !canManagePayments && (
-                <FlowStep
-                  number="01"
-                  title="Relatórios"
-                  onClick={() => setActiveView("reports")}
-                />
-              )}
+          <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+            <h2 className="text-base font-semibold">{canManageAcademics ? "Atendimento" : "Consultas"}</h2>
+            <p className="mt-1 text-sm text-slate-500">Escolha uma tarefa para continuar.</p>
+            <div className="lss-actions mt-5">
+              {canManageAcademics ? <PrimaryButton onClick={startNewEnrollment}>Nova matrícula</PrimaryButton>
+                : <PrimaryButton onClick={() => setActiveView("enrollments")}>Consultar alunos</PrimaryButton>}
+              {canManagePayments ? <SecondaryButton onClick={() => openPaymentEntry()}>Registar pagamento</SecondaryButton>
+                : <SecondaryButton onClick={() => setActiveView("reports")}>Consultar relatórios</SecondaryButton>}
             </div>
           </section>
 
@@ -3962,7 +3579,7 @@ export function SchoolAdminDemo({
 
     return (
       <div className="grid gap-6">
-        <nav className="flex flex-wrap gap-2 pb-1">
+        <nav aria-label="Áreas de pagamentos" data-workspace-secondary className="flex flex-wrap gap-2 pb-1">
           {visiblePaymentSections.map((section) => (
             <button
               key={section.id}
@@ -4022,7 +3639,7 @@ export function SchoolAdminDemo({
 
         {currentPaymentSection?.id === "entry" && (
           <div className="grid gap-6">
-            <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <section data-workspace-secondary className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
                 <div>
                   <h3 className="text-base font-semibold">Gerar propinas</h3>
@@ -4103,7 +3720,7 @@ export function SchoolAdminDemo({
               )}
             </section>
 
-            <div className="lss-split-grid">
+            <div className="lss-split-grid lss-payment-grid">
               <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                   <div>
@@ -4159,7 +3776,7 @@ export function SchoolAdminDemo({
                   search={studentSearch}
                 />
 
-                <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
+                <div className="table-scroll" data-scroll-id="payments" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
                                     <table className="lss-finance-table w-full min-w-[1720px] text-left text-sm">
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                       <tr>
@@ -4443,7 +4060,7 @@ export function SchoolAdminDemo({
               </section>
 
               {selectedProfile.id === "secretaria" && (
-                <PaymentForm
+                <div data-workspace-secondary><PaymentForm
                   allRows={allPaymentRows}
                   allStudents={allStudentsAlphabetically}
                   draft={paymentDraft}
@@ -4455,7 +4072,7 @@ export function SchoolAdminDemo({
                   settings={paymentSettings}
                   onChange={changePaymentDraft}
                   onSubmit={launchPayment}
-                />
+                /></div>
               )}
             </div>
           </div>
