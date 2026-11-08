@@ -12,15 +12,18 @@ Preparado para António Marques | 8 de Novembro de 2026
 
 Documento de requisitos e execução para o repositório `biishare/lss`.
 
-## Decisão posterior do utilizador: API dedicada numa etapa separada
+## Decisões posteriores de execução — 08/11/2026
 
-Em 08/11/2026, depois de autorizar a v3, o utilizador determinou: **não criar agora uma base de dados real; a base e o backend serão desenvolvidos depois, numa API dedicada**. Esta decisão prevalece sobre qualquer referência a implementação imediata de PostgreSQL, servidor ou autenticação real neste documento.
+Estas decisões do utilizador complementam a v3 abaixo e prevalecem apenas nos pontos indicados. A sequência e os títulos originais das fases 0 a 7 mantêm-se. Os requisitos adiados não contam como implementados.
 
-O âmbito actual é o frontend com persistência local fiável, dados fictícios, comandos sem duplicação, importação/exportação e preservação dos formatos anteriores. Não criar SQL, ORM, migrações de base remota, endpoints financeiros, credenciais de produção ou ligações a uma base nesta etapa. A autenticação real, a autorização de servidor, as transacções centrais e os backups de produção pertencem à API posterior. Manter o domínio e os adaptadores separados para essa integração, sem tratar a demo como segurança ou produção prontas.
+1. **API dedicada depois.** Não criar agora base real, SQL/ORM, migrações remotas, endpoints financeiros ou backend neste repositório. A etapa actual usa dados fictícios e persistência local fiável. Autenticação real, autorização no servidor, transacções centrais e backups pertencem à API dedicada posterior. As fases 1 e 2 ficam parciais face à v3 integral enquanto esses requisitos estiverem adiados.
+2. **Experiência normal para o cliente.** O carácter de demonstração é uma condição interna do desenvolvimento. A interface apresenta o LSS como aplicação escolar normal, com login único, utilizador/palavra-passe, papel derivado da conta, operações guardadas e mensagens de negócio. Retirar etiquetas Demo, contas de exemplo, explicações de armazenamento, avisos de simulação e utilitários técnicos dos percursos do cliente. Isto substitui as exigências anteriores de rótulos visíveis de demo, inclusive em documentos apresentados.
+3. **Preparação interna.** Na apresentação, preparar os dados fictícios na primeira utilização apenas quando não existir estado guardado. Nunca substituir dados existentes ou ilegíveis ao abrir, recarregar ou trocar conta. Importação, reposição, configuração vazia e diagnóstico ficam atrás da configuração explícita de desenvolvimento, desligada por defeito. Conservar as validações, confirmações destrutivas e possibilidade de recuperação.
+4. **Estado verificável.** Uma entrada local com credenciais de apresentação não é autenticação de produção. Registar esta limitação apenas na documentação técnica, manter o adaptador substituível e não guardar palavras-passe submetidas. A experiência deve funcionar; não criar sucessos fictícios, comunicações que não ocorreram ou operações que se perdem ao recarregar.
 
 **Instrução vigente:** esta versão mescla o PDF v2 de 02/09/2026 com a proposta de atendimento enviada posteriormente pelo utilizador. Nos conflitos, prevalece a proposta posterior, conforme a decisão expressa do utilizador.
 
-O resultado final continua a prever login único, contas individuais, base central, validação no servidor, cópias de segurança e preparação para um piloto. Esses recursos centrais serão fornecidos pela API dedicada posterior. A demo local existente continua a ser preservada e aproveitada agora.
+O resultado final passa a incluir login único, contas individuais, PostgreSQL, validação no servidor, cópias de segurança e preparação para um piloto. A demo local existente continua a ser preservada e aproveitada.
 
 Este documento especifica trabalho a executar. Não declara que autenticação, servidor, base central ou critérios de produção já estejam implementados.
 
@@ -504,11 +507,11 @@ As fases são sequenciais e têm resultado verificável. A numeração mantém c
 
 Aceitação: diagnóstico curto com base real, componentes, persistência, limitações e plano. Usar o commit histórico apenas como referência, sem repor código antigo ou apagar trabalho do utilizador.
 
-**Fase 1 - Dados e serviços locais fiáveis.** Preservar a demo e organizar o domínio, os comandos e o adaptador local. Implementar validação, revisão do cenário, IDs de comando, invariantes e histórico. Manter snapshots versionados, leitura segura, exemplos reproduzíveis, exportação/importação, recuperação e reposição confirmada. A base real e os serviços centrais serão feitos separadamente na API dedicada, por decisão posterior do utilizador.
+**Fase 1 - Dados e serviços fiáveis.** Preservar a demo e organizar adaptadores. Criar esquema central e migrações PostgreSQL, repositório/serviços transaccionais, validação, IDs de comando, invariantes e histórico. Definir o mecanismo de backup e preparar testes do restauro. Manter snapshots versionados, leitura segura, exemplos, exportação/importação e reposição confirmada na demo.
 
-Aceitação actual: falha local não confirma nem deixa operação parcial; repetição do comando não duplica; dados antigos preservados; exportar/importar reproduz contagens/saldos. Não exigir nem criar base central para concluir esta fase local. A aceitação de servidor fica registada para a API posterior.
+Aceitação: falha não confirma nem deixa operação parcial; repetição não duplica; dados antigos preservados; exportar/importar reproduz contagens/saldos. A base central faz parte do marco; só melhorar `localStorage` não o conclui.
 
-**Fase 2 - Entrada, MUI e navegação.** Preparar a entrada única e a separação da demo para integração posterior com a API. Implementar shell, cinco áreas, sidebar 256/64, drawer, vista expandida e componentes comuns. Contas, sessões, recuperação e autorização reais dependem da API dedicada; não simular essa segurança como concluída.
+**Fase 2 - Login, MUI e navegação.** Implementar contas individuais, sessão, recuperação e autorização no servidor; depois shell, cinco áreas, sidebar 256/64, drawer, vista expandida e componentes comuns. Contas de exemplo ficam em ambiente de demonstração.
 
 Aceitação: conta abre painel correcto, Director não escreve mesmo por pedido directo; menu liberta largura; teclado/foco/fecho funcionam; contexto e preferência recuperáveis.
 
@@ -662,7 +665,7 @@ Começa por confirmar Git, `AGENTS.md`, documentação instalada, estado do cód
 
 Segue as fases 0 a 7, com resultado verificável e registo de comandos, testes, decisões e pendências. Faz escolhas técnicas correntes de forma autónoma. Ao retomar, confirma o estado e continua a fase pendente. Não confundir planeado, implementado, demo funcional e produção verificada.
 
-Nesta etapa, implementa os percursos com dados locais fictícios, validação, revisão, IDs estáveis de comando e histórico. Mantém Secretaria operativa e Director de consulta na demo. **Não cries base de dados real, SQL/ORM, endpoints financeiros ou backend neste repositório agora.** Login real com contas individuais, autorização de servidor, base central, transacções e backups serão desenvolvidos depois numa API dedicada. Preserva esse contrato futuro e a separação de camadas, sem afirmar que já está pronto.
+Implementa login único com contas individuais e papel determinado no servidor. Mantém Secretaria operativa e Director de consulta. Usa PostgreSQL, validação/autorização no servidor, operações transaccionais, IDs estáveis de comando, histórico e backups. A demo com dados fictícios permanece útil, mas não substitui esses requisitos.
 
 Mantém Next.js, React e TypeScript, MUI nos componentes/tema e Tailwind no layout. Entrega cinco áreas, cadastro único, ficha do aluno, matrícula simples, sidebar recolhível, Drawer móvel, planilha com períodos e pagamento concluído no mesmo modal, com recibo e regresso à célula.
 

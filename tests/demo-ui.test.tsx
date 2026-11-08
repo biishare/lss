@@ -43,13 +43,13 @@ beforeEach(() => {
 afterEach(() => { cleanup(); });
 after(async () => { await domWindow.happyDOM.close(); });
 
-function open(view: WorkspaceView = "overview") {
-  return render(<AppRouterContext.Provider value={router}><SchoolAdminDemo initialView={view} /></AppRouterContext.Provider>);
+function open(view: WorkspaceView = "overview", developerToolsEnabled = false) {
+  return render(<AppRouterContext.Provider value={router}><SchoolAdminDemo initialView={view} developerToolsEnabled={developerToolsEnabled} /></AppRouterContext.Provider>);
 }
 
 test("dados corrompidos não são substituídos ao abrir a aplicação", async () => {
   storage.values.set(demoStorageKey, "{incompleto");
-  open();
+  open("overview", true);
   await screen.findByRole("heading", { name: "Não foi possível abrir os dados" });
   assert.equal(storage.getItem(demoStorageKey), "{incompleto");
   assert.equal(storage.financialWrites, 0);
@@ -95,7 +95,7 @@ test("Director consulta o cenário comum sem formulários de escrita nem gravaç
 test("cancelar reposição deixa o cenário intacto", async () => {
   const raw = storage.getItem(demoStorageKey);
   window.confirm = () => false;
-  open("catalog");
+  open("catalog", true);
   const reset = await screen.findByRole("button", { name: "Repor dados iniciais" });
   fireEvent.click(reset);
   await screen.findByText(/Reposição cancelada/);
@@ -103,14 +103,14 @@ test("cancelar reposição deixa o cenário intacto", async () => {
   assert.equal(storage.financialWrites, 0);
 });
 
-test("primeiro arranque oferece escolha e não cria exemplos ao recarregar", async () => {
+test("modo de desenvolvimento conserva a escolha inicial e não cria exemplos ao recarregar", async () => {
   storage.values.delete(demoStorageKey);
-  const page = open();
+  const page = open("overview", true);
   await screen.findByRole("button", { name: "Abrir escola de exemplo" });
   assert.equal(storage.financialWrites, 0);
   assert.equal(storage.getItem(demoStorageKey), null);
   page.unmount();
-  open();
+  open("overview", true);
   await screen.findByRole("button", { name: "Configurar do início" });
   assert.equal(storage.financialWrites, 0);
 });
@@ -134,7 +134,7 @@ test("erro de importação não substitui o estado nem pede confirmação", asyn
   const raw = storage.getItem(demoStorageKey);
   let confirmations = 0;
   window.confirm = () => { confirmations++; return true; };
-  open("catalog");
+  open("catalog", true);
   const input = await screen.findByLabelText("Importar JSON");
   fireEvent.change(input, { target: { files: [new File(["{invalid"], "invalid.json", { type: "application/json" })] } });
   await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /JSON válido/));
@@ -188,15 +188,18 @@ function mainNavigation() {
   return within(screen.getByRole("complementary", { name: "Navegação principal" }));
 }
 
-test("entrada única de demonstração abre o papel da conta e sair conserva a escola", async () => {
+test("login abre o papel atribuído à conta e sair conserva a escola sem guardar credenciais", async () => {
   const raw = storage.getItem(demoStorageKey);
   window.sessionStorage.removeItem("lss-demo-session-v1");
   open();
   await screen.findByRole("heading", { name: "Entrar no LSS" });
-  fireEvent.change(screen.getByRole("combobox", { name: "Conta de exemplo" }), { target: { value: "demo-director" } });
-  fireEvent.click(screen.getByRole("button", { name: "Abrir demonstração" }));
+  fireEvent.change(screen.getByLabelText("Utilizador", { exact: false }), { target: { value: "antonio" } });
+  fireEvent.change(screen.getByLabelText("Palavra-passe", { exact: false }), { target: { value: "Lss!Antonio2026" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Entrar$/ }));
   await screen.findByRole("heading", { level: 1, name: "Início" });
-  assert.ok(screen.getByText("António — Director"));
+  assert.ok(screen.getByText("António", { exact: true }));
+  assert.ok(!JSON.stringify([...storage.values]).includes("Lss!Antonio2026"));
+  assert.ok(!window.sessionStorage.getItem("lss-demo-session-v1")?.includes("Lss!Antonio2026"));
   fireEvent.click(mainNavigation().getByRole("button", { name: "Pagamentos" }));
   await screen.findByRole("heading", { name: "Planilha financeira da turma" });
   assert.equal(screen.queryByRole("button", { name: "Confirmar pagamento" }), null);
@@ -205,6 +208,68 @@ test("entrada única de demonstração abre o papel da conta e sair conserva a e
   assert.equal(storage.getItem(demoStorageKey), raw);
   assert.equal(storage.financialWrites, 0);
   assert.equal(window.sessionStorage.getItem("lss-demo-session-v1"), null);
+});
+
+test("credenciais incorrectas conservam o login e não abrem sessão ou alteram os dados", async () => {
+  const raw = storage.getItem(demoStorageKey);
+  window.sessionStorage.removeItem("lss-demo-session-v1");
+  open();
+  await screen.findByRole("heading", { name: "Entrar no LSS" });
+  assert.equal(screen.queryByRole("combobox"), null);
+  assert.doesNotMatch(document.body.textContent ?? "", /demonstração|Conta de exemplo|fictícias/);
+  fireEvent.change(screen.getByLabelText("Utilizador", { exact: false }), { target: { value: "marta" } });
+  fireEvent.change(screen.getByLabelText("Palavra-passe", { exact: false }), { target: { value: "incorrecta" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Entrar$/ }));
+  await screen.findByText("Utilizador ou palavra-passe incorrectos.");
+  assert.equal(window.sessionStorage.getItem("lss-demo-session-v1"), null);
+  assert.equal(storage.getItem(demoStorageKey), raw);
+  assert.equal((screen.getByLabelText("Utilizador", { exact: false }) as HTMLInputElement).value, "marta");
+  fireEvent.change(screen.getByLabelText("Palavra-passe", { exact: false }), { target: { value: "Lss!Marta2026" } });
+  fireEvent.click(screen.getByRole("button", { name: /^Entrar$/ }));
+  await screen.findByRole("heading", { level: 1, name: "Início" });
+  assert.ok(screen.getByText("Marta", { exact: true }));
+});
+
+test("primeiro arranque abre a escola preparada uma vez, inclusive para Director", async () => {
+  storage.values.delete(demoStorageKey);
+  window.sessionStorage.setItem("lss-demo-session-v1", JSON.stringify({ source: "demo", accountId: "demo-director" }));
+  const page = open();
+  await screen.findByRole("heading", { level: 1, name: "Início" });
+  assert.equal(storage.financialWrites, 1);
+  const saved = storage.getItem(demoStorageKey);
+  assert.ok(saved);
+  assert.equal(screen.queryByRole("button", { name: "Abrir escola de exemplo" }), null);
+  page.unmount();
+  open();
+  await screen.findByRole("heading", { level: 1, name: "Início" });
+  assert.equal(storage.financialWrites, 1);
+  assert.equal(storage.getItem(demoStorageKey), saved);
+});
+
+test("cliente não recebe controlos técnicos e dados ilegíveis continuam preservados", async () => {
+  const page = open("catalog");
+  await screen.findByRole("heading", { level: 1, name: "Configurações" });
+  assert.equal(screen.queryByRole("button", { name: "Repor dados iniciais" }), null);
+  assert.equal(screen.queryByLabelText("Importar JSON"), null);
+  assert.equal(screen.queryByRole("button", { name: "Exportar JSON" }), null);
+  assert.doesNotMatch(document.body.textContent ?? "", /\bDemo\b|navegador|Ferramentas de desenvolvimento/);
+  page.unmount();
+  storage.values.set(demoStorageKey, "{incompleto");
+  open();
+  await screen.findByRole("heading", { name: "Não foi possível abrir os dados" });
+  assert.equal(storage.getItem(demoStorageKey), "{incompleto");
+  assert.equal(storage.financialWrites, 0);
+  assert.equal(screen.queryByRole("button", { name: "Descarregar original" }), null);
+  assert.match(document.body.textContent ?? "", /contacte o responsável/);
+});
+
+test("falha ao preparar a primeira utilização não apresenta sucesso nem entra num cenário vazio", async () => {
+  storage.values.delete(demoStorageKey);
+  storage.failed = true;
+  open();
+  await screen.findByRole("heading", { name: "Não foi possível abrir os dados" });
+  assert.equal(storage.getItem(demoStorageKey), null);
+  assert.equal(screen.queryByRole("heading", { level: 1, name: "Início" }), null);
 });
 
 test("layout partilhado conserva pesquisa, selecção e rascunho entre áreas", async () => {

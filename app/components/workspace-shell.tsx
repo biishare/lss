@@ -103,7 +103,6 @@ export function WorkspaceShell({
         </div>
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           <span aria-label={`Ano lectivo ${year}`} className="text-xs font-semibold text-slate-600">{year}</span>
-          <span className="rounded border border-sky-100 bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-800">Demo</span>
           <div className="lss-account-label text-right text-sm"><p className="font-semibold">{accountName}</p><p className="text-xs text-slate-500">{roleLabel}</p></div>
           <Tooltip title="Sair" arrow><IconButton onClick={onSignOut} aria-label="Sair"><NavigationIcon view="signout"/></IconButton></Tooltip>
         </div>
