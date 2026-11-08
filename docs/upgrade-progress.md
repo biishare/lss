@@ -12,7 +12,7 @@ previam PostgreSQL e servidor nesta etapa.
 | --- | --- | --- |
 | 0 - Diagnóstico | Concluída | Base e PDF lidos; código, testes e diferenças inventariados; âmbito actualizado. |
 | 1 - Estado e serviços locais | Concluída no âmbito local autorizado | Repositório local, snapshot v3, validação, revisão, comandos, recuperação, recibo persistido e rascunhos ligados à UI; 59 testes aprovados. |
-| 2 - Entrada e shell | Implementada; em validação do preview | Entrada demo por conta, layout partilhado MUI, cinco áreas, sidebar/Drawer, expansão e contexto recuperável. Autenticação real aguarda a API. |
+| 2 - Entrada e shell | Implementada; revisão visual pendente | Entrada demo por conta, layout partilhado MUI, cinco áreas, sidebar/Drawer, expansão e contexto recuperável. Autenticação real aguarda a API. |
 | 3 - Académico | Pendente | Ficha única, pessoa/matrícula/colocação, renovação, transferência, vagas e configuração guiada. |
 | 4 - Regras | Pendente | Dinheiro exacto, emissão, benefícios e cálculos de multas conforme v3. |
 | 5 - Atendimento | Pendente | Pagamento inteiramente no modal, conferência, crédito, devoluções e série de recibos. |
@@ -47,7 +47,7 @@ previam PostgreSQL e servidor nesta etapa.
   metadados do ano activo/próximo. Números repetidos no formato antigo são
   conservados com aviso, para revisão académica explícita na fase 3.
 
-## Validação desta entrega
+## Validação da fase 1
 
 | Comando | Resultado observado |
 | --- | --- |
@@ -109,10 +109,22 @@ Branch: `codex/lss-v3-navigation`, a partir da `main` publicada na fase 1.
 Validação automatizada desta fase: 55 testes de domínio/persistência e 18 de UI
 (73 no total), incluindo contas, compatibilidade, URL sem pesquisa pessoal,
 links directos, retorno/reabertura, rascunho, selecção, scroll, Drawer e Escape.
-Lint, TypeScript e build são verificados antes de publicar a branch.
+Lint sem erros/avisos, `npx tsc --noEmit`, `git diff --check` e `npm run build` aprovados. Todas as rotas foram geradas na compilação de produção.
 
-A revisão visual e o estado do preview serão registados depois da publicação
-da branch. A fase 2 não altera `main` nem promove produção automaticamente.
+PR #3: https://github.com/biishare/lss/pull/3. O commit de código `5e97eca`
+foi publicado com árvore Git idêntica à testada localmente. O check Vercel
+terminou em `success`; o bot confirmou o preview como Ready, deployment
+`J8fu7s5gwwScXh7yVMaTZUA7XuS4`.
+
+A abertura do preview neste navegador foi redireccionada para o login da Vercel.
+O navegador também não alcança o servidor local deste ambiente (`localhost:3000`).
+Por isso, **não foi concluída a revisão visual das oito larguras** nem a medição
+real dos 192 px libertados. Não foram alteradas protecções ou acesso do preview.
+O comportamento de retorno, scroll, foco/Escape e fechos foi verificado no DOM
+simulado, sem o apresentar como ensaio visual ou de teclado virtual. A PR permanece
+em draft para essa revisão; isto não bloqueia a consulta do código e dos resultados.
+
+A fase 2 não altera `main` nem promove produção automaticamente.
 O atendimento completo no Dialog, Mês/Trimestre/Ano e a impressão ficam na
 fase 5; a configuração única e os vários anos ficam na fase 3.
 
