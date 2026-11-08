@@ -24,6 +24,7 @@ export type StudentFinanceRuleHistoryEntry = {
 };
 
 export type StudentFinancialProfile = {
+  appliesToRegistration?: boolean;
   status: FinanceStatus;
   discountPercent: number;
   startMonth?: string;
@@ -92,6 +93,7 @@ export type SchoolRoom = {
 };
 
 export type Student = {
+  pricingLevelId?: string;
   personId?: string;
   enrollmentStatus?: "active" | "withdrawn" | "completed" | "cancelled";
   tuitionEndMonth?: string;
@@ -137,6 +139,9 @@ export type PaymentSettings = {
 };
 
 export type ChargeSnapshot = {
+  calculationVersion?: "v3";
+  benefitIds?: string[];
+  penaltyPolicy?: import("../features/finance/domain/entities").PaymentRuleVersion["penaltyPolicy"];
   source: "legacy" | "rule-version";
   ruleVersionId?: string;
   ruleVersion?: number;
@@ -167,6 +172,8 @@ export type PaymentEntry = {
 export type ChargeCategory = "registration" | "tuition" | "miscellaneous";
 
 export type Charge = {
+  adjustedBenefit?: { percent: number; label: string; benefitIds: string[] };
+  adjustedDueAmount?: number;
   academicCancellation?: { eventId: string; previousDue: number; recordedAt: string; reason: string };
   id: string;
   studentId: string;
@@ -186,6 +193,7 @@ export type Charge = {
 export type PenaltyStage = "first" | "second";
 
 export type PenaltyCharge = {
+  adjustedAmount?: number;
   academicCancellation?: { eventId: string; previousDue: number; recordedAt: string; reason: string };
   id: string;
   studentId: string;
@@ -195,6 +203,7 @@ export type PenaltyCharge = {
   effectiveOn: string;
   createdAt: string;
   snapshot: {
+    calculationVersion?: "v3";
     thresholdDay: number;
     percent: number;
     baseBalance: number;
@@ -237,6 +246,10 @@ export type PaymentCorrection = {
 };
 
 export type StudentPaymentRecord = {
+  billingVersion?: 3;
+  billingCalendar?: import("../features/finance/domain/entities").BillingCalendarItem[];
+  financialAid?: import("../features/finance/domain/entities").FinancialAid[];
+  financialAdjustments?: import("../features/finance/domain/entities").FinancialAdjustment[];
   academicAdjustments?: Array<{ id: string; chargeId: string; amount: number; reason: string; recordedAt: string; releasedAllocations: PaymentAllocation[] }>;
   studentId: string;
   charges: Charge[];

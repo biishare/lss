@@ -1,4 +1,5 @@
 import { validateAcademicState } from "../academics/validation";
+import { validateBillingExtensions } from "../finance/domain/billing-validation";
 
 type JsonObject = Record<string, unknown>;
 
@@ -38,6 +39,7 @@ const moneyFields = new Set([
   "monthlyFee", "inscriptionFee", "inscriptionRenewalFee", "expectedTotal",
   "firstPenaltyAmount", "secondPenaltyAmount", "totalAllocated", "baseTotal",
   "penaltyTotal", "unallocatedAmount", "balanceBefore", "balanceAfter",
+  "adjustedAmount", "adjustedDueAmount", "previousAmount", "nextAmount",
 ]);
 
 function validateNumbers(value: unknown): void {
@@ -129,6 +131,7 @@ export function validateDemoState(value: unknown): asserts value is JsonObject {
     fail("as configurações de pagamento são inválidas.");
   }
   validateNumbers(value);
+  validateBillingExtensions(value);
   if (value.academic !== undefined) validateAcademicState(value.academic, value);
 
   for (const record of collections.get("paymentRecords") ?? []) {
@@ -171,7 +174,7 @@ export function validateDemoState(value: unknown): asserts value is JsonObject {
       if ((paymentTotals.get(String(payment.id)) ?? 0) > cents(payment.amount)) fail("as aplicações excedem o recebido.");
     }
     for (const charge of [...charges, ...penalties]) {
-      if ((chargeTotals.get(String(charge.id)) ?? 0) > cents(charge.dueAmount ?? charge.amount)) {
+      if ((chargeTotals.get(String(charge.id)) ?? 0) > cents(charge.adjustedDueAmount ?? charge.adjustedAmount ?? charge.dueAmount ?? charge.amount)) {
         fail("as aplicações excedem o valor devido.");
       }
     }

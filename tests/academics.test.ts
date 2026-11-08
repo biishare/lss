@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createDemoState, demoStorageKey, type DemoState } from "../app/features/demo/demo-state";
 import { createLocalDemoRepository, serializeDemoSnapshot, parseDemoSnapshot } from "../app/features/demo/local-repository";
+import { prepareBilling } from "../app/features/finance/billing-commands";
 import { confirmDemoPayment } from "../app/features/demo/payment-command";
 import { academicStateFor, groupOccupancy, projectStudents, searchPeople, type EnrollmentInput } from "../app/features/academics/model";
 import { executeAcademic, previewExit, type AcademicCommand } from "../app/features/academics/operations";
@@ -66,7 +67,8 @@ test("duplicados são revistos sem fundir nomes iguais; pesquisa ignora acentos 
   assert.ok(searchPeople(academic, f.state.students, "004").length);
 });
 test("renovação reutiliza a pessoa, cria matrícula de outro ano e preserva dívida e pagamentos", () => {
-  const f = fixture(), person = f.state.academic!.people[0], original = f.state.paymentRecords.find((item) => item.studentId === "student-001");
+  const seed = createDemoState("example", { now, datasetId: "renewal" });
+  const f = fixture({ ...seed, ...prepareBilling(seed, now) }), person = f.state.academic!.people[0], original = f.state.paymentRecords.find((item) => item.studentId === "student-001");
   const year = f.state.academic!.years.find((item) => item.id === "2027")!;
   f.run({ type: "year", ...year, settings: { ...year.settings, monthlyDueDay: 10 } });
   f.run({ type: "class", name: "7.ª classe", levelId: "secondary-1", yearId: "2027" });
@@ -131,7 +133,7 @@ test("bolsa integral confirma matrícula sem pagamento fictício e inscrição s
 test("desistência conserva mês da saída; antecipação futura torna-se crédito sem apagar recebido ou recibo", () => {
   const f = fixture(); const result = f.run({ type: "enroll", input: input() }); const studentId = String(result.result.studentId);
   const charge = f.state.paymentRecords.find((item) => item.studentId === studentId)!.charges.find((item) => item.monthKey === "jul")!;
-  const paid = confirmDemoPayment(f.repository, { expected: f.state, role: "secretaria", commandId: "advance", recordedAt: now, draft: { studentId, category: "tuition", monthKey: "jul", targetChargeId: charge.id, amount: String(charge.amount), paidOn: "2026-05-05", method: "Numerário", description: "Antecipação", allowFutureAllocation: true } });
+  const paid = confirmDemoPayment(f.repository, { expected: f.state, role: "secretaria", commandId: "advance", recordedAt: now, draft: { studentId, category: "tuition", monthKey: "jul", targetChargeId: charge.id, amount: String(charge.amount), paidOn: "2026-05-05", method: "Numerário", description: "Antecipação", evidenceReference: "TALAO-05-05", lateReason: "Comprovativo entregue posteriormente", allowFutureAllocation: true } });
   const loaded = fixture(paid.state);
   const preview = previewExit(loaded.state, String(result.result.enrollmentId), "2026-06-10", false); assert.ok(preview.releasedCredit > 0);
   loaded.run({ type: "exit", enrollmentId: String(result.result.enrollmentId), status: "withdrawn", effectiveOn: "2026-06-10", reason: "Mudança de escola" }, "withdrawal");

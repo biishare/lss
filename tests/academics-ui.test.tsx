@@ -6,6 +6,7 @@ import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/a
 import { SchoolAdminDemo } from "../app/components/school-admin-demo";
 import { createDemoState, demoStorageKey, type DemoState } from "../app/features/demo/demo-state";
 import { domWindow } from "./dom-environment";
+import { prepareBilling } from "../app/features/finance/billing-commands";
 import { executeAcademic, type AcademicCommand } from "../app/features/academics/operations";
 import { createLocalDemoRepository } from "../app/features/demo/local-repository";
 import type { WorkspaceView } from "../app/components/school-admin-demo.model";
@@ -14,7 +15,8 @@ let values: Map<string, string>, writes: number;
 const router: AppRouterInstance = { bfcacheId: "academic-test", back() {}, forward() {}, refresh() {}, prefetch: async () => {}, push: (url) => window.history.pushState(null, "", url), replace: (url) => window.history.replaceState(null, "", url) };
 beforeEach(() => {
   values = new Map(); writes = 0;
-  values.set(demoStorageKey, JSON.stringify(createDemoState("example", { now: "2026-11-08T12:00:00.000Z", datasetId: "academic-ui" })));
+  const initial = createDemoState("example", { now: "2026-11-08T12:00:00.000Z", datasetId: "academic-ui" });
+  values.set(demoStorageKey, JSON.stringify({ ...initial, ...prepareBilling(initial, "2026-11-08T12:00:00.000Z") }));
   Object.defineProperty(window, "localStorage", { configurable: true, value: { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); if (key === demoStorageKey) writes++; } } });
   window.sessionStorage.clear(); window.sessionStorage.setItem("lss-demo-session-v1", JSON.stringify({ source: "demo", accountId: "demo-secretaria" }));
   window.history.replaceState(null, "", "/"); window.confirm = () => true;

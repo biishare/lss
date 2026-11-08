@@ -903,7 +903,7 @@ test("vocabulário oficial de estados da planilha tem exemplos", () => {
   );
   capture(getRegistrationCellState(scholarshipLedger, settings));
 
-  const expectedLabels: Record<OfficialPaymentState, string> = {
+  const expectedLabels: Partial<Record<OfficialPaymentState, string>> = {
     "not-applicable": "—",
     future: "A vencer",
     pending: "Pendente",

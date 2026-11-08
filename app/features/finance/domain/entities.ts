@@ -41,6 +41,12 @@ export type Enrollment = {
 };
 
 export type PaymentRuleVersion = {
+  calculationVersion?: "v3";
+  supersededBy?: string;
+  registeredBy?: string;
+  registeredAt?: string;
+  reason?: string;
+  penaltyPolicy?: { firstAfterDays: number; firstPercent: number; secondEnabled: boolean; secondAfterDays: number; secondPercent: number };
   id: string;
   policyId?: string;
   policyName?: string;
@@ -84,6 +90,32 @@ export type FinancialAid = {
   authorizedBy: string;
   registeredBy: string;
   registeredAt: string;
+  authorizationReference?: string;
+  effectiveFrom?: string;
+  revokedOn?: string;
+};
+
+export type BillingCalendarItem = {
+  educationLevelId?: string;
+  id: string;
+  enrollmentId: string;
+  kind: "registration" | "tuition";
+  monthKey?: string;
+  competence: string;
+  issueOn: string;
+};
+
+export type FinancialAdjustment = {
+  id: string;
+  chargeId: string;
+  kind: "benefit" | "late-proof";
+  previousAmount: number;
+  nextAmount: number;
+  reason: string;
+  evidenceReference?: string;
+  recordedBy: string;
+  recordedAt: string;
+  releasedAllocations: Array<{ id: string; paymentId: string; chargeId: string; amount: number }>;
 };
 
 export type FinanceChargeKind =

@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { RulesWorkspace } from "../features/finance/rules-workspace";
+import { executeBilling, synchronizeSchool, type BillingCommand } from "../features/finance/billing-commands";
 import {
   initialAcademicStages,
   initialClassDefinitions,
@@ -512,6 +514,23 @@ export function SchoolAdminDemo({
       flush();
     };
   }, [storageReady, demoState, activeProfile, paymentDraft, enrollmentDraft]);
+
+  useEffect(() => {
+    if (!storageReady || !demoState || activeProfile !== "secretaria" || !repositoryRef.current) return;
+    const synchronize = () => {
+      try {
+        const next = synchronizeSchool(repositoryRef.current!, demoState, activeProfile, nowIso());
+        if (next.revision !== demoState.revision) setDemoState(next);
+      } catch (error) {
+        setStorageToolsError(true);
+        setStorageToolsNotice(error instanceof Error ? error.message : "Não foi possível actualizar as cobranças.");
+      }
+    };
+    const timer = window.setTimeout(synchronize, 0);
+    const interval = window.setInterval(synchronize, 60_000);
+    window.addEventListener("focus", synchronize);
+    return () => { window.clearTimeout(timer); window.clearInterval(interval); window.removeEventListener("focus", synchronize); };
+  }, [storageReady, demoState, activeProfile, activeView]);
 
   const effectivePaymentRuleVersions = useMemo(
     () =>
@@ -1055,6 +1074,12 @@ export function SchoolAdminDemo({
     if (!repositoryRef.current || !demoState || !activeProfile) throw new Error("Entre na sua conta e aguarde os dados.");
     const result = executeAcademic(repositoryRef.current, demoState, command, { id, role: activeProfile, recordedAt: nowIso() });
     setDemoState(result.state); setStorageToolsError(false); setStorageToolsNotice(""); return result;
+  }
+
+  function executeBillingCommand(command: BillingCommand, id: string) {
+    if (!repositoryRef.current || !demoState || !activeProfile) throw new Error("Entre na sua conta e aguarde os dados.");
+    const result = executeBilling(repositoryRef.current, demoState, command, { id, role: activeProfile, recordedAt: nowIso() });
+    setDemoState(result.state); setStorageToolsError(false); setStorageToolsNotice("");
   }
 
   function confirmAcademicPayment(draft: PaymentLaunchDraft, id: string) {
@@ -3699,13 +3724,14 @@ export function SchoolAdminDemo({
 
         {currentPaymentSection?.id === "settings" && (
           <div className="grid gap-6">
-            <PaymentRulesTable
+            {demoState && <RulesWorkspace state={demoState} yearId={selectedYearId} mode="rules" readOnly={!canEditPaymentRules} execute={executeBillingCommand} recordedAt={nowIso()} />}
+            {developerToolsEnabled && <PaymentRulesTable
               rules={effectivePaymentRuleVersions}
               levelLabel={paymentRuleLevelLabel}
               onCreate={openNewPaymentPolicyDialog}
               onEdit={(rule) => openPaymentRuleDialog(rule.id)}
               readOnly={!canEditPaymentRules}
-            />
+            />}
             {canEditPaymentRules && (
               <MiscellaneousChargeForm
                 disabled={paymentRows.length === 0}
@@ -3724,7 +3750,9 @@ export function SchoolAdminDemo({
         )}
 
         {currentPaymentSection?.id === "student-rules" && canEditPaymentRules && (
-          <StudentFinanceForm
+          <>
+          {demoState && <RulesWorkspace state={demoState} yearId={selectedYearId} mode="aid" readOnly={!canEditPaymentRules} execute={executeBillingCommand} recordedAt={nowIso()} />}
+          {developerToolsEnabled && <StudentFinanceForm
             draft={financeProfileDraft}
             notice={financeNotice}
             students={allStudentsAlphabetically}
@@ -3734,7 +3762,8 @@ export function SchoolAdminDemo({
             }}
             onStudentChange={selectFinanceStudent}
             onSubmit={submitFinanceProfile}
-          />
+          />}
+          </>
         )}
 
         {currentPaymentSection?.id === "entry" && (
@@ -3742,9 +3771,9 @@ export function SchoolAdminDemo({
             <section data-workspace-secondary className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
                 <div>
-                  <h3 className="text-base font-semibold">Gerar propinas</h3>
+                  <h3 className="text-base font-semibold">Cobranças mensais</h3>
                   <p className="text-sm text-slate-500">
-                    Preparação mensal da cobrança por turma.
+                    Emissão automática no início de cada mês; antecipação disponível nos meses previstos.
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -3772,7 +3801,7 @@ export function SchoolAdminDemo({
                       </option>
                     ))}
                   </select>
-                  {selectedProfile.id === "secretaria" && (
+                  {developerToolsEnabled && selectedProfile.id === "secretaria" && (
                     <PrimaryButton onClick={generateMonthlyBilling}>
                       Gerar propinas
                     </PrimaryButton>
@@ -3800,15 +3829,15 @@ export function SchoolAdminDemo({
                   accent="border-l-[#d08a19]"
                 />
                 <MetricCard
-                  label="Sobra p/ seguinte"
+                  label="Crédito disponível"
                   value={formatCurrency(selectedMonthCarryOut)}
-                  supporting="Credito automatico"
+                  supporting="Aguarda aplicação"
                   accent="border-l-[#0ea5c7]"
                 />
                 <MetricCard
                   label="Descontos"
                   value={formatCurrency(selectedMonthDiscount)}
-                  supporting={selectedMonthBillingRun ? "Mês gerado" : "Mês por gerar"}
+                  supporting={selectedMonthBillingRun ? "Cobranças emitidas" : "Conforme calendário individual"}
                   accent="border-l-[#8b5cf6]"
                 />
               </div>
