@@ -4,8 +4,9 @@
 
 1. Execute `npm ci` e `npm run dev`.
 2. Abra `http://localhost:3000`.
-3. Entre como **Secretaria** para demonstrar operações ou como **Director**
-   para demonstrar consulta em modo de leitura.
+3. Entre como **Secretaria** para preparar/operar a demo. No primeiro arranque,
+   escolha **Abrir escola de exemplo** ou **Configurar do início**. O Director
+   consulta o mesmo cenário depois de preparado, em modo de leitura.
 4. Use **Sair** para trocar de perfil. Os dados locais não são apagados.
 
 ## Roteiro sugerido
@@ -23,7 +24,7 @@
 
 As ferramentas ficam em **Configurações** e só aparecem para Secretaria.
 
-- **Exportar JSON** descarrega um snapshot v2 com todos os dados locais.
+- **Exportar JSON** descarrega um snapshot v3 (também aceita exportações v2 e o formato anterior) com todos os dados locais.
 - **Importar JSON** valida primeiro o ficheiro e só substitui o estado após
   confirmação. Ficheiros inválidos e versões desconhecidas são recusados.
 - **Repor dados fictícios** pede confirmação e remove apenas as alterações da
@@ -46,3 +47,25 @@ mesmo domínio.
 
 Esta demo serve para apresentar fluxos e decisões do produto. Não deve receber
 dados pessoais reais nem ser tratada como sistema de produção.
+
+## Dados ilegíveis e falha de gravação
+
+O ecrã de recuperação conserva os dados existentes. Descarregue o original e,
+como Secretaria, importe uma cópia válida. A importação pede confirmação, recusa
+versão/IDs/relações/saldos inválidos e não apaga o cenário se a gravação falhar.
+
+Pagamento só é confirmado depois de guardar o conjunto completo. Se falhar,
+o formulário conserva o preenchimento e a tentativa pode ser repetida com o
+mesmo identificador. Se outra aba tiver alterado os dados, reveja o estado antes
+de confirmar; use uma aba de escrita de cada vez.
+
+Os rascunhos de matrícula e pagamento ficam na sessão e no cenário de origem.
+A sua gravação não confirma nenhuma matrícula ou pagamento. Se o armazenamento
+de rascunhos estiver bloqueado, o ecrã informa que o preenchimento só permanece
+na página actual.
+
+## API posterior
+
+Por decisão do utilizador, esta etapa não cria uma base real ou backend. A API
+dedicada posterior fornecerá autenticação, autorização, base central e backups.
+Os perfis de exemplo e a exportação local não são esses mecanismos de produção.

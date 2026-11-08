@@ -1,58 +1,89 @@
-# LSS — registo do upgrade da demo
+# LSS - registo de implementação
 
-Referência: `LSS_Upgrade_Demo_Especificacao_Codex_v2_2026-09-02.pdf`.
-A v2 substitui integralmente a v1. O âmbito é uma demonstração local com dados
-fictícios; PostgreSQL, SQL, backend, autenticação real, filas e integrações
-externas estão deliberadamente fora do projecto.
+Instrução vigente: [especificação mesclada v3](lss-especificacao-mesclada-v3.md),
+com a decisão posterior do utilizador de 08/11/2026: **não criar base de dados
+real agora; a base central e o backend serão implementados depois numa API
+dedicada**. Esta decisão prevalece sobre as secções anteriores da v3 que
+previam PostgreSQL e servidor nesta etapa.
 
-## Estado das fases
+## Estado actual
 
-| Fase | Estado | Resultado / validação |
+| Fase | Estado | Resultado |
 | --- | --- | --- |
-| 0 — Diagnóstico | concluída | PDF v2 e instruções do repositório lidos; aplicação e domínio financeiro inventariados; baseline com 21 testes e lint aprovados. |
-| 1 — Estado local | concluída | `localStorage` preservado, schema local v2, sessão fictícia, exportação versionada, importação validada e reposição confirmada. Formato local anterior continua aceite. |
-| 2 — Shell e navegação | concluída | Material UI integrado ao App Router; entrada por Secretaria/Director sem palavra-passe; cinco rotas; Drawer temporário móvel e barra lateral 256/64 no desktop. |
-| 3 — Académico | concluída | Níveis, classes, salas, turmas, matrícula, filtros e números estáveis usam dados fictícios persistentes. Director consulta sem formulários de escrita. |
-| 4 — Regras financeiras | concluída | Políticas nomeadas associam inscrição, mensalidade, período, limite, multas e estado a várias classes de um ano; uma classe/ano mantém uma única política activa e as versões históricas não são reescritas. |
-| 5 — Pagamentos | concluída | Prévia, afectação por prioridade, antecipação explícita, diversos, recibo demonstrativo e correcção compensatória auditável. |
-| 6 — Relatórios | concluída | Indicadores, dívida vencida/a vencer, totais, multas, diversos e histórico de gerações disponíveis aos dois perfis. |
-| 7 — Qualidade e entrega | concluída | 29 testes automatizados, lint, TypeScript e build de produção aprovados; entrada, dados iniciais, cinco rotas, política por classes e menu de cobranças diversas verificados no navegador. |
+| 0 - Diagnóstico | Concluída | Base e PDF lidos; código, testes e diferenças inventariados; âmbito actualizado. |
+| 1 - Estado e serviços locais | Concluída no âmbito local autorizado | Repositório local, snapshot v3, validação, revisão, comandos, recuperação, recibo persistido e rascunhos ligados à UI; 59 testes aprovados. |
+| 2 - Entrada e shell | Pendente | Preparar entrada/integração futura, MUI, navegação, largura útil e contexto recuperável. Autenticação real aguarda a API. |
+| 3 - Académico | Pendente | Ficha única, pessoa/matrícula/colocação, renovação, transferência, vagas e configuração guiada. |
+| 4 - Regras | Pendente | Dinheiro exacto, emissão, benefícios e cálculos de multas conforme v3. |
+| 5 - Atendimento | Pendente | Pagamento inteiramente no modal, conferência, crédito, devoluções e série de recibos. |
+| 6 - Relatórios e caixa | Pendente | Definições, listas, CSV/PDF, fecho e movimento de caixa. |
+| 7 - Qualidade da demo | Pendente | Matriz completa F/U/A/I/M/R, revisão visual e ensaio de atendimento. Critérios P de servidor ficam para a API posterior. |
 
-## Preservação dos dados
+## Fase 1: alterações
 
-- A chave de estado continua a ser `gestao-academica-demo-state-v2`.
-- O carregamento tolera campos ausentes e normaliza snapshots anteriores.
-- Exportações usam o envelope `lss-demo-snapshot`, versão 2 e data ISO.
-- A importação valida o JSON e as colecções antes de pedir confirmação e gravar.
-- A reposição remove apenas o estado da demo depois de confirmação; preferências
-  visuais e a sessão são independentes.
-- Erros de armazenamento/importação são apresentados sem indicar sucesso falso.
+- A chave `gestao-academica-demo-state-v2` foi conservada para encontrar os dados
+  existentes; o conteúdo e as novas exportações passam a versão 3.
+- O adaptador local distingue ausência de dados, leitura válida e erro. Não há
+  gravação automática de dados financeiros após renderizar nem reposição ao
+  carregar. A primeira utilização oferece exemplo ou configuração vazia.
+- Exportações v2 e o formato anterior continuam legíveis. A primeira gravação
+  do formato anterior conserva o original completo em `legacySource`.
+- Dados inválidos permanecem intactos; a recuperação permite descarregar o
+  original e importar uma cópia válida, com confirmação e preservação do original.
+- Importação valida versão, colecções, IDs, relações, valores e aplicações;
+  mostra contagens e só substitui após confirmação e gravação bem-sucedida.
+- Cada alteração guarda um próximo snapshot completo antes de actualizar os
+  dados apresentados. Matrícula e registo financeiro são uma escrita; pagamento,
+  aplicações, recibo e histórico também são uma escrita.
+- O mesmo ID/conteúdo de pagamento recupera o resultado original. Conteúdo
+  diferente com o mesmo ID é recusado. Director não pode escrever pelo serviço.
+- `revision` e `datasetId` detectam alterações concluídas noutra aba e
+  substituições do cenário. Continua suportada uma aba de escrita por vez;
+  não é garantia de concorrência simultânea nem segurança de produção.
+- Falha conserva formulário/dados. Rascunhos de pagamento e matrícula são
+  recuperáveis na sessão do mesmo cenário; preferência de sidebar é lida antes
+  de ser escrita.
+- Os exemplos têm data-base fixa, números permanentes únicos, dois preços e
+  metadados do ano activo/próximo. Números repetidos no formato antigo são
+  conservados com aviso, para revisão académica explícita na fase 3.
 
-## Controlo de acesso demonstrativo
+## Validação desta entrega
 
-- **Secretaria:** operações académicas, regras, cobranças, pagamentos e
-  ferramentas de dados.
-- **Director:** leitura de dashboard, alunos/turmas, planilha, relatórios e
-  parâmetros. Os serviços locais continuam a negar mutações financeiras mesmo
-  que uma acção seja invocada fora da interface.
+| Comando | Resultado observado |
+| --- | --- |
+| `npm test` | 59 testes aprovados: 49 de domínio/persistência e 10 de interface. |
+| `npm run lint` | Aprovado, sem erros nem avisos. |
+| `npm run build` | Compilação, verificação TypeScript e geração das rotas concluídas. |
+| `npx tsc --noEmit` | Aprovado. |
+| `git diff --check` | Aprovado. |
 
-Isto é separação de perfis para demonstração, não autenticação nem segurança de
-produção.
+Os testes de UI usam React Testing Library e Happy DOM; verificam as operações
+no DOM, incluindo falhas, mas não substituem revisão visual desktop/mobile.
+Foram verificados recuperação sem reposição silenciosa, falha/repetição de
+pagamento, matrícula com gravação única, consulta pelo Director, cancelamento de
+reposição, importação inválida, conflito entre abas e preservação de rascunhos
+ao navegar imediatamente, antes de correr o temporizador de gravação.
 
-## Testes realizados
+## Pendências e limites
 
-- Baseline: 21/21 testes do domínio financeiro.
-- Repositório local: exportação/importação v2, compatibilidade legada, JSON
-  inválido, versão futura e colecção incompatível.
-- Políticas: aplicação conjunta às classes, exclusividade activa por classe/ano
-  e histórico independente entre 2026 e 2027.
-- Total actual: 29 testes automatizados aprovados.
-- `eslint`, `tsc --noEmit` e `next build`: aprovados.
+Os cenários completos de conferência, crédito, devolução, transferência e dívida
+anual dependem das fases académicas/financeiras seguintes. O estado base já
+preserva essas operações quando existirem, sem as declarar implementadas.
+Os cálculos F01/F06/F07 identificados no diagnóstico continuam para a fase 4.
+A numeração dos recibos ainda usa o formato anterior; a série institucional e a
+impressão limpa serão concluídas na fase 5.
 
-## Pendências fora do âmbito
+Não foram criados SQL, ORM, servidor, endpoints financeiros ou base remota.
+Contas reais, autenticação, validação no servidor, backups centrais e critérios
+P01-P12 de produção dependem da API dedicada posterior. Exportar JSON não
+substitui esses backups.
 
-- Backend, PostgreSQL/SQL, contas reais, permissões de servidor e auditoria de
-  segurança.
-- Documentos fiscais/contabilísticos, integração bancária, SMS/e-mail e
-  sincronização entre dispositivos.
-- Uso de dados reais ou publicação em produção.
+O trabalho fica numa branch para revisão. `main` e a publicação não são alteradas
+como parte desta fase.
+
+## Evidência histórica
+
+A implementação anterior declarava as oito fases da demo v2 concluídas e tinha
+29 testes aprovados. O [diagnóstico de 08/11/2026](diagnostico-demo-v2-2026-11-08.md)
+confirmou diferenças de persistência, UI e cálculos; a tabela actual acima
+substitui essa marcação histórica como estado de execução.
