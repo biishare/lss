@@ -8,16 +8,16 @@ previam PostgreSQL e servidor nesta etapa.
 
 ## Estado actual
 
-| Fase | Estado | Resultado |
+| Fase da v3 | Estado | Resultado |
 | --- | --- | --- |
-| 0 - Diagnóstico | Concluída | Base e PDF lidos; código, testes e diferenças inventariados; âmbito actualizado. |
-| 1 - Estado e serviços locais | Concluída no âmbito local autorizado | Repositório local, snapshot v3, validação, revisão, comandos, recuperação, recibo persistido e rascunhos ligados à UI; 59 testes aprovados. |
-| 2 - Entrada e shell | Implementada; revisão visual pendente | Entrada demo por conta, layout partilhado MUI, cinco áreas, sidebar/Drawer, expansão e contexto recuperável. Autenticação real aguarda a API. |
-| 3 - Académico | Pendente | Ficha única, pessoa/matrícula/colocação, renovação, transferência, vagas e configuração guiada. |
-| 4 - Regras | Pendente | Dinheiro exacto, emissão, benefícios e cálculos de multas conforme v3. |
-| 5 - Atendimento | Pendente | Pagamento inteiramente no modal, conferência, crédito, devoluções e série de recibos. |
-| 6 - Relatórios e caixa | Pendente | Definições, listas, CSV/PDF, fecho e movimento de caixa. |
-| 7 - Qualidade da demo | Pendente | Matriz completa F/U/A/I/M/R, revisão visual e ensaio de atendimento. Critérios P de servidor ficam para a API posterior. |
+| 0 - Confirmar base e rever o plano | Diagnóstico realizado | Base, código, testes e diferenças inventariados. |
+| 1 - Dados e serviços fiáveis | Parcial face à v3 integral; âmbito local entregue na main | Snapshot v3, validação, revisão, comandos, recuperação, recibo persistido e rascunhos. Base central, transacções e backups adiados para a API. |
+| 2 - Login, MUI e navegação | Parte local implementada; fase integral parcial | Login e navegação de apresentação com cinco áreas. Autenticação/recuperação/autorização reais adiadas. Revisão visual pendente. |
+| 3 - Alunos e estrutura | Iniciada noutra branch; não integrada na main | Trabalho académico em curso preservado, sem o incluir nesta alteração. |
+| 4 - Regras e cobranças | Pendente | Emissão, benefícios, dinheiro exacto e multas conforme v3. |
+| 5 - Atendimento, crédito e recibos | Pendente | Modal completo, conferência, crédito, devoluções e série de recibos. |
+| 6 - Relatórios, caixa e continuidade | Pendente | Totais detalháveis, CSV/PDF, caixa e fechos; backups centrais para a API. |
+| 7 - Validar, apresentar e preparar piloto | Pendente | Matriz de aceitação, ensaio de atendimento e critérios de piloto/servidor. |
 
 ## Fase 1: alterações
 
@@ -121,12 +121,29 @@ O navegador também não alcança o servidor local deste ambiente (`localhost:30
 Por isso, **não foi concluída a revisão visual das oito larguras** nem a medição
 real dos 192 px libertados. Não foram alteradas protecções ou acesso do preview.
 O comportamento de retorno, scroll, foco/Escape e fechos foi verificado no DOM
-simulado, sem o apresentar como ensaio visual ou de teclado virtual. A PR permanece
-em draft para essa revisão; isto não bloqueia a consulta do código e dos resultados.
+simulado, sem o apresentar como ensaio visual ou de teclado virtual. Esse limite de verificação permanece registado. A PR foi entretanto integrada por instrução do utilizador.
 
-A fase 2 não altera `main` nem promove produção automaticamente.
+A fase 2 foi integrada na `main` pelo commit `0f64d75` (PR #3). Essa publicação não conclui os requisitos centrais da v3.
 O atendimento completo no Dialog, Mês/Trimestre/Ano e a impressão ficam na
 fase 5; a configuração única e os vários anos ficam na fase 3.
+
+## Ajuste da fase 2: experiência de aplicação normal
+
+Branch: `codex/lss-normal-app`, criada a partir da `main` `0f64d75`. As alterações académicas ainda não guardadas da outra branch foram preservadas e não fazem parte desta entrega.
+
+Decisão nova do utilizador: a condição de demo fica apenas nos bastidores e na documentação técnica. A interface e os percursos apresentados ao cliente devem corresponder a uma aplicação normal. Mantêm-se os dados fictícios e a API posterior.
+
+- Um formulário com Utilizador/Palavra-passe substitui a lista de contas. O par deve corresponder a uma conta fictícia; o papel vem dessa conta. Erros de acesso são genéricos e não abrem sessão. A recuperação orienta para a administração, sem fingir envio de mensagens.
+- O adaptador local de entrada é uma fixture de apresentação inspectável no browser, não um mecanismo de segurança. Não guarda a palavra-passe submetida nem cria utilizadores reais, sessões de servidor ou requisitos P01/P02/P11.
+- Selo Demo e explicações técnicas retirados do percurso normal. Importação, reposição, recuperação técnica e preparação de cenários exigem `NEXT_PUBLIC_LSS_DEVELOPER_TOOLS=true` e Secretaria; por defeito estão desligados. Esta flag é configuração de apresentação e não autorização de produção.
+- Primeira utilização prepara a escola fictícia uma vez, inclusive quando a primeira conta é Director. A inicialização verifica a ausência de estado antes de escrever. Dados existentes/ilegíveis e falhas de armazenamento não desencadeiam reposição; um erro mantém o original e indica contacto do responsável.
+- Os títulos e a numeração originais das fases foram repostos na cópia da especificação. As decisões posteriores ficam num complemento inicial; progresso local e conclusão integral da v3 têm estados separados.
+
+Validação desta branch: 56 testes de domínio/persistência e 22 de interface (78 no total) aprovados. Lint sem erros/avisos, TypeScript, `git diff --check` e build de produção aprovados. As sete rotas da aplicação foram geradas. Foram ensaiados os dois acessos, credenciais incorrectas sem sessão, ausência de palavras-passe no estado guardado, primeira utilização pelo Director sem reposição no recarregamento, dados ilegíveis, falha inicial de gravação e ferramentas técnicas ausentes no modo do cliente.
+
+Limite da revisão visual: `sites-preview start` acrescentou `--host 127.0.0.1 --port 4173 --strictPort`, que o `next dev` instalado não aceita. `sites-preview status` confirmou o preview parado. Não foram alterados scripts da aplicação, permissões ou infra-estrutura para contornar a incompatibilidade. O build passou; browser/mobile/teclado virtual e as oito larguras continuam pendentes de ensaio visual. Não confundir os testes no DOM com essa revisão.
+
+Autorização de entrega: o primeiro envio da branch foi bloqueado pela revisão automática por falta de autorização explícita reconhecida para transmitir o código privado ao GitHub. Em 08/11/2026, o utilizador autorizou expressamente: **«Envia para main»**. Essa instrução autoriza enviar a branch a `biishare/lss`, abrir a PR, integrar a alteração testada e acompanhar a publicação Vercel. O estado final da integração e do deploy deve ser confirmado no GitHub/Vercel. As alterações académicas da outra branch permanecem intactas e fora desta entrega.
 
 ## Evidência histórica
 

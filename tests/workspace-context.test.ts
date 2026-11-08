@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { demoSessionFor, readDemoSession, saveDemoSession } from "../app/features/demo/demo-session";
+import { authenticateDemoSession } from "../app/features/demo/demo-auth";
 import { contextFromLocation, defaultWorkspaceContext, readWorkspaceContext, validateWorkspaceContext, workspaceUrl } from "../app/features/demo/workspace-context";
 
 test("a conta de exemplo determina o papel; sessão desconhecida ou da API não dá acesso à demo", () => {
@@ -18,6 +19,15 @@ test("a conta de exemplo determina o papel; sessão desconhecida ou da API não 
 test("sessão v1 é reconhecida sem aceitar nome ou papel inventado", () => {
   assert.equal(readDemoSession({ getItem: () => '{"profile":"director","accountName":"outro nome"}' })?.account.name, "António");
   assert.equal(readDemoSession({ getItem: () => '{"profile":"administrador"}' }), null);
+});
+
+test("entrada local exige o par correcto e o papel pertence à conta", async () => {
+  assert.equal((await authenticateDemoSession(" Marta ", "Lss!Marta2026"))?.account.role, "secretaria");
+  assert.equal((await authenticateDemoSession("ANTONIO", "Lss!Antonio2026"))?.account.role, "director");
+  assert.equal(await authenticateDemoSession("marta", "Lss!Antonio2026"), null);
+  assert.equal(await authenticateDemoSession("outro", "Lss!Marta2026"), null);
+  assert.equal(await authenticateDemoSession("marta", ""), null);
+  assert.equal(await authenticateDemoSession("marta", " Lss!Marta2026"), null);
 });
 
 test("URL recupera área e IDs, sem transportar pesquisa pessoal ou selecção em lote", () => {

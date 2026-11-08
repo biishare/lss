@@ -26,15 +26,21 @@ npm ci
 npm run dev
 ```
 
-Abra [http://localhost:3000](http://localhost:3000), escolha uma **Conta de exemplo**
-e clique em **Abrir demonstração**. A conta determina o painel e o papel:
+Abra [http://localhost:3000](http://localhost:3000) e entre com o utilizador e a
+palavra-passe de apresentação indicados no [guia técnico](docs/operations.md).
+A conta determina o painel e o papel:
 
 - **Secretaria** — pode matricular, configurar regras e registar pagamentos.
 - **Director** — consulta indicadores, alunos, pagamentos, relatórios e
   configurações em modo de leitura.
 
-Estas contas são fictícias e não usam palavra-passe. Sessões e autorização
-reais serão fornecidas pela API posterior.
+Os pares de acesso são fictícios e a validação é local, num adaptador de
+apresentação. Não constituem segurança de produção. Sessões e autorização
+reais serão fornecidas pela API posterior. Não se guardam palavras-passe submetidas.
+
+A interface apresentada ao cliente usa identidade da escola e percursos normais,
+sem rótulos Demo, escolha de perfil ou utilitários técnicos. Os limites da demo
+ficam nesta documentação.
 
 O layout permanece montado ao navegar pelas cinco áreas. Desktop usa menu
 256/64 px; tablet usa barra de 64 px e expansão sobreposta; telemóvel usa Drawer.
@@ -53,17 +59,20 @@ cenário. O URL inclui apenas IDs/contexto, sem pesquisa ou contactos.
 
 ## Dados locais
 
-Em **Configurações**, o perfil Secretaria pode exportar os dados para JSON,
+Com `NEXT_PUBLIC_LSS_DEVELOPER_TOOLS=true`, em **Configurações**, a Secretaria pode exportar os dados para JSON,
 importar exportações v3/v2 ou o formato anterior e repor os dados fictícios. Uma importação inválida
 ou cancelada não substitui o estado actual. Sair da sessão não apaga os dados.
 
 Os nomes e movimentos incluídos no estado inicial são dados de exemplo para
 apresentação e testes locais.
 
-No primeiro arranque, Secretaria escolhe **Abrir escola de exemplo** ou
-**Configurar do início**. Recarregar não semeia novamente. Dados ilegíveis
-permanecem guardados, com opção para descarregar o original e importar uma
-cópia válida. As operações só mostram confirmação depois de gravar o snapshot
+Por defeito, o primeiro arranque prepara a escola fictícia apenas quando não
+existem dados, inclusive se Director entrar primeiro. Recarregar não semeia
+novamente. Dados ilegíveis permanecem intactos; o cliente vê orientação para o
+responsável, que pode activar as ferramentas técnicas para descarregar o
+original e importar uma cópia válida. No modo de desenvolvimento, continua
+disponível a escolha entre escola de exemplo e configuração vazia.
+As operações só mostram confirmação depois de gravar o snapshot
 completo; cada pagamento inclui aplicações, recibo e histórico numa escrita.
 
 O formato local v3 conserva a chave anterior, acrescenta revisão, identidade do

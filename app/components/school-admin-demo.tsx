@@ -189,8 +189,10 @@ const sidebarPreferenceKey = "lss-demo-sidebar-collapsed";
 
 export function SchoolAdminDemo({
   initialView = "overview",
+  developerToolsEnabled = process.env.NEXT_PUBLIC_LSS_DEVELOPER_TOOLS === "true",
 }: {
   initialView?: WorkspaceView;
+  developerToolsEnabled?: boolean;
 }) {
   const firstClassId = initialClasses[0]?.id ?? "";
   const firstGroupId = initialGroups[0]?.id ?? "";
@@ -348,7 +350,7 @@ export function SchoolAdminDemo({
         const session = readDemoSession(window.sessionStorage);
         if (session) {
           setActiveProfile(session.account.role);
-          setAccountName(`${session.account.name} — ${session.account.roleLabel}`);
+          setAccountName(session.account.name);
         }
         savedSidebar = window.localStorage.getItem(sidebarPreferenceKey);
       } catch { /* As preferências não substituem a leitura obrigatória dos dados. */ }
@@ -379,7 +381,17 @@ export function SchoolAdminDemo({
         setItem: (key, value) => window.localStorage.setItem(key, value),
       });
       repositoryRef.current = repository;
-      const loaded = repository.load();
+      let loaded = repository.load();
+      if (loaded.status === "empty" && !developerToolsEnabled) {
+        try {
+          const state = repository.initialize(createDemoState("example", { now: nowIso(), datasetId: crypto.randomUUID() }));
+          loaded = { status: "ready", state, originalRaw: JSON.stringify(state) };
+        } catch (error) {
+          setStorageLoadError(error instanceof Error ? error.message : "Não foi possível preparar os dados.");
+          setStorageReady(true);
+          return;
+        }
+      }
       if (loaded.status !== "ready") {
         if (loaded.status === "error") {
           setStorageLoadError(loaded.message);
@@ -463,7 +475,7 @@ export function SchoolAdminDemo({
     }, 0);
 
     return () => window.clearTimeout(loadStateId);
-  }, []);
+  }, [developerToolsEnabled]);
 
   useEffect(() => {
     if (!storageReady || !demoState || activeProfile !== "secretaria") return;
@@ -1002,8 +1014,11 @@ export function SchoolAdminDemo({
     const session = demoSessionFor(accountId);
     if (!session) return;
     try { saveDemoSession(window.sessionStorage, session); }
-    catch { setStorageToolsNotice("A sessão não pôde ser guardada, mas a demonstração continua neste ecrã."); }
-    setAccountName(`${session.account.name} — ${session.account.roleLabel}`);
+    catch {
+      setStorageToolsError(true);
+      setStorageToolsNotice("A sessão não pôde ser guardada. Ao recarregar, será necessário entrar novamente.");
+    }
+    setAccountName(session.account.name);
     setActiveProfile(session.account.role);
     workspace.update({ view: activeView }, true);
   }
@@ -1078,7 +1093,7 @@ export function SchoolAdminDemo({
   }
 
   async function importDemoData(file?: File) {
-    if (!file || activeProfile !== "secretaria" || !repositoryRef.current) return;
+    if (!developerToolsEnabled || !file || activeProfile !== "secretaria" || !repositoryRef.current) return;
     try {
       const raw = await file.text();
       const incoming = hydrateDemoState(parseDemoSnapshot(raw), raw, nowIso(), crypto.randomUUID());
@@ -1102,7 +1117,7 @@ export function SchoolAdminDemo({
 
   function initializeDemo(kind: "example" | "empty") {
     try {
-      if (!repositoryRef.current || activeProfile !== "secretaria") return;
+      if (!developerToolsEnabled || !repositoryRef.current || activeProfile !== "secretaria") return;
       const state = createDemoState(kind, { now: nowIso(), datasetId: crypto.randomUUID() });
       setDemoState(repositoryRef.current.initialize(state));
       window.location.reload();
@@ -1110,7 +1125,7 @@ export function SchoolAdminDemo({
   }
 
   function resetDemoData() {
-    if (!demoState || activeProfile !== "secretaria" || !repositoryRef.current) return;
+    if (!developerToolsEnabled || !demoState || activeProfile !== "secretaria" || !repositoryRef.current) return;
     if (!window.confirm("Repor a demo vai substituir o cenário local. Exporte primeiro para conservar uma cópia. Deseja continuar?")) {
       setStorageToolsNotice("Reposição cancelada; os dados actuais foram preservados.");
       return;
@@ -2280,13 +2295,15 @@ export function SchoolAdminDemo({
   if (storageLoadError || !demoState) {
     return (
       <main className="grid min-h-screen place-items-center bg-slate-50 p-6">
-        <section className="lss-responsive-card" aria-label="Preparar dados do LSS">
+        <section className="lss-responsive-card" aria-label="Acesso aos dados do LSS">
           <h1 className="text-xl font-bold">{storageLoadError ? "Não foi possível abrir os dados" : "Preparar o LSS"}</h1>
           <p className="mt-3 text-sm text-slate-600">
-            {storageLoadError || "Escolha uma escola de exemplo ou comece uma configuração vazia. Os dados ficam neste navegador."}
+            {developerToolsEnabled
+              ? storageLoadError || "Escolha uma escola de exemplo ou comece uma configuração vazia. Os dados ficam neste navegador."
+              : "Tente novamente. Se o problema continuar, contacte o responsável pelo sistema. Os dados existentes foram conservados."}
           </p>
-          {storageLoadError && <p className="mt-3 text-sm">O original foi conservado. Pode descarregá-lo e importar uma cópia válida.</p>}
-          {activeProfile === "secretaria" ? (
+          {developerToolsEnabled && storageLoadError && <p className="mt-3 text-sm">O original foi conservado. Pode descarregá-lo e importar uma cópia válida.</p>}
+          {developerToolsEnabled && (activeProfile === "secretaria" ? (
             <div className="lss-actions mt-5">
               {!storageLoadError && <>
                 <PrimaryButton onClick={() => initializeDemo("example")}>Abrir escola de exemplo</PrimaryButton>
@@ -2300,7 +2317,7 @@ export function SchoolAdminDemo({
                 }} />
               </label>
             </div>
-          ) : <p className="mt-4 text-sm">A Secretaria deve preparar ou recuperar o cenário antes da consulta pelo Director.</p>}
+          ) : <p className="mt-4 text-sm">A Secretaria deve preparar ou recuperar o cenário antes da consulta pelo Director.</p>)}
           {storageToolsNotice && <p role="alert" className="mt-4 text-sm text-rose-800">{storageToolsNotice}</p>}
           <div className="lss-actions mt-4">
             <SecondaryButton onClick={() => window.location.reload()}>Tentar novamente</SecondaryButton>
@@ -2332,7 +2349,7 @@ export function SchoolAdminDemo({
         {storageToolsError && <p role="alert" className="mb-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">{storageToolsNotice}</p>}
         {draftStorageNotice && <p role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{draftStorageNotice}</p>}
         {financeSettingsNotice && <p role="status" className="mb-4 rounded-md bg-slate-50 p-3 text-sm">{financeSettingsNotice}</p>}
-        {demoState?.migrationWarnings?.map((warning) => <p key={warning} role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{warning}</p>)}
+        {developerToolsEnabled && demoState?.migrationWarnings?.map((warning) => <p key={warning} role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{warning}</p>)}
         {activeView === "overview" && renderOverview()}
         {activeView === "catalog" && renderCatalog()}
         {activeView === "classes" && renderClasses()}
@@ -2688,10 +2705,10 @@ export function SchoolAdminDemo({
           />
         </div>
 
-        <section className="lss-responsive-card" data-wide="true">
+        {developerToolsEnabled && <section className="lss-responsive-card" data-wide="true">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h3 className="text-base font-semibold">Cópia de segurança</h3>
+              <h3 className="text-base font-semibold">Ferramentas de desenvolvimento</h3>
               <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500">
                 Os dados ficam guardados neste navegador. Pode exportar uma cópia,
                 importar um ficheiro compatível ou repor o conjunto inicial.
@@ -2726,11 +2743,7 @@ export function SchoolAdminDemo({
               {storageToolsNotice}
             </p>
           )}
-        </section>
-
-        <section className="lss-responsive-card">
-          <h3 className="text-base font-semibold">Parametros academicos</h3>
-        </section>
+        </section>}
 
         <div className="lss-split-grid">
           <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">

@@ -93,20 +93,20 @@ export function createLocalDemoRepository(storage: DemoStorage, options: {
       return { status: "ready", state, originalRaw: raw };
     } catch (error) {
       return { status: "error", originalRaw: raw ?? undefined,
-        message: error instanceof Error ? error.message : "Não foi possível ler os dados deste navegador." };
+        message: error instanceof Error ? error.message : "Não foi possível ler os dados." };
     }
   }
   function write(state: DemoState) {
     validateDemoState(state);
     const raw = JSON.stringify(state);
     try { storage.setItem(demoStorageKey, raw); }
-    catch { throw new Error("Não foi possível guardar no navegador. Os dados anteriores e o formulário foram conservados. Tente novamente ou exporte uma cópia."); }
+    catch { throw new Error("Não foi possível guardar. Os dados anteriores e o formulário foram conservados. Tente novamente."); }
     return JSON.parse(raw) as DemoState;
   }
   function current(expected: DemoState) {
     const loaded = load();
     if (loaded.status !== "ready") {
-      throw new Error(loaded.status === "error" ? loaded.message : "Os dados locais já não estão disponíveis. Recarregue para os rever.");
+      throw new Error(loaded.status === "error" ? loaded.message : "Os dados já não estão disponíveis. Recarregue para os rever.");
     }
     if (loaded.state.revision !== expected.revision || loaded.state.datasetId !== expected.datasetId) throw new DemoConflictError();
     return loaded.state;
