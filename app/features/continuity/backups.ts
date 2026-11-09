@@ -11,8 +11,23 @@ export type BackupArchive = { version: 1; enabled: boolean; retention: number; i
 export function readBackups(storage: DemoStorage): BackupArchive {
   const raw = storage.getItem(backupArchiveKey);
   if (raw === null) return { version: 1, enabled: false, retention: 3, items: [] };
-  const parsed = JSON.parse(raw) as BackupArchive;
-  if (parsed.version !== 1 || typeof parsed.enabled !== "boolean" || !Number.isInteger(parsed.retention) || parsed.retention < 1 || parsed.retention > 10 || !Array.isArray(parsed.items) || parsed.items.some((item) => !item || typeof item.id !== "string" || typeof item.raw !== "string" || typeof item.createdAt !== "string")) throw new Error("Não foi possível ler as cópias guardadas. O original foi preservado.");
+  const fail = (): never => { throw new Error("Não foi possível ler as cópias guardadas. O original foi preservado."); };
+  let parsed: BackupArchive;
+  try { parsed = JSON.parse(raw) as BackupArchive; } catch { return fail(); }
+  const object = (value: unknown): value is Record<string, unknown> => Boolean(value && typeof value === "object" && !Array.isArray(value));
+  const text = (value: unknown): value is string => typeof value === "string" && Boolean(value.trim());
+  const instant = (value: unknown) => text(value) && Number.isFinite(Date.parse(value));
+  const item = (value: unknown) => object(value) && text(value.id) && text(value.raw) && text(value.datasetId) && text(value.reason) && instant(value.createdAt) && Number.isInteger(value.revision) && Number(value.revision) >= 0;
+  if (!object(parsed) || parsed.version !== 1 || typeof parsed.enabled !== "boolean" || !Number.isInteger(parsed.retention) || parsed.retention < 1 || parsed.retention > 10 || !Array.isArray(parsed.items) || !parsed.items.every(item)) return fail();
+  if (parsed.beforeRestore !== undefined && !item(parsed.beforeRestore)) return fail();
+  if (parsed.lastVerification !== undefined) {
+    const verification = parsed.lastVerification;
+    if (!object(verification) || !instant(verification.verifiedAt) || !text(verification.datasetId) || !Number.isInteger(verification.revision) || verification.revision < 0 || !object(verification.summary)) return fail();
+    for (const key of ["people", "enrollments", "charges", "payments", "allocations", "receipts", "proofs", "cashSessions", "closedSessions"] as const) if (!Number.isSafeInteger(verification.summary[key]) || verification.summary[key] < 0) return fail();
+    for (const key of ["received", "applied", "credit", "open", "refunds"] as const) {
+      try { cents(verification.summary[key]); } catch { return fail(); }
+    }
+  }
   return parsed;
 }
 export function configureBackups(storage: DemoStorage, enabled: boolean, retention: number) {

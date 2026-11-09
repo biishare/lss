@@ -14,20 +14,24 @@ export function DashboardWorkspace({ state, role, context, onContext, onEnroll, 
   state: DemoState; role: "director" | "secretaria"; context: WorkspaceContext; onContext(patch: Partial<WorkspaceContext>, push?: boolean): void; onEnroll(): void; onPay(studentId?: string): void;
 }) {
   const [now] = useState(() => new Date().toISOString()), source = useMemo(() => reportSource(state, now), [state, now]);
-  const base = defaultReportFilters(context.yearId, now), academic = source.academic;
-  const report = (kind: ReportKind) => queryReport(source, { ...base, kind });
-  const receipts = report("receipts"), refunds = report("refunds"), debt = report("overdue"), credit = report("credit"), enrollments = report("enrollments"), vacancies = report("occupancy");
+  const { base, receipts, refunds, debt, credit, enrollments, vacancies, year, monthly } = useMemo(() => {
+    const base = defaultReportFilters(context.yearId, now), academic = source.academic;
+    const report = (kind: ReportKind) => queryReport(source, { ...base, kind });
+    const receipts = report("receipts"), refunds = report("refunds"), debt = report("overdue"), credit = report("credit"), enrollments = report("enrollments"), vacancies = report("occupancy");
+    const year = academic.years.find((item) => item.id === context.yearId)?.startsOn.slice(0, 4) || source.today.slice(0, 4), lastMonth = year === source.today.slice(0, 4) ? Number(source.today.slice(5, 7)) : 12;
+    const monthly = Array.from({ length: lastMonth }, (_, index) => {
+      const month = `${year}-${String(index + 1).padStart(2, "0")}`, last = new Date(Date.UTC(Number(year), index + 1, 0)).toISOString().slice(0, 10);
+      const filters = { ...base, from: `${month}-01`, to: last };
+      return { month, label: new Intl.DateTimeFormat("pt-MZ", { month: "short", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`)), received: queryReport(source, { ...filters, kind: "receipts" }).total, refunded: queryReport(source, { ...filters, kind: "refunds" }).total };
+    });
+    return { base, receipts, refunds, debt, credit, enrollments, vacancies, year, monthly };
+  }, [source, context.yearId, now]);
+  const academic = source.academic;
   const pending = state.paymentProofs?.filter((item) => item.status === "pending") ?? [];
   const active = activeCashSession(state.cashBook), totals = active && state.cashBook ? cashTotals(active.openingAmount, sessionMovements(state.cashBook, active.id)) : undefined;
   const openReport = (kind: ReportKind, section: ReportSection = "reports") => onContext({ view: "reports", reportSection: section, reportFilters: { ...base, kind }, reportPage: 0 }, true);
   const matches = context.search.trim() ? searchPeople(academic, state.students, context.search).slice(0, 8) : [];
   const card = (kind: ReportKind, title: string, value: string | number, note: string) => <button type="button" key={kind} className="rounded-lg border border-slate-200 bg-white p-4 text-left hover:border-teal-700" onClick={() => openReport(kind)}><span className="text-xs font-semibold text-slate-500">{title}</span><strong className="mt-2 block text-2xl">{value}</strong><span className="mt-2 block text-xs text-slate-500">{note} · Ver detalhe</span></button>;
-  const year = academic.years.find((item) => item.id === context.yearId)?.startsOn.slice(0, 4) || source.today.slice(0, 4), lastMonth = year === source.today.slice(0, 4) ? Number(source.today.slice(5, 7)) : 12;
-  const monthly = Array.from({ length: lastMonth }, (_, index) => {
-    const month = `${year}-${String(index + 1).padStart(2, "0")}`, last = new Date(Date.UTC(Number(year), index + 1, 0)).toISOString().slice(0, 10);
-    const filters = { ...base, from: `${month}-01`, to: last };
-    return { month, label: new Intl.DateTimeFormat("pt-MZ", { month: "short", timeZone: "UTC" }).format(new Date(`${month}-01T00:00:00Z`)), received: queryReport(source, { ...filters, kind: "receipts" }).total, refunded: queryReport(source, { ...filters, kind: "refunds" }).total };
-  });
   const max = Math.max(1, ...monthly.map((item) => item.received));
   return <div className="grid gap-5">
     <section className="lss-responsive-card"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-bold">{role === "secretaria" ? "Atendimento" : "Acompanhamento da escola"}</h2><p className="mt-1 text-sm text-slate-500">Situação em {source.today} · Recebimentos de {base.from} a {base.to}</p></div><div className="flex flex-wrap gap-2">{role === "secretaria" && <><Button variant="contained" onClick={onEnroll}>Nova matrícula</Button><Button variant="outlined" onClick={() => onPay()}>Registar pagamento</Button></>}<Button onClick={() => openReport("receipts", "cash")}>{role === "secretaria" ? "Consultar caixa" : "Acompanhar caixa"}</Button></div></div>

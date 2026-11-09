@@ -1,0 +1,33 @@
+{
+  "clock": "2026-05-14T08:00:00.000Z",
+  "runtime": "v24.22.1",
+  "scope": "Domínio e serialização; não mede renderização, rede ou teclado virtual.",
+  "results": [
+    {
+      "students": 100,
+      "searchMeanMs": 1.3,
+      "searchMatches": 1,
+      "spreadsheetRows": 100,
+      "spreadsheetDomainMs": 191.96,
+      "reportPreparationMs": 38.5,
+      "allTenReportsMs": 32.46,
+      "receivedRows": 100,
+      "receivedTotal": 100000,
+      "csvRows": 100,
+      "csvMs": 1.75
+    },
+    {
+      "students": 300,
+      "searchMeanMs": 4.84,
+      "searchMatches": 1,
+      "spreadsheetRows": 300,
+      "spreadsheetDomainMs": 511.52,
+      "reportPreparationMs": 120.89,
+      "allTenReportsMs": 51.8,
+      "receivedRows": 300,
+      "receivedTotal": 300000,
+      "csvRows": 300,
+      "csvMs": 1.32
+    }
+  ]
+}
