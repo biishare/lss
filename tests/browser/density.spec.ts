@@ -54,6 +54,11 @@ for (const width of [320, 390]) test(`pagamentos abre na lista do mês e conserv
   await page.getByRole("dialog").getByRole("button", { name: "Fechar", exact: true }).click();
   await expect(cell).toBeFocused();
   expect((await snapshot(page)).receipts).toHaveLength(0);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.reload();
+  await expect(list).toBeVisible();
+  await expect(list.getByRole("checkbox")).toBeChecked();
+  await page.setViewportSize({ width, height: 844 });
   await noOverflow(page);
 });
 

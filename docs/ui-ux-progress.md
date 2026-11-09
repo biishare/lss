@@ -424,3 +424,18 @@ registada como teste funcional aprovado. A execução de navegador, capturas e
 PDFs segue para o workflow da branch, com resultados finais registados na PR.
 Android físico e teclado virtual real continuam na UI-5. Esta branch ainda não
 foi integrada na main.
+
+A revisão acrescenta uma opção explícita para descartar apenas um rascunho de
+caixa, sem tocar em movimentos confirmados. Um teste de interface percorre o
+fecho e abertura de outra sessão: a saída antiga é bloqueada, e descartá-la não
+altera o estado financeiro. Assim uma tarefa da sessão anterior não fica presa
+na lista de retoma. A contagem de interface passa para 81 casos.
+
+O primeiro workflow UI-4 (`42676580509`, commit `e9e0f73`) aprovou os 227 testes,
+lint, TypeScript e build; Chromium passou 42/43 casos. O caso restante detectou
+que entryDestination removia os novos IDs de filtros na recarga de alunos.
+A lista de parâmetros internos admitidos passa a incluir classe/turma/situação
+dos alunos e apresentação lista/planilha, sem admitir pesquisa ou contactos.
+Os testes de contexto percorrem agora também essa fronteira de entrada, e o
+ensaio de pagamentos verifica a apresentação explícita após recarga em desktop.
+A correcção e o descarte de rascunho seguem para nova execução completa.

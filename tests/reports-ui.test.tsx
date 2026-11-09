@@ -147,3 +147,22 @@ test("o detalhe filtrado do caixa e a sua impressão excluem as outras formas", 
   assert.match(dialog.textContent ?? "", /Forma: M-Pesa.*1 movimento.*200 MT/);
   assert.doesNotMatch(dialog.textContent ?? "", /Numerário|1200 MT/);
 });
+
+test("rascunho de saída de outra sessão é bloqueado e pode ser descartado sem alterar movimentos", (t) => {
+  const h = fixture("cash"); t.mock.timers.enable({ apis: ["Date"], now: new Date(h.f.time) });
+  fireEvent.click(screen.getByRole("button", { name: "Registar saída" }));
+  fireEvent.change(screen.getByLabelText(/^Valor \(MT\)/), { target: { value: "100" } });
+  fireEvent.change(screen.getByLabelText(/^Motivo/), { target: { value: "Rascunho da sessão anterior" } });
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Fechar" }));
+  fireEvent.click(screen.getByRole("button", { name: "Fechar caixa" }));
+  fireEvent.change(screen.getByLabelText(/^Numerário contado/), { target: { value: "1200" } });
+  submitCash(); submitCash();
+  fireEvent.click(screen.getByRole("button", { name: "Abrir caixa" })); submitCash(); submitCash();
+  const before = JSON.stringify(h.f.state), writes = h.f.writes;
+  fireEvent.click(screen.getByRole("button", { name: "Retomar saída" })); submitCash();
+  assert.match(within(screen.getByRole("dialog")).getByRole("alert").textContent ?? "", /pertence a outra sessão/);
+  fireEvent.click(screen.getByText("Outras opções do preenchimento"));
+  fireEvent.click(screen.getByRole("button", { name: "Descartar preenchimento" }));
+  assert.equal(screen.queryByRole("button", { name: "Retomar saída" }), null);
+  assert.equal(JSON.stringify(h.f.state), before); assert.equal(h.f.writes, writes);
+});

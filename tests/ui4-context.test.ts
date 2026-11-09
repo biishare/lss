@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cashTaskKey, readCashTasks, type CashTask } from "../app/features/cash/task-drafts";
 import { contextFromLocation, defaultWorkspaceContext, readWorkspaceContext, validateWorkspaceContext, workspaceUrl } from "../app/features/demo/workspace-context";
+import { entryDestination } from "../app/lib/workspace-navigation";
 
 test("apresentação automática distingue-se da planilha anual explícita ao restaurar e voltar", () => {
   const fallback = { ...defaultWorkspaceContext("payments"), yearId: "2026", paymentPeriod: "year" as const, paymentDisplay: "sheet" as const };
   assert.equal(contextFromLocation("/payments", "year=2026", fallback).paymentPeriod, undefined);
   assert.equal(contextFromLocation("/payments", "year=2026", fallback).paymentDisplay, undefined);
-  const restored = contextFromLocation("/payments", workspaceUrl(fallback, "2026").split("?")[1], defaultWorkspaceContext());
+  const url = entryDestination("/payments", workspaceUrl(fallback, "2026").split("?")[1]);
+  const restored = contextFromLocation("/payments", url.split("?")[1], defaultWorkspaceContext());
   assert.equal(restored.paymentPeriod, "year"); assert.equal(restored.paymentDisplay, "sheet");
   assert.equal(readWorkspaceContext(JSON.stringify({ datasetId: "school", context: {} }), "school").paymentPeriod, undefined);
   const valid = validateWorkspaceContext(defaultWorkspaceContext("payments"), { classes: [], groups: [], students: [], months: ["mar", "may"], defaultYearId: "2026", defaultMonth: "may", years: [{ id: "2026", billingMonths: ["mar", "may"] }] });
@@ -16,7 +18,7 @@ test("apresentação automática distingue-se da planilha anual explícita ao re
 
 test("filtros de alunos usam IDs no URL, recuperam o conjunto e limpam ao voltar à lista sem filtros", () => {
   const selected = { ...defaultWorkspaceContext("enrollments"), yearId: "2026", studentClassId: "class-7", studentGroupId: "group-7", studentStatus: "active", search: "Contacto 840000000" };
-  const url = workspaceUrl(selected, "2026");
+  const url = entryDestination("/students", workspaceUrl(selected, "2026").split("?")[1]);
   assert.ok(!url.includes("840000000"));
   const restored = contextFromLocation("/students", url.split("?")[1], defaultWorkspaceContext());
   assert.equal(restored.studentClassId, "class-7"); assert.equal(restored.studentGroupId, "group-7"); assert.equal(restored.studentStatus, "active");
