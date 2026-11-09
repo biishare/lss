@@ -19,7 +19,8 @@ ou serviços financeiros remotos. O progresso é registado em
 
 ## Executar
 
-Requer Node.js 20.9 ou posterior.
+Use Node.js 24.x; esta entrega foi validada com Node.js 24.22.1.
+O runner de testes usa o suporte a TypeScript do Node, além do mínimo do Next.js.
 
 ```bash
 npm ci
@@ -54,8 +55,8 @@ cenário. O URL inclui apenas IDs/contexto, sem pesquisa ou contactos.
 - `/dashboard` — início e indicadores;
 - `/students` — alunos, classes, salas e turmas;
 - `/payments` — políticas por classe/ano, cobranças diversas, planilha e lançamentos;
-- `/reports` — síntese financeira e histórico;
-- `/settings` — parâmetros e gestão dos dados locais.
+- `/reports` — relatórios detalháveis, caixa, conferência e cópias;
+- `/settings` — escola, calendário, níveis, classes, salas e regras.
 
 ## Dados locais
 
@@ -116,5 +117,19 @@ e os requisitos centrais da API continuam separados.
 A [fase 5](docs/phase-5-2026-11-09.md) acrescenta atendimento no Dialog,
 Mês/Trimestre/Ano, conferência de comprovativos, aplicação de crédito entre
 anos, correcção ligada ao original, devoluções e recibos com série e snapshot.
-Uma aplicação de crédito não é contada como novo recebimento. Relatórios,
-caixa e fechos completos continuam para a fase 6.
+Uma aplicação de crédito não é contada como novo recebimento.
+
+A [fase 6](docs/phase-6-2026-11-09.md), integrada na `main` pela PR #9,
+acrescenta painéis, relatórios com CSV/impressão, caixa com retrato do fecho e
+cópias locais com ensaio de restauro. Essas cópias estão em Relatórios, sem
+precisar de activar ferramentas técnicas.
+
+A [fase 7](docs/phase-7-2026-11-09.md) reúne ensaios de atendimento, escala,
+regressões, matriz de aceitação e preparação do piloto. Os checks de testes,
+lint, TypeScript e build passam a correr nas PRs e na `main` pelo workflow
+`Validar LSS`; a Git integration da Vercel continua responsável pelos deploys.
+
+Guias: [arranque/configuração](docs/quick-start.md), [apresentação](docs/presentation.md),
+[operação](docs/operations.md), [recuperação](docs/recovery.md) e
+[piloto](docs/pilot-plan.md). A [matriz v3](docs/acceptance-v3.md) distingue
+validação local, observação no navegador e requisitos centrais adiados.

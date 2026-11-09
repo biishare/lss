@@ -1,139 +1,116 @@
-# Guia de operação da demo LSS
+# Operação do LSS
 
-## Início rápido
+Guia da apresentação com dados fictícios. Para instalar, configurar e conhecer
+as contas de desenvolvimento, consulte [Arranque](quick-start.md).
+Os limites do ambiente ficam na documentação técnica; a interface apresenta
+os percursos habituais de uma escola.
 
-1. Execute `npm ci` e `npm run dev`.
-2. Abra `http://localhost:3000`.
-3. Entre com uma das contas fictícias abaixo. A interface não mostra contas nem papéis para escolher; o papel deriva do acesso introduzido.
-4. Na apresentação normal, a escola fictícia é preparada uma única vez se não houver estado guardado. O Director também pode ser a primeira conta. Abrir, recarregar ou sair não repõe dados existentes.
-5. Use **Sair** para voltar ao formulário e trocar de conta. Os dados da escola permanecem.
+## Abrir e fechar o atendimento
 
-| Utilizador | Palavra-passe de apresentação | Papel |
-| --- | --- | --- |
-| `marta` | `Lss!Marta2026` | Secretaria |
-| `antonio` | `Lss!Antonio2026` | Director |
+1. Entre na conta da Secretaria e confirme o ano de acompanhamento/consulta.
+2. Reveja comprovativos pendentes e a sessão de caixa. Feche uma sessão de
+   outro dia antes de registar novos movimentos físicos.
+3. Abra o caixa com o numerário de fundo, se existir. Banco e carteiras não
+   pertencem a esse fundo.
+4. No fim, confira os movimentos por forma, conte o numerário e guarde o fecho.
+5. Descarregue a cópia actual e use Sair. Não limpar os dados do navegador.
 
-Estes pares são fixtures fictícias e públicas de desenvolvimento; não são segredos de produção. A comparação local de fingerprints apenas permite ensaiar o formulário e o papel. Pode ser inspeccionada/contornada no browser e será substituída pela API. Não reutilizar palavras-passe pessoais. A palavra-passe introduzida não é gravada em snapshots, preferências ou sessões.
+Use apenas uma aba para escrever. O Director consulta alunos, regras,
+relatórios, caixa e histórico; não matricula, recebe, devolve ou restaura dados.
+As permissões centrais e vários postos simultâneos pertencem à futura API.
 
-## Apresentação ao cliente e ferramentas internas
+## Localizar e matricular
 
-O cliente vê identidade da escola, login e operações habituais. Não aparecem rótulos Demo, contas fictícias, pormenores de armazenamento ou botões de preparação/reposição. Isso não altera os limites técnicos registados neste guia.
+A pesquisa encontra nome, número e contacto, ignorando acentos/maiúsculas.
+O nome abre a ficha com Dados, Matrículas, Financeiro, Comprovativos e Histórico.
+A pesquisa pessoal permanece na sessão e não vai no URL.
 
-As ferramentas internas ficam **desligadas por defeito**. Para desenvolvimento, configure `NEXT_PUBLIC_LSS_DEVELOPER_TOOLS=true` no ambiente local e reinicie `npm run dev`. Num build, a flag é fixada durante a compilação; remova-a/recompile para voltar à apresentação normal. Não há parâmetro no URL para a activar. A flag não protege dados nem substitui autorização.
+Em Nova matrícula, preencha identificação, colocação e condições/revisão.
+Reveja correspondências antes de criar outra pessoa. Escolha turma com vaga,
+data da matrícula, primeiro mês cobrável e benefício, quando aplicável.
 
-Nesse modo, Secretaria dispõe da preparação inicial (escola de exemplo ou configuração vazia), importação, exportação, reposição e recuperação do original. Director mantém consulta. Para uma apresentação normal, deixe a flag ausente ou `false`.
+- Guardar rascunho não matricula, não ocupa vaga e não cria cobranças.
+- Guardar matrícula permite pagar a inscrição depois, pela ficha.
+- Guardar e pagar abre a inscrição do aluno acabado de criar, com contexto e
+  valor preenchidos. Bolsa integral não produz pagamento fictício.
 
-## Navegação e contexto
+A condição financeira e o estado académico são distintos. Renovar reutiliza
+a pessoa noutro ano. Transferir ou registar saída exige data, motivo e revisão
+do efeito. A pauta anterior e os movimentos financeiros permanecem no histórico.
 
-As cinco áreas partilham o mesmo layout. **Recolher menu** passa de 256 a 64 px
-no desktop (a partir de 1200 px). Entre 768 e 1199 px a barra começa compacta e
-**Expandir menu** abre uma sobreposição sem alterar a preferência desktop.
-No telemóvel, **Abrir menu** mostra o Drawer. Escape, destino, toque fora e
-**Fechar menu** fecham a sobreposição; o foco regressa à abertura.
+## Receber e emitir o recibo
 
-**Pagamentos** abre a planilha. **Expandir planilha** oculta o menu e os blocos
-secundários, conservando filtros, selecção e rascunho. A saída restaura o layout.
-Enquanto o atendimento no modal não estiver concluído na fase 5, **Registar
-pagamento** no detalhe sai da vista expandida e prepara o formulário existente.
+Em Pagamentos, escolha ano, classe, turma e Mês/Trimestre/Ano. Abra uma célula
+ou Registar pagamento. Confirme aluno, item, forma, data efectiva e distribuição
+antes de guardar. Um valor parcial mantém o restante em aberto; o excedente é
+crédito, sem liquidar outros itens automaticamente.
 
-Voltar, Avançar e recarregar recuperam os IDs de classe/turma, mês e área no URL.
-Pesquisa, selecção em lote e posições de scroll ficam na sessão do cenário,
-sem colocar nomes ou contactos no URL. O ano mostrado é o ano operacional
-existente; a organização e selecção de vários anos pertencem à fase 3.
+Seleccionar uma mensalidade Prevista exige confirmar a antecipação. Outras
+cobranças/anos da mesma pessoa só recebem valor quando seleccionados. Rever
+os montantes por item evita aplicar tudo ao ano errado.
 
-## Roteiro sugerido
+Depois de guardar, o mesmo diálogo apresenta o recibo persistido. Fechar
+conserva o contexto da planilha. Imprimir ou reimprimir não recebe dinheiro
+novamente. O documento é interno, sem validade fiscal atribuída por esta demo.
 
-1. No **Início**, apresente os indicadores e alertas.
-2. Em **Alunos e turmas**, seleccione classe/turma e faça uma matrícula fictícia.
-3. Em **Pagamentos → Dados de pagamentos**, crie uma política, seleccione as
-   classes abrangidas e mostre as cobranças diversas.
-4. Na **Planilha financeira**, mostre geração de mensalidades, prévia e recibo.
-5. Em **Relatórios**, compare previsto, recebido, descontos e dívida.
-6. Use **Sair**, entre como Director e mostre o modo só de leitura.
+Se a gravação falhar, conserve o preenchimento e repita a tentativa existente.
+Não criar outro pagamento para obter um recibo. Se os dados tiverem mudado
+noutra aba, recarregue/reveja a distribuição antes de confirmar.
 
-## Exportar, importar e repor
+## Comprovativos e datas anteriores
 
-As ferramentas ficam em **Configurações**, apenas com a flag de desenvolvimento activa e a conta Secretaria.
+Para transferência, depósito, Multicaixa, M-Pesa ou e-Mola, registe referência,
+data efectiva, valor e observação. Guardar para conferência mantém a dívida
+em análise: não confirma recebimento nem emite recibo.
 
-- **Exportar JSON** descarrega um snapshot v3 (também aceita exportações v2 e o formato anterior) com todos os dados locais.
-- **Importar JSON** valida primeiro o ficheiro e só substitui o estado após
-  confirmação. Ficheiros inválidos e versões desconhecidas são recusados.
-- **Repor dados iniciais** pede confirmação e remove apenas as alterações da
-  demo. Exporte antes se quiser conservar uma cópia.
+Em Relatórios → Conferência → Consultar movimentos, confira a referência,
+data e montante e registe a decisão. Rejeição conserva a evidência e o saldo.
+Uma confirmação cria um único recebimento e recibo. A referência repetida é
+recusada. Cobranças com comprovativo pendente ficam fora dos lembretes.
 
-## Recuperação
+Se o dinheiro foi pago antes e apresentado depois, use a data efectiva correcta,
+a evidência e o motivo da apresentação posterior. O sistema conserva multas
+originais e regista os ajustamentos aplicáveis; não editar ou apagar a história.
 
-Se uma alteração indesejada for feita, importe a exportação mais recente. Se não
-houver cópia, reponha os dados fictícios. Não limpe todo o armazenamento do
-navegador: outras aplicações e as preferências do utilizador podem partilhar o
-mesmo domínio.
+## Crédito, correcção e devolução
 
-## Limitações assumidas
+Consultar movimentos permite seleccionar a origem e as cobranças para aplicação
+de crédito. A aplicação entre anos fica ligada à pessoa e não cria receita nova.
 
-- Dados apenas no navegador e no dispositivo actual.
-- Credenciais locais fictícias para apresentação; sem utilizadores, autenticação, recuperação ou sessões reais de servidor.
-- Sem servidor, base de dados, concorrência multiutilizador ou cópias remotas.
-- Sem validade fiscal, contabilística ou jurídica dos recibos.
-- Sem comunicações ou integrações externas.
+Devolução tem valor disponível, data, forma e motivo. Conserva o recebimento e
+o recibo originais. Corrigir recebimento conserva o valor físico, anula
+logicamente o original e liga o substituto. Não usar correcção para esconder
+uma devolução. Se a origem já tiver crédito transferido/devolvido, o sistema
+pede revisão desses movimentos antes de corrigir.
 
-Esta demo serve para apresentar fluxos e decisões do produto. Não deve receber
-dados pessoais reais nem ser tratada como sistema de produção.
+## Caixa e relatórios
 
-## Dados ilegíveis e falha de gravação
+Numerário esperado = abertura + recebimentos/reforços em numerário −
+devoluções/saídas em numerário. Saídas têm categoria, forma e motivo; documento
+é opcional. Não contar transferências ou carteiras como notas/moedas.
 
-O ecrã normal conserva os dados existentes e orienta para o responsável. Em desenvolvimento, descarregue o original e, como Secretaria, importe uma cópia válida. A importação pede confirmação, recusa
-versão/IDs/relações/saldos inválidos e não apaga o cenário se a gravação falhar.
+Rever efeito precede a confirmação do fecho. Diferença entre esperado e contado
+exige justificação. O fecho é um retrato preservado. Correcções posteriores
+aparecem ligadas como ajustamentos; não reescrevem a contagem anterior.
 
-Pagamento só é confirmado depois de guardar o conjunto completo. Se falhar,
-o formulário conserva o preenchimento e a tentativa pode ser repetida com o
-mesmo identificador. Se outra aba tiver alterado os dados, reveja o estado antes
-de confirmar; use uma aba de escrita de cada vez.
+Os totais dos painéis abrem o detalhe. Recebimentos seguem a data efectiva;
+liquidação segue a competência; crédito, benefícios e previsão são distintos.
+CSV e impressão abrangem toda a lista filtrada, incluindo páginas não visíveis.
+Confira período, ano/âmbito, forma, funcionário e pesquisa antes de exportar.
 
-Os rascunhos de matrícula e pagamento ficam na sessão e no cenário de origem.
-A sua gravação não confirma nenhuma matrícula ou pagamento. Se o armazenamento
-de rascunhos estiver bloqueado, o ecrã informa que o preenchimento só permanece
-na página actual.
+A prévia de mensagem identifica destinatário, período e montante. Copiar não
+envia WhatsApp, SMS ou e-mail. O LSS não afirma ter enviado cobranças.
 
-## API posterior
+## Navegação, cópias e incidentes
 
-Por decisão do utilizador, esta etapa não cria uma base real ou backend. A API
-dedicada posterior fornecerá autenticação, autorização, base central e backups.
-Os perfis de exemplo e a exportação local não são esses mecanismos de produção.
+Recolher menu liberta espaço no desktop. No telemóvel, Abrir menu mostra o
+Drawer; Escape, destino ou toque fora fecham. Expandir planilha e Escape
+conservam filtros/posição sem alterar a preferência permanente.
 
-## Alunos e estrutura — fase 3
+Em Relatórios → Cópias de segurança, descarregue, verifique e só depois reponha
+uma cópia. O [guia de recuperação](recovery.md) explica prévia, estado anterior,
+erros e conservação do original. Cópias locais não são backups de servidor.
 
-Em **Configurações**, percorra Escola, Ano e calendário, Níveis e classes, Salas e turmas e Regras de pagamento. A classe é cadastrada uma vez e disponibilizada no ano escolhido; a sala é cadastrada uma vez e aparece logo nas turmas. Uma turma valida vaga/capacidade, sala e horário. Escolha **Ano de consulta** para preparar/consultar outro ano sem apagar o actual. O ano seguinte só pode tornar-se operacional depois de encerrar o anterior.
-
-Em **Alunos e turmas**, use **Nova matrícula** e os três passos. Complete o nome, reveja as correspondências, escolha ano/turma e as condições. Pode guardar um rascunho, confirmar e pagar depois, ou **Guardar e pagar** para abrir a inscrição correcta. O formulário conserva o preenchimento em falha. Rascunho não é matrícula confirmada.
-
-O nome abre a ficha permanente. Dados/contactos corrigidos pedem motivo e mantêm anterior/novo no Histórico. **Renovar matrícula** reutiliza a pessoa para outro ano. No separador Matrículas, **Transferir de turma** e **Registar saída** apresentam a data e o efeito antes da confirmação. O número anterior da pauta permanece no histórico. Pagamentos e recibos anteriores conservam-se; antecipações de obrigações anuladas ficam como crédito identificado, sem devolução automática.
-
-A ficha reúne todos os anos. **Abrir pagamentos de [ano]** leva à planilha com o ano, classe e turma correspondentes. Comprovativos mostra os pagamentos/referências e recibos já guardados; não inventa recibos de movimentos antigos sem snapshot. A gestão completa de conferência/anexos, crédito/devolução e impressão pertence à fase 5.
-
-Os calendários desta etapa usam os meses de um ano civil identificado por quatro algarismos. A vigência de novos preços por nível, emissão automática e precisão/multas completas continuam para a fase 4. Contas reais e validação central/concorrência entre postos dependem da API posterior.
-
-## Atendimento da fase 5
-
-Em Pagamentos, escolha turma/período e abra uma célula ou Registar pagamento.
-Confirme a distribuição antes de guardar; o recibo surge no mesmo Dialog.
-Fechar conserva o contexto. Imprimir / Guardar PDF usa o documento guardado;
-repetir impressão não recebe dinheiro novamente.
-
-Acrescentar outras cobranças permite distribuir um valor por anos da mesma
-pessoa. Indique montantes por item quando necessário; o excedente fica em
-crédito. Receber apenas crédito exige seleccionar esse destino.
-
-Consultar movimentos reúne comprovativos, recibos, origens de crédito e
-histórico. Guardar para conferência mantém a dívida; confirmar exige comparar
-referência, data e valor com a evidência. Rejeitar conserva a decisão. O cenário
-inicial novo inclui `DEP-2026-008` para ensaiar essa consulta.
-
-Aplicar crédito e Registar devolução mostram o efeito antes de guardar e
-recusam exceder o saldo. Corrigir recebimento preserva o original e liga um
-substituto, sem duplicar a entrada física. Se o crédito já saiu para outro ano
-ou foi devolvido, a correcção automática é bloqueada para revisão dos movimentos.
-Não apagar histórico nem editar o saldo para contornar esse bloqueio.
-
-Ver cobertura e limites em [phase-5-2026-11-09.md](phase-5-2026-11-09.md).
-Relatórios detalhados, fecho/caixa e continuidade fazem parte da fase 6;
-segurança e dados centrais aguardam a API dedicada.
+Se ocorrer um resultado inesperado, registe data, aluno fictício, item, ID do
+recibo, acção e mensagem observada. Conserve uma cópia antes de restaurar.
+Não editar saldos numa planilha paralela para compensar o sistema.

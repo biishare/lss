@@ -93,3 +93,9 @@ test("B05: inválido, concorrência, Director e falha da cópia prévia preserva
   assert.throws(() => restoreBackup(f.repository, f.storage, f.state, "{quebrado", "secretaria", f.time), /JSON/); assert.equal(f.values.get(demoStorageKey), raw);
   f.failBackup(true); assert.throws(() => restoreBackup(f.repository, f.storage, f.state, backup, "secretaria", f.time), /cópia de segurança/); assert.equal(f.values.get(demoStorageKey), raw);
 });
+
+for (const broken of ["null", "{", JSON.stringify({ version: 1, enabled: true, retention: 3, items: [], beforeRestore: {} }), JSON.stringify({ version: 1, enabled: true, retention: 3, items: [], lastVerification: { verifiedAt: "2026-05-05T08:00:00.000Z", datasetId: "test", revision: 1, summary: {} } })]) test("arquivo de cópias ilegível apresenta erro controlado e conserva o original: " + broken.slice(0, 45), () => {
+  const f = phase6Fixture(); f.values.set(backupArchiveKey, broken);
+  assert.throws(() => readBackups(f.storage), /Não foi possível ler as cópias.*original foi preservado/);
+  assert.equal(f.values.get(backupArchiveKey), broken);
+});

@@ -9,13 +9,14 @@ import { DashboardWorkspace } from "../app/features/reports/dashboard";
 import { defaultWorkspaceContext, type WorkspaceContext } from "../app/features/demo/workspace-context";
 import { executeCash } from "../app/features/cash/commands";
 import { phase6Fixture } from "./helpers/phase6-fixture";
-import { configureBackups, storeBackup } from "../app/features/continuity/backups";
+import { backupArchiveKey, configureBackups, storeBackup } from "../app/features/continuity/backups";
 import { domWindow } from "./dom-environment";
 
 afterEach(cleanup); after(async () => { await domWindow.happyDOM.close(); });
-function fixture(section: "reports" | "cash" | "continuity" = "reports", role: "secretaria" | "director" = "secretaria") {
+function fixture(section: "reports" | "cash" | "continuity" = "reports", role: "secretaria" | "director" = "secretaria", brokenArchive = false) {
   const f = phase6Fixture(); f.pay({ amount: "1200" });
   configureBackups(f.storage, true, 3); storeBackup(f.storage, f.state, "Cópia de teste", f.time);
+  if (brokenArchive) f.values.set(backupArchiveKey, JSON.stringify({ version: 1, enabled: true, retention: 3, items: [], beforeRestore: {} }));
   Object.defineProperty(window, "localStorage", { value: f.storage, configurable: true });
   let context: WorkspaceContext = { ...defaultWorkspaceContext("reports"), yearId: "2026", reportSection: section, reportFilters: defaultReportFilters("2026", f.time) };
   let failed = false;
@@ -76,4 +77,13 @@ test("painel do Director abre o mesmo relatório do total e mostra evolução me
   render(<DashboardWorkspace state={f.state} role="director" context={{ ...defaultWorkspaceContext(), yearId: "2026" }} onContext={(value) => { patch = value; }} onEnroll={() => { throw new Error("Director"); }} onPay={() => { throw new Error("Director"); }}/ >);
   assert.ok(screen.getByRole("heading", { name: "Evolução mensal · 2026" })); assert.equal(screen.queryByRole("button", { name: "Registar pagamento" }), null);
   fireEvent.click(screen.getByRole("button", { name: /Recebido no período/ })); assert.equal(patch.view, "reports"); assert.equal(patch.reportFilters!.kind, "receipts");
+});
+
+
+test("arquivo de recuperação corrompido mantém a página utilizável e conserva os dados", () => {
+  const h = fixture("continuity", "secretaria", true), writes = h.f.writes, raw = h.f.values.get(backupArchiveKey);
+  assert.match(screen.getByRole("alert").textContent ?? "", /Não foi possível ler as cópias.*original foi preservado/);
+  assert.ok(screen.getByRole("heading", { name: "Cópias de segurança e recuperação" }));
+  assert.ok(screen.getByRole("button", { name: "Descarregar cópia actual" }));
+  assert.equal(h.f.values.get(backupArchiveKey), raw); assert.equal(h.f.writes, writes);
 });

@@ -1,0 +1,67 @@
+# Matriz de aceitação v3 — fase 7
+
+Base: fase 6 integrada na `main` em `9fb85c3`. Decisões posteriores do
+responsável: apresentação normal ao cliente e API/base central adiadas.
+
+**Automatizado local** significa domínio, repositório e/ou Happy DOM. Não
+significa navegador real, autorização de servidor, vários postos ou piloto.
+A evidência de publicação e de observação fica no [registo da fase 7](phase-7-2026-11-09.md).
+
+## Cálculos e movimentos
+
+| Critério | Evidência automatizada | Estado no âmbito actual |
+| --- | --- | --- |
+| F01 | `tests/billing-v3.test.ts`: half-up, 1 000,10 × 15% | Automatizado local. |
+| F02/F03 | Mesmo ficheiro: bolsa integral, inscrição e maior benefício | Automatizado local; ensaio de bolsa em `tests/pilot-rehearsal.test.ts`. |
+| F04/F05 | Mesmo ficheiro: incrementos e limites das datas de multa | Automatizado local. |
+| F06 | Mesmo ficheiro + `tests/finance-service.test.ts`: evidência tardia e ajustamento | Ensaio integrado de comprovativo, relatório e caixa em `pilot-rehearsal`. |
+| F07/F08 | `billing-v3`: parcial 600/200 e multa sem principal | Automatizado local. |
+| F09/F10 | `finance-service`: excedente 200 e aplicação explícita | Automatizado local; sem nova receita. |
+| F11/F12 | `finance-service`: benefício retroactivo e devolução limitada | Automatizado local. |
+| F13/F14 | `billing-v3`: antecipação e vigência futura preservando emitidas | Automatizado local. |
+| F15 | `finance-service` + `cash-continuity`: correcção ligada, uma entrada e fecho preservado | Automatizado local, inclusive ajustamento no mesmo instante do fecho. |
+| F16 | `finance-service` + `reports`: 700/300, um recebido físico | Automatizado local. |
+| F17 | `billing-v3`: 60 dias, multa simples única | Automatizado local. |
+
+Datas-limite, fuso Africa/Maputo, viragem de mês/ano, cêntimos, valores inválidos,
+benefícios temporários, extras e compatibilidade histórica têm cobertura em
+`billing-v3`, `payment-policies` e `finance-spreadsheet`.
+
+## Uso e persistência
+
+| Critério | Evidência existente | Observação que não pode ser inferida desses testes |
+| --- | --- | --- |
+| U01 | `demo-ui`: menu, contexto e preferência | Medir 256/64 e ganho de largura em navegador. |
+| U02 | CSS e componentes responsivos; listas paginadas | Rever 320/360/390/768/1024/1280/1440/1920 e overflow real. |
+| U03 | `demo-ui`: Drawer, Escape/destino/fora e foco | Confirmar no dispositivo/navegador de utilização. |
+| U04 | `demo-ui`: célula → pagamento → recibo → célula, filtros/scroll/foco | Ensaio acompanhado no browser. |
+| U05 | `demo-ui`, `academics-ui`, `workspace-context`: períodos, ficha, história e recarga | Confirmar contexto na versão publicada. |
+| U06 | `demo-ui`: vista expandida e Escape | Teclado virtual, zoom e alcance dos botões exigem dispositivo/navegador. |
+| U07 | `billing-v3`, `finance-spreadsheet`, `pilot-rehearsal`: bolsa e multa pendente | Conferir apresentação dos mesmos estados na ficha/planilha. |
+| U08 | `finance-service`, `finance-service-ui`: série, snapshot e erro de impressão sem escrita | PDF/folha real e paginação não são comprovados pelo DOM. |
+| U09 | `academics-ui`: erro, dados mantidos e inscrição correcta | Confirmar o percurso com o operador no posto. |
+| A01/A02 | Serviços locais recusam Director; `demo-ui` cobre contas/saída | Não é autorização ou autenticação de servidor. |
+| I01 | `demo-repository`, `finance-service`, `cash-continuity`: ID/conteúdo e repetição | Não prova resposta perdida/conflito simultâneo numa API. |
+| I02 | `demo-ui`, `demo-repository`, `academics`: revisão obsoleta | Detecta alteração já ocorrida noutra aba; uma aba de escrita suportada. |
+| I03 | `billing-v3`, `demo-ui`: sincronização e arranque sem reposição | Não declara concorrência central. |
+| M01 | `academics`, `academics-ui`: entrada, renovação, transferência e pauta | Servidor ainda por implementar. |
+| M02 | `cash-continuity`, `pilot-rehearsal`, `synthetic-readiness`: validação e restauro repetido | Ensaio local isolado, não restauro PostgreSQL. |
+| M03 | `demo-ui`, `demo-repository`, `cash-continuity`: falha, cancelamento e rascunho | Sem confirmação financeira offline de servidor. |
+| R01 | `reports`, `reports-ui`, `synthetic-readiness`: detalhe, filtros, CSV e crédito | CSV ensaiado com todos os 100/300 registos, sem limitar à página visível. |
+
+## Critérios centrais e piloto
+
+| Critérios | Situação e porta de entrada |
+| --- | --- |
+| P01/P02/P11 | API: contas, sessão, papéis, recuperação e isolamento validados no servidor. |
+| P03/P04/P05 | API/base: transacções, recuperação por ID e concorrência real. Os testes locais são adicionais. |
+| P06 | API/base: persistência entre dispositivos autorizados. |
+| P07 | Backup remoto e restauro de base central isolada, com política operacional aprovada. Há apenas ensaio local nesta entrega. |
+| P08 | Migração central ensaiada, original conservado, relações e saldos reconciliados. Compatibilidade local não activa dados reais. |
+| P09 | Caixa local coberto por `cash-continuity` e ensaio integrado; conferir no ambiente central e no posto do piloto. |
+| P10 | Confirmar equipa/projecto, commit, ambiente, build e percursos na Vercel. READY não substitui o ensaio de uso. |
+| P12 | Uma turma e um funcionário, parcial/bolsa/prova tardia sem planilha de compensação. Ensaio fictício preparado; piloto real não iniciado. |
+
+O [plano do piloto](pilot-plan.md) define a sequência e o registo a preencher
+com o responsável. Nenhum critério central é marcado concluído por existir
+uma simulação, uma conta fictícia ou um documento.

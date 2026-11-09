@@ -16,8 +16,8 @@ previam PostgreSQL e servidor nesta etapa.
 | 3 - Alunos e estrutura | Implementada e validada no âmbito local; revisão visual pendente | Ficha permanente, matrículas anuais, configuração guiada, vagas, pautas, rascunhos, renovação, transferência e saída. Validação de servidor aguarda a API. |
 | 4 - Regras e cobranças | Implementada no âmbito local; revisão visual pendente | Vigências por nível, calendário/emissão automática, benefícios com prévia, dinheiro exacto e multas v3; legado preservado. Integrada na main pela PR #7 (`88e1fea`). |
 | 5 - Atendimento, crédito e recibos | Integrada na main e publicada | PR #8, `17cf3d6`. Pagamento/recibo, Mês/Trimestre/Ano, conferência, crédito, correcções e devoluções. |
-| 6 - Relatórios, caixa e continuidade | Implementada no âmbito local, em entrega para revisão | Painéis por papel, totais detalháveis, CSV/impressão/PDF, mensagens para copiar, caixa e fechos imutáveis, cópias locais e ensaio de restauro. Backups centrais aguardam a API. |
-| 7 - Validar, apresentar e preparar piloto | Pendente | Matriz de aceitação, ensaio de atendimento e critérios de piloto/servidor. |
+| 6 - Relatórios, caixa e continuidade | Integrada na main e publicada (PR #9, `9fb85c3`) | Painéis por papel, totais detalháveis, CSV/impressão/PDF, mensagens para copiar, caixa e fechos imutáveis, cópias locais e ensaio de restauro. Backups centrais aguardam a API. |
+| 7 - Validar, apresentar e preparar piloto | Validação local e guias preparados para revisão | Ensaios integrados, escala 100/300, guias, matriz e checks de CI. Piloto real condicionado à API. |
 
 ## Fase 1: alterações
 
@@ -231,3 +231,26 @@ A partir desta entrega, publicação e revisão são conferidas no endereço da
 Vercel e/ou no estado do deploy. Os registos de fases anteriores que mencionam
 a incompatibilidade do preview local são históricos, não prova do estado
 actual da publicação. O resultado externo desta entrega fica registado na PR.
+
+## Fase 7 — Validar, apresentar e preparar piloto
+
+Base `main` `9fb85c3`, fase 6 integrada e produção Vercel READY. Trabalho em
+`codex/lss-v3-validation-pilot`. O [registo desta fase](phase-7-2026-11-09.md)
+reúne resultados e limites. A [matriz v3](acceptance-v3.md) separa testes locais,
+observação no navegador e requisitos de servidor adiados por decisão do utilizador.
+
+Foram acrescentados ensaios integrados de matrícula, parcial, bolsa, prova
+tardia, caixa e restauro, além de escala com 100/300 alunos. A revisão remove
+reconstruções repetidas dos movimentos de caixa nos relatórios e mantém os
+indicadores do painel em memória enquanto se pesquisa. Arquivos de cópias com
+metadados corrompidos são recusados com erro controlado, preservando o original.
+
+Guias de arranque/configuração, apresentação, operação, recuperação e piloto
+foram revistos. Um workflow de testes/lint/TypeScript/build foi preparado para
+PRs e main, sem credenciais da Vercel. Não foi criada API, base central nem
+iniciado piloto com dados reais.
+
+Validação da fase 7: 195 testes aprovados (140 domínio/persistência, 55 UI),
+lint sem avisos, TypeScript, build e diff check aprovados. Medições e distinção
+entre automação e observação no navegador estão no registo detalhado. A revisão
+da branch precede integração; P01–P08/P11 e o piloto real aguardam a API.

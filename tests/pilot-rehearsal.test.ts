@@ -1,0 +1,88 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { phase6Fixture } from "./helpers/phase6-fixture";
+import type { EnrollmentInput } from "../app/features/academics/model";
+import { effectiveAmount } from "../app/features/finance/domain/billing";
+import { getChargeBalance } from "../app/components/school-admin-demo.model";
+import { demoStorageKey } from "../app/features/demo/demo-state";
+import { serializeDemoSnapshot } from "../app/features/demo/local-repository";
+import { configureBackups, recoverySummary, restoreBackup, verifyBackup } from "../app/features/continuity/backups";
+import { executeAcademic } from "../app/features/academics/operations";
+import { executeCash } from "../app/features/cash/commands";
+import { cashTotals, sessionMovements } from "../app/features/cash/model";
+import { recordCredit } from "../app/features/finance/service-model";
+
+const enrollment = (name: string, patch: Partial<EnrollmentInput> = {}): EnrollmentInput => ({ fullName: name, guardianName: "Encarregado fictício", guardianPhone: "", yearId: "2026", groupId: "7A2026", enrolledOn: "2026-05-05", tuitionStartMonth: "may", financeStatus: "regular", discountPercent: 0, benefitStart: "may", benefitEnd: "nov", benefitReason: "", duplicateReviewed: true, ...patch });
+
+test("ensaio: matrícula, inscrição, parcial, falha/repetição, recibo, caixa, relatório e restauro concordam", () => {
+  const f = phase6Fixture(); configureBackups(f.storage, true, 3);
+  const name = "Aluno Ensaio Parcial", result = f.academic({ type: "enroll", input: enrollment(name) });
+  const id = String(result.result.studentId), registration = f.record(id).charges.find((item) => item.category === "registration")!;
+  const inscription = effectiveAmount(registration);
+  f.cash({ kind: "open", openingAmount: "100" });
+  f.pay({ studentId: id, category: "registration", amount: String(inscription), targetChargeId: registration.id });
+  const partial = f.pay({ studentId: id, amount: "600" }), originalReceipt = JSON.stringify(partial.receipt);
+  const may = f.record(id).charges.find((item) => item.monthKey === "may")!;
+  assert.equal(getChargeBalance(f.record(id), may), 400);
+  assert.equal(f.report("due", { search: name }).rows.find((item) => item.id === may.id)!.amount, 400);
+  const before = f.state, raw = f.values.get(demoStorageKey);
+  f.failMain(true); assert.throws(() => f.pay({ studentId: id, amount: "400" }, "complete-partial"), /Não foi possível guardar/);
+  assert.equal(f.values.get(demoStorageKey), raw); assert.equal(f.state.receipts.length, 2);
+  f.failMain(false); f.pay({ studentId: id, amount: "400" }, "complete-partial");
+  assert.equal(getChargeBalance(f.record(id), may), 0); assert.equal(f.state.receipts.length, 3);
+  assert.equal(JSON.stringify(f.state.receipts.find((item) => item.id === partial.receipt.id)), originalReceipt);
+  const received = f.report("receipts", { search: name });
+  assert.equal(received.total, inscription + 1000); assert.equal(f.report("allocations", { search: name }).total, received.total);
+  f.cash({ kind: "expense", amount: "50", method: "Numerário", category: "Material", reason: "Papel para atendimento fictício", document: "ENSAIO-01" });
+  const cash = f.state.cashBook!, sessionId = cash.sessions[0].id, expected = cashTotals(100, sessionMovements(cash, sessionId)).expectedCashCents / 100;
+  assert.equal(expected, 100 + received.total - 50);
+  f.cash({ kind: "close", sessionId, countedAmount: String(expected), reason: "" });
+  const backup = serializeDemoSnapshot(f.state), summary = verifyBackup(backup, f.time).summary;
+  assert.equal(summary.receipts, 3); assert.equal(summary.closedSessions, 1);
+  f.pay({ studentId: id, amount: "10", creditOnly: true });
+  assert.equal(recordCredit(f.record(id)), 10);
+  f.setState(restoreBackup(f.repository, f.storage, f.state, backup, "secretaria", f.time));
+  assert.deepEqual(recoverySummary(f.state), summary); assert.equal(recordCredit(f.record(id)), 0);
+  const loaded = f.repository.load(); assert.equal(loaded.status, "ready");
+  if (loaded.status === "ready") assert.equal(loaded.state.receipts.length, 3);
+  const finalRaw = f.values.get(demoStorageKey);
+  assert.throws(() => executeAcademic(f.repository, f.state, { type: "enroll", input: enrollment("Escrita recusada") }, { id: "director-enroll", role: "director", recordedAt: f.time }), /Director/);
+  assert.throws(() => executeCash(f.repository, f.state, { kind: "open", openingAmount: "0" }, { id: "director-cash", role: "director", recordedAt: f.time }), /Director/);
+  assert.equal(f.values.get(demoStorageKey), finalRaw); assert.ok(before.revision < f.state.revision || before.datasetId !== f.state.datasetId);
+});
+
+test("ensaio: bolsa integral matricula e dispensa inscrição/mensalidade sem recebimento fictício", () => {
+  const f = phase6Fixture(), count = f.state.receipts.length;
+  const result = f.academic({ type: "enroll", input: enrollment("Aluna Ensaio Bolsa", { financeStatus: "scholarship", discountPercent: 100, benefitAppliesToRegistration: true, benefitReason: "Bolsa integral autorizada para o ensaio" }) });
+  const id = String(result.result.studentId), record = f.record(id), covered = record.charges.filter((item) => item.category === "registration" || item.monthKey === "may");
+  assert.equal(covered.length, 2); assert.ok(covered.every((item) => effectiveAmount(item) === 0));
+  assert.equal(record.payments.length, 0); assert.equal(f.state.receipts.length, count); assert.equal(record.penaltyCharges?.length ?? 0, 0);
+  assert.equal(f.report("receipts", { search: "Aluna Ensaio Bolsa" }).total, 0);
+  assert.ok(f.report("benefits", { search: "Aluna Ensaio Bolsa" }).total > 1000);
+  assert.equal(f.report("enrollments", { search: "Aluna Ensaio Bolsa" }).total, 1);
+});
+
+test("ensaio: prova tardia pendente suspende lembrete; conferência neutraliza multa e fecha banco sem numerário", () => {
+  const f = phase6Fixture(), name = "Aluno Ensaio Prova Tardia";
+  const result = f.academic({ type: "enroll", input: enrollment(name) }), id = String(result.result.studentId);
+  f.advance("2026-05-14"); f.sync();
+  const may = f.record(id).charges.find((item) => item.monthKey === "may")!, penalty = f.record(id).penaltyCharges!.find((item) => item.baseChargeId === may.id)!;
+  assert.equal(penalty.amount, 50);
+  f.run({ kind: "save-proof", draft: f.draft({ studentId: id, paidOn: "2026-05-08", method: "Transferência", evidenceReference: "ENSAIO-TALAO-08", lateReason: "Comprovativo entregue em 14 de Maio" }), reference: "ENSAIO-TALAO-08", note: "Pago em 8 de Maio" });
+  assert.equal(f.report("receipts", { search: name }).total, 0); assert.equal(f.state.receipts.length, 0);
+  assert.equal(f.report("overdue", { search: name }).rows.find((item) => item.id === may.id)!.pending, true);
+  const proofId = f.state.paymentProofs!.at(-1)!.id;
+  f.run({ kind: "review-proof", proofId, confirm: true, decision: "Referência, data e valor conferidos no ensaio" });
+  assert.equal(getChargeBalance(f.record(id), may), 0);
+  assert.equal(f.record(id).penaltyCharges!.find((item) => item.id === penalty.id)!.amount, 50);
+  assert.equal(effectiveAmount(f.record(id).penaltyCharges!.find((item) => item.id === penalty.id)!), 0);
+  assert.equal(f.record(id).financialAdjustments!.find((item) => item.chargeId === penalty.id)!.evidenceReference, "ENSAIO-TALAO-08");
+  assert.equal(f.report("receipts", { search: name }).total, 1000);
+  assert.equal(f.report("receipts", { search: name }).rows[0].date, "2026-05-08");
+  const session = f.state.cashBook!.sessions[0], rows = sessionMovements(f.state.cashBook!, session.id);
+  assert.equal(cashTotals(session.openingAmount, rows).expectedCashCents, 0);
+  f.cash({ kind: "close", sessionId: session.id, countedAmount: "0", reason: "" });
+  const receipt = JSON.stringify(f.state.receipts[0]), raw = serializeDemoSnapshot(f.state), summary = verifyBackup(raw, f.time).summary;
+  for (let attempt = 0; attempt < 2; attempt++) f.setState(restoreBackup(f.repository, f.storage, f.state, raw, "secretaria", f.time));
+  assert.deepEqual(recoverySummary(f.state), summary); assert.equal(JSON.stringify(f.state.receipts[0]), receipt);
+});

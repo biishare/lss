@@ -7,7 +7,7 @@ import { prepareBilling } from "../finance/billing-commands";
 import { effectiveAmount, projectedCharge, schoolToday, validDate } from "../finance/domain/billing";
 import { cents, money } from "../finance/domain/money";
 import { paymentCredit, pendingProofFor } from "../finance/service-model";
-import { restateCashMovement } from "../cash/model";
+import { restateCashMovement, type CashMovement } from "../cash/model";
 
 export const reportDefinitions = {
   receipts: { title: "Recebimentos", definition: "Dinheiro confirmado pela data efectiva, excluindo estornos de erro e aplicações de crédito. Abrange todos os anos lectivos.", scope: "movements" },
@@ -35,10 +35,19 @@ export function defaultReportFilters(yearId: string, recordedAt: string): Report
   const today = schoolToday({ now: () => recordedAt });
   return { kind: "receipts", from: `${today.slice(0, 7)}-01`, to: today, yearId, classId: "", groupId: "", method: "", actorId: "", search: "" };
 }
+const paymentKey = (studentId: string, paymentId: string) => JSON.stringify([studentId, paymentId]);
 export function reportSource(input: DemoState, recordedAt: string) {
   const state = { ...input, ...prepareBilling(input, recordedAt) }, academic = academicStateFor(state), today = schoolToday({ now: () => recordedAt });
   const students = projectStudents(state, academic, today);
-  return { state, academic, students, recordedAt, today };
+  const studentsById = new Map(students.map((student) => [student.id, student]));
+  const receiptsByPayment = new Map(state.receipts.map((receipt) => [paymentKey(receipt.studentId, receipt.paymentId), receipt]));
+  const cashByPayment = new Map<string, CashMovement>();
+  if (state.cashBook) for (const movement of state.cashBook.movements) {
+    if (movement.kind !== "receipt") continue;
+    const current = restateCashMovement(state.cashBook, movement);
+    if (current.source) cashByPayment.set(paymentKey(current.source.studentId, current.source.paymentId), current);
+  }
+  return { state, academic, students, studentsById, receiptsByPayment, cashByPayment, recordedAt, today };
 }
 export type ReportSource = ReturnType<typeof reportSource>;
 export function sourcePayment(state: DemoState, studentId: string, payment: Payment): { studentId: string; payment: Payment } {
@@ -56,14 +65,14 @@ function actor(payment?: Payment) {
   return { actorId: payment?.recordedBy === "Marta — Secretaria" ? "demo-secretaria" : "previous-author", actorName: payment?.recordedBy ?? "Autor anterior não registado" };
 }
 function studentFields(source: ReportSource, studentId: string) {
-  const student = source.students.find((item) => item.id === studentId);
+  const student = source.studentsById.get(studentId);
   return { studentId, personId: student?.personId ?? studentId, name: student?.fullName ?? "Aluno anterior indisponível", number: student?.registrationNumber ?? "", yearId: student?.academicYearId ?? "", classId: student?.classId ?? "", groupId: student?.groupId ?? "", guardianName: student?.guardianName, guardianPhone: student?.guardianPhone };
 }
 function row(source: ReportSource, studentId: string, patch: Partial<ReportRow> & { id: string; amount: number; label: string }): ReportRow {
   return { date: "", recordedAt: "", method: "", actorId: "previous-author", actorName: "Autor anterior não registado", status: "", sourceId: "", ...studentFields(source, studentId), ...patch };
 }
 function competence(source: ReportSource, studentId: string, charge: Charge) {
-  const student = source.students.find((item) => item.id === studentId), year = student?.academicYearId ?? "";
+  const student = source.studentsById.get(studentId), year = student?.academicYearId ?? "";
   if (charge.category === "tuition" && charge.monthKey) return `${year}-${String(monthOptions.findIndex((item) => item.key === charge.monthKey) + 1).padStart(2, "0")}`;
   return (charge.dueOn ?? (charge.category === "registration" ? student?.enrollmentDate : charge.createdAt) ?? "").slice(0, 7);
 }
@@ -90,11 +99,11 @@ export function queryReport(source: ReportSource, filters: ReportFilters): Repor
     if (filters.kind === "receipts") for (const payment of record.payments.filter((item) => !item.reversedBy && item.kind !== "credit-application")) {
       const date = payment.effectivePaymentDate ?? payment.paidOn;
       if (!inPeriod(date)) continue;
-      const cash = state.cashBook?.movements.map((movement) => restateCashMovement(state.cashBook!, movement)).find((movement) => movement.kind === "receipt" && movement.source?.studentId === record.studentId && movement.source.paymentId === payment.id);
+      const cash = source.cashByPayment.get(paymentKey(record.studentId, payment.id));
       const owner = cash ? { actorId: cash.actorId, actorName: cash.actorName } : actor(payment);
       if ((filters.method && payment.method !== filters.method) || (filters.actorId && filters.actorId !== owner.actorId)) continue;
       add(row(source, record.studentId, { id: `${record.studentId}:${payment.id}`, label: "Recebimento confirmado", amount: payment.amount, date, recordedAt: payment.recordedAt ?? "", method: payment.method, ...owner,
-        sourceId: payment.id, status: cash ? "Com sessão de caixa" : "Sessão anterior não registada", receiptId: state.receipts.find((item) => item.studentId === record.studentId && item.paymentId === payment.id)?.id }), false);
+        sourceId: payment.id, status: cash ? "Com sessão de caixa" : "Sessão anterior não registada", receiptId: source.receiptsByPayment.get(paymentKey(record.studentId, payment.id))?.id }), false);
     }
     if (filters.kind === "refunds") for (const debit of record.creditDebits ?? []) {
       if (debit.kind !== "refund" || !inPeriod(debit.effectiveOn) || (filters.method && debit.method !== filters.method)) continue;
@@ -112,7 +121,7 @@ export function queryReport(source: ReportSource, filters: ReportFilters): Repor
       add(row(source, record.studentId, { id: `${record.studentId}:${allocation.id}`, amount: allocation.amount,
         label: `${charge.description}${penalty ? " · Multa" : ""}`, date: `${competence(source, record.studentId, charge)}-01`,
         applicationDate: allocation.effectiveOn ?? payment.effectivePaymentDate ?? payment.paidOn, recordedAt: payment.recordedAt ?? "", method: payment.kind === "credit-application" || allocation.effectiveOn ? "Crédito existente" : payment.method,
-        ...actor(payment), originYear: studentFields(source, origin.studentId).yearId, sourceId: origin.payment.id, status: "Aplicação", receiptId: state.receipts.find((item) => item.studentId === origin.studentId && item.paymentId === origin.payment.id)?.id }));
+        ...actor(payment), originYear: studentFields(source, origin.studentId).yearId, sourceId: origin.payment.id, status: "Aplicação", receiptId: source.receiptsByPayment.get(paymentKey(origin.studentId, origin.payment.id))?.id }));
     }
     if (["overdue", "due", "benefits"].includes(filters.kind)) for (const charge of record.charges) {
       const period = competence(source, record.studentId, charge);
@@ -135,7 +144,7 @@ export function queryReport(source: ReportSource, filters: ReportFilters): Repor
         pending, status: pending ? "Em análise · saldo mantido" : !charge.dueOn ? "Prazo anterior não registado" : penalty && !principal ? "Multa por pagar" : isOverdue ? "Em atraso" : "A vencer" }));
     }
     if (filters.kind === "forecast") {
-      const student = source.students.find((item) => item.id === record.studentId);
+      const student = source.studentsById.get(record.studentId);
       if (!student) continue;
       for (const calendar of record.billingCalendar ?? []) {
         if (record.charges.some((item) => item.id === calendar.id) || !inCompetence(calendar.competence)) continue;

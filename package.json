@@ -9,7 +9,9 @@
     "lint": "eslint",
     "test": "npm run test:domain && npm run test:ui",
     "test:domain": "node --test --experimental-strip-types --loader ./tests/ts-extension-loader.mjs tests/*.test.ts",
-    "test:ui": "node --import tsx --test tests/*.test.tsx"
+    "test:ui": "node --import tsx --test tests/*.test.tsx",
+    "test:rehearsal": "node --test --experimental-strip-types --loader ./tests/ts-extension-loader.mjs tests/pilot-rehearsal.test.ts tests/synthetic-readiness.test.ts",
+    "benchmark": "node --import tsx scripts/benchmark-readiness.ts"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
@@ -33,5 +35,8 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "engines": {
+    "node": "24.x"
   }
 }
