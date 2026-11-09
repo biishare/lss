@@ -4,6 +4,7 @@ import {
   type DemoData, type DemoState,
 } from "./demo-state";
 import { isObject, validateDemoState } from "./snapshot-validation";
+import { automaticBackup } from "../continuity/backups";
 
 export const demoSnapshotSchema = "lss-demo-snapshot";
 export const demoSnapshotVersion = 3;
@@ -78,7 +79,7 @@ export interface DemoRepository {
 }
 
 export function createLocalDemoRepository(storage: DemoStorage, options: {
-  now?: () => string; newId?: () => string;
+  now?: () => string; newId?: () => string; onBackupIssue?: (message: string) => void;
 } = {}): DemoRepository {
   const now = options.now ?? (() => new Date().toISOString());
   const newId = options.newId ?? (() => crypto.randomUUID());
@@ -101,7 +102,9 @@ export function createLocalDemoRepository(storage: DemoStorage, options: {
     const raw = JSON.stringify(state);
     try { storage.setItem(demoStorageKey, raw); }
     catch { throw new Error("Não foi possível guardar. Os dados anteriores e o formulário foram conservados. Tente novamente."); }
-    return JSON.parse(raw) as DemoState;
+    const saved = JSON.parse(raw) as DemoState;
+    automaticBackup(storage, saved, now(), options.onBackupIssue);
+    return saved;
   }
   function current(expected: DemoState) {
     const loaded = load();

@@ -18,7 +18,8 @@ import { ReceiptContent } from "./receipt-view";
 import { schoolToday } from "./domain/billing";
 
 export type ServiceExecute = (command: ServiceCommand, id: string) => { receipt?: PaymentReceipt | null; message: string };
-export function PaymentDialog({ state, draft, onChange, onClose, confirm, execute, commandId, correction }: {
+export function PaymentDialog({ onOpenCash, state, draft, onChange, onClose, confirm, execute, commandId, correction }: {
+  onOpenCash?(): void;
   state: DemoState; draft: PaymentLaunchDraft; onChange(draft: PaymentLaunchDraft): void; onClose(): void;
   confirm(draft: PaymentLaunchDraft, id: string): PaymentReceipt; execute: ServiceExecute;
   commandId?: string | null; correction?: { studentId: string; paymentId: string };
@@ -47,7 +48,7 @@ export function PaymentDialog({ state, draft, onChange, onClose, confirm, execut
     event.preventDefault(); if (submitting.current) return;
     setError(""); submitting.current = true; setBusy(true);
     try {
-      if (preview.error) throw new Error(preview.error);
+      if (preview.error && !proof) throw new Error(preview.error);
       if (correction) {
         const result = execute({ kind: "replace-payment", ...correction, draft, reason }, id);
         setReceipt(result.receipt ?? null); setOutcome(result.message);
@@ -85,7 +86,7 @@ export function PaymentDialog({ state, draft, onChange, onClose, confirm, execut
         {Boolean(draft.additionalTargets?.length) && <TextField label="Aplicar ao item seleccionado (MT)" type="number" value={draft.primaryAllocationAmount ?? ""} placeholder="Até ao saldo do item" slotProps={{ htmlInput: { min: 0, step: "0.01" } }} onChange={(event) => update({ primaryAllocationAmount: event.target.value })}/>}
         {preview.receipt && <section className="rounded-lg bg-slate-50 p-4 text-sm" aria-label="Prévia da distribuição"><h3 className="font-bold">Distribuição antes de confirmar</h3>{preview.receipt.items.map((item, index) => <div className="mt-3 flex justify-between gap-3" key={`${item.chargeId}-${index}`}><span>{item.label} · {item.academicYearId}<small className="block text-slate-500">Saldo após: {formatCurrency(item.balanceAfter)}</small></span><strong>{formatCurrency(item.amount)}</strong></div>)}<p className="mt-4 font-semibold">Crédito após este recebimento: {formatCurrency(preview.receipt.unallocatedAmount)}</p></section>}
         {preview.details.length > 0 && <Alert severity="warning">{preview.details.map((detail) => <p key={detail}>{detail}</p>)}</Alert>}
-        {preview.error && <p className="text-sm text-slate-600">{preview.error}</p>}
+        {preview.error && <div className="text-sm text-slate-600"><p>{preview.error}</p>{/caixa/i.test(preview.error) && onOpenCash && <Button onClick={onOpenCash}>Consultar caixa e conservar preenchimento</Button>}</div>}
       </form>}
     </DialogContent>
     <DialogActions sx={{ flexWrap: "wrap", gap: 1, p: 2 }}><Button onClick={onClose} disabled={busy}>{receipt || outcome ? "Fechar" : "Fechar e conservar preenchimento"}</Button>

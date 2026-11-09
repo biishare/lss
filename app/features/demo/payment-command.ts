@@ -11,6 +11,7 @@ import { assessPenalties, schoolToday } from "../finance/domain/billing";
 import { cents, money } from "../finance/domain/money";
 import { allocateCredit } from "../finance/credit-allocation";
 import { paymentCredit, samePerson } from "../finance/service-model";
+import { cashForPayment } from "../cash/model";
 
 export function validatePaymentDate(date: string, recordedAt: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`)) ||
@@ -21,7 +22,7 @@ export function validatePaymentDate(date: string, recordedAt: string) {
 // Pure preparation is shared by immediate receipt, proof review and correction.
 // Its complete patch is saved once by the repository; no intermediate payment is written.
 export function prepareConfirmedPayment(current: DemoState, input: {
-  commandId: string; draft: PaymentLaunchDraft; recordedAt: string; proofId?: string;
+  commandId: string; draft: PaymentLaunchDraft; recordedAt: string; proofId?: string; replaces?: { studentId: string; paymentId: string }; reason?: string; deferCash?: boolean;
 }): { patch: Partial<DemoData>; receipt: PaymentReceipt } {
   const { draft } = input, amount = money(cents(draft.amount));
   const limit = draft.primaryAllocationAmount?.trim() ? money(cents(draft.primaryAllocationAmount)) : amount;
@@ -99,8 +100,11 @@ export function prepareConfirmedPayment(current: DemoState, input: {
   receipt.unallocatedAmount = money(cents(paymentCredit(nextRecord, paymentId)) + transferredCredit.reduce((sum, item) => sum + cents(paymentCredit(item.record, item.paymentId)), 0));
   receipt.penaltyTotal = money(receipt.items.filter((item) => item.kind === "penalty").reduce((sum, item) => sum + cents(item.amount), 0));
   const ledger = buildLedger(student, nextRecord, months, settings, referenceDate, rules);
+  const cashBook = input.deferCash ? current.cashBook : cashForPayment(current, { id: input.commandId, studentId: student.id, paymentId, amount, method: draft.method,
+    effectiveOn: draft.paidOn, recordedAt: input.recordedAt, replaces: input.replaces, reason: input.reason });
   return { patch: {
     paymentRecords,
+    ...(cashBook ? { cashBook } : {}),
     paymentRuleVersions: current.paymentRuleVersions,
     students: current.students.map((item) => item.id === student.id ? { ...item, registrationStatus: ledger.registrationBalance === 0 ? "paid" as const : "pending" as const } : item),
     receipts: [...current.receipts, receipt],

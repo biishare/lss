@@ -6,3 +6,7 @@ for (const key of ["window", "document", "navigator", "HTMLElement", "HTMLInputE
   Object.defineProperty(globalThis, key, { value: key === "getComputedStyle" ? domWindow.getComputedStyle.bind(domWindow) : value, configurable: true, writable: true });
 }
 Object.defineProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT", { value: true, writable: true });
+
+for (const key of ["requestAnimationFrame", "cancelAnimationFrame"] as const) {
+  Object.defineProperty(globalThis, key, { value: domWindow[key].bind(domWindow), configurable: true, writable: true });
+}

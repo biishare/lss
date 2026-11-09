@@ -15,8 +15,8 @@ previam PostgreSQL e servidor nesta etapa.
 | 2 - Login, MUI e navegação | Parte local implementada; fase integral parcial | Login e navegação de apresentação com cinco áreas. Autenticação/recuperação/autorização reais adiadas. Revisão visual pendente. |
 | 3 - Alunos e estrutura | Implementada e validada no âmbito local; revisão visual pendente | Ficha permanente, matrículas anuais, configuração guiada, vagas, pautas, rascunhos, renovação, transferência e saída. Validação de servidor aguarda a API. |
 | 4 - Regras e cobranças | Implementada no âmbito local; revisão visual pendente | Vigências por nível, calendário/emissão automática, benefícios com prévia, dinheiro exacto e multas v3; legado preservado. Integrada na main pela PR #7 (`88e1fea`). |
-| 5 - Atendimento, crédito e recibos | Implementada e validada no âmbito local; revisão visual pendente | Pagamento e recibo no mesmo Dialog, Mês/Trimestre/Ano, conferência, crédito entre anos, correcções e devoluções. Entrega em branch para revisão. |
-| 6 - Relatórios, caixa e continuidade | Pendente | Totais detalháveis, CSV/PDF, caixa e fechos; backups centrais para a API. |
+| 5 - Atendimento, crédito e recibos | Integrada na main e publicada | PR #8, `17cf3d6`. Pagamento/recibo, Mês/Trimestre/Ano, conferência, crédito, correcções e devoluções. |
+| 6 - Relatórios, caixa e continuidade | Implementada no âmbito local, em entrega para revisão | Painéis por papel, totais detalháveis, CSV/impressão/PDF, mensagens para copiar, caixa e fechos imutáveis, cópias locais e ensaio de restauro. Backups centrais aguardam a API. |
 | 7 - Validar, apresentar e preparar piloto | Pendente | Matriz de aceitação, ensaio de atendimento e critérios de piloto/servidor. |
 
 ## Fase 1: alterações
@@ -218,3 +218,16 @@ A correcção de uma origem cujo crédito já saiu para outro ano ou foi devolvi
 fica bloqueada para revisão dos movimentos associados. Não há estorno
 silencioso desses movimentos. A API central, segurança real, fechos/relatórios
 completos e piloto mantêm os âmbitos das fases seguintes.
+
+## Fase 6 — Relatórios, caixa e continuidade
+
+Ver [comportamento, definições e verificação](phase-6-2026-11-09.md).
+Os painéis usam os mesmos cálculos das listas; recebido físico, liquidado por
+competência, crédito, benefícios e previsão permanecem distintos. O caixa tem
+contagem, diferença justificada e retrato preservado perante correcções. As
+cópias locais têm retenção, ensaio isolado e prévia antes de substituir dados.
+
+A partir desta entrega, publicação e revisão são conferidas no endereço da
+Vercel e/ou no estado do deploy. Os registos de fases anteriores que mencionam
+a incompatibilidade do preview local são históricos, não prova do estado
+actual da publicação. O resultado externo desta entrega fica registado na PR.

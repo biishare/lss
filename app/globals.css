@@ -450,3 +450,33 @@ textarea:focus-visible,
   .lss-receipt-print { position: absolute !important; inset: 0 auto auto 0; width: 100%; padding: 10mm !important; color: black !important; }
   .lss-receipt-print tr { break-inside: avoid; }
 }
+
+@media print {
+  body:has(.lss-report-print) * { visibility: hidden !important; }
+  body .lss-report-print, body .lss-report-print * { visibility: visible !important; }
+  body:has(.lss-report-print) .MuiDialog-root,
+  body:has(.lss-report-print) .MuiDialog-container,
+  body:has(.lss-report-print) .MuiDialog-paper,
+  body:has(.lss-report-print) .MuiDialogContent-root {
+    position: static !important; display: block !important; transform: none !important;
+    overflow: visible !important; width: 100% !important; max-width: none !important;
+    height: auto !important; max-height: none !important; margin: 0 !important;
+    padding: 0 !important; box-shadow: none !important; border: 0 !important;
+  }
+  body:has(.lss-report-print) .MuiBackdrop-root,
+  body:has(.lss-report-print) .MuiDialogTitle-root,
+  body:has(.lss-report-print) .MuiDialogActions-root,
+  body:has(.lss-report-print) .lss-workspace { display: none !important; }
+  .lss-report-print { position: absolute !important; inset: 0 auto auto 0; width: 100%; padding: 8mm !important; color: black !important; }
+  .lss-report-print tr { break-inside: avoid; }
+  .lss-report-print .overflow-x-auto { overflow: visible !important; }
+  .lss-report-print table { font-size: 8pt; table-layout: fixed; }
+  .lss-report-print th, .lss-report-print td { overflow-wrap: anywhere; }
+}
+
+.report-cards { display: block; }
+.report-table { display: none; }
+@media (min-width: 768px) {
+  .report-cards { display: none; }
+  .report-table { display: block; }
+}

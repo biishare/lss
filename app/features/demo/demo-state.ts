@@ -20,7 +20,7 @@ export type DemoData = Required<Pick<StoredDemoState,
   "academicStages" | "classDefinitions" | "roomDefinitions" | "classes" |
   "rooms" | "groups" | "students" | "paymentSettings" | "paymentRuleVersions" |
   "paymentRecords" | "billingRuns"
->> & { receipts: PaymentReceipt[]; academic?: AcademicState; paymentProofs?: import("../finance/service-model").PaymentProof[] };
+>> & { receipts: PaymentReceipt[]; academic?: AcademicState; paymentProofs?: import("../finance/service-model").PaymentProof[]; cashBook?: import("../cash/model").CashBook };
 
 export type DemoOperation = {
   id: string;
