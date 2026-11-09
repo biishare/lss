@@ -51,6 +51,17 @@ for (const width of [320, 360, 390, 768, 1024, 1280, 1440, 1920]) {
     for (const [route, label] of [["dashboard", "Início"], ["students", "Alunos e turmas"], ["payments", "Pagamentos"], ["reports", "Relatórios"], ["settings", "Configurações"]]) {
       await page.goto(`/${route}`);
       await expect(page.getByRole("heading", { level: 1, name: label, exact: true })).toBeVisible();
+      if (route === "payments") {
+        const grid = (await page.locator(".lss-payment-grid").boundingBox())!;
+        const sheet = (await page.locator(".lss-payment-grid > section").first().boundingBox())!;
+        expect(sheet.width, "A planilha deve ocupar toda a largura, sem reservar o formulário retirado").toBe(grid.width);
+      }
+      if (route === "reports") {
+        for (const name of ["Classe do relatório", "Turma do relatório", "Forma no relatório", "Funcionário do relatório"]) {
+          const field = page.getByLabel(name, { exact: true });
+          expect(await field.evaluate((el) => el.closest(".MuiFormControl-root")?.querySelector("label")?.getAttribute("data-shrink")), `O rótulo ${name} não deve sobrepor Todas/Todos`).toBe("true");
+        }
+      }
       await screenshot(page, info, `${route}-${width}`);
       await noPageOverflow(page);
     }
@@ -122,7 +133,7 @@ for (const width of [390, 1440]) {
     await screenshot(page, info, `pagamento-${width}`);
     await noPageOverflow(page);
     await dialog.getByRole("button", { name: "Confirmar pagamento", exact: true }).click();
-    const receipt = dialog.locator(".lss-receipt-print");
+    const receipt = page.locator(".lss-receipt-print");
     await expect(receipt).toContainText("LSS-2026-000001");
     await expect(receipt).toContainText("600 MT");
     await screenshot(page, info, `recibo-${width}`);
@@ -132,7 +143,7 @@ for (const width of [390, 1440]) {
     await page.emulateMedia({ media: "print" });
     await expect(receipt).toBeVisible();
     await expect(page.locator(".lss-workspace")).toBeHidden();
-    await expect(dialog.getByRole("button", { name: "Imprimir / Guardar PDF" })).toBeHidden();
+    await expect(page.locator(".MuiDialogActions-root")).toBeHidden();
     const pdf = await page.pdf({ path: info.outputPath(`recibo-${width}.pdf`), format: "A4", printBackground: true });
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
     await page.emulateMedia({ media: "screen" });
@@ -190,7 +201,7 @@ for (const role of ["secretaria", "director"] as const) {
     await page.getByLabel("Utilizador", { exact: false }).fill(role === "secretaria" ? "marta" : "antonio");
     await page.getByLabel("Palavra-passe", { exact: false }).fill("incorrecta");
     await page.getByRole("button", { name: "Entrar", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("Utilizador ou palavra-passe incorrectos.");
+    await expect(page.getByRole("region", { name: "Entrar no LSS", exact: true }).getByRole("alert")).toContainText("Utilizador ou palavra-passe incorrectos.");
     // Public fictional test accounts; no user credentials or remote service.
     await page.getByLabel("Palavra-passe", { exact: false }).fill(role === "secretaria" ? "Lss!Marta2026" : "Lss!Antonio2026");
     await page.getByRole("button", { name: "Entrar", exact: true }).click();

@@ -3211,7 +3211,7 @@ export function SchoolAdminDemo({
               )}
             </section>
 
-            <div className="lss-split-grid lss-payment-grid">
+            <div className="lss-section-grid lss-payment-grid">
               <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                   <div>
