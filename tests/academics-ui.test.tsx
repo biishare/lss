@@ -1,15 +1,18 @@
 import "./dom-environment";
 import assert from "node:assert/strict";
 import { after, afterEach, beforeEach, test } from "node:test";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within, configure } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { SchoolAdminDemo } from "../app/components/school-admin-demo";
+import { WorkspaceEntry as SchoolAdminDemo } from "../app/components/workspace-entry";
 import { createDemoState, demoStorageKey, type DemoState } from "../app/features/demo/demo-state";
 import { domWindow } from "./dom-environment";
 import { prepareBilling } from "../app/features/finance/billing-commands";
 import { executeAcademic, type AcademicCommand } from "../app/features/academics/operations";
 import { createLocalDemoRepository } from "../app/features/demo/local-repository";
 import type { WorkspaceView } from "../app/components/school-admin-demo.model";
+
+// Includes the cold, deferred workspace import and Node's TSX transformation.
+configure({ asyncUtilTimeout: 5000 });
 
 let values: Map<string, string>, writes: number;
 const router: AppRouterInstance = { bfcacheId: "academic-test", back() {}, forward() {}, refresh() {}, prefetch: async () => {}, push: (url) => window.history.pushState(null, "", url), replace: (url) => window.history.replaceState(null, "", url) };

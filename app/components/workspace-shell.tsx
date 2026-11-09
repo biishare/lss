@@ -1,12 +1,75 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import Button from "@mui/material/Button";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { institutionName, workspaceNavigation, type WorkspaceView } from "./school-admin-demo.model";
+import { institutionName, sidebarPreferenceKey, workspaceNavigation } from "../lib/workspace-navigation";
+import type { WorkspaceView } from "./school-admin-demo.model";
+import type { DemoSession } from "../features/demo/demo-session";
+
+type ShellProps = {
+  children: ReactNode;
+  institutionLabel?: string;
+  activeView: WorkspaceView;
+  accountName: string;
+  roleLabel: string;
+  year: string;
+  collapsed: boolean;
+  onCollapsedChange(collapsed: boolean): void;
+  onNavigate(view: WorkspaceView): void;
+  onSignOut(): void;
+  expandable?: boolean;
+  expanded: boolean;
+  onExpandedChange(expanded: boolean): void;
+};
+
+const ShellConfiguration = createContext<((props: ShellProps) => void) | null>(null);
+const displayKeys = ["institutionLabel", "activeView", "accountName", "roleLabel", "year", "collapsed", "expandable", "expanded"] as const;
+
+// Own the actual shell above Suspense: loading the workspace replaces only its
+// content, keeping the Drawer, its DOM trigger and focus alive across loading.
+export function WorkspaceFrame({ session, initialView, onSignOut, children }: {
+  session: DemoSession; initialView: WorkspaceView; onSignOut(): void; children: ReactNode;
+}) {
+  const [configuration, setConfiguration] = useState<ShellProps>(() => ({
+    children: null, activeView: initialView, accountName: session.account.name,
+    roleLabel: session.account.roleLabel, year: "", collapsed: false, expanded: false,
+    onCollapsedChange() {}, onNavigate() {}, onExpandedChange() {}, onSignOut,
+  }));
+  const handlers = useRef(configuration);
+  const configure = useCallback((next: ShellProps) => {
+    handlers.current = next;
+    setConfiguration((previous) => displayKeys.some((key) => previous[key] !== next[key])
+      ? { ...next, children: null } : previous);
+  }, []);
+  return <ShellConfiguration.Provider value={configure}>
+    <WorkspaceShellView {...configuration}
+      onNavigate={(view) => handlers.current.onNavigate(view)}
+      onSignOut={() => handlers.current.onSignOut()}
+      onCollapsedChange={(value) => {
+        // A choice made while the workspace chunk is loading must also be seen
+        // by its later preference restoration. Do not defer this user action.
+        try { window.localStorage.setItem(sidebarPreferenceKey, String(value)); } catch { /* Optional preference. */ }
+        handlers.current.onCollapsedChange(value);
+      }}
+      onExpandedChange={(value) => handlers.current.onExpandedChange(value)}>
+      {children}
+    </WorkspaceShellView>
+  </ShellConfiguration.Provider>;
+}
+
+export function WorkspaceShell(props: ShellProps) {
+  const configure = useContext(ShellConfiguration);
+  return configure ? <ShellContent configure={configure} shell={props} /> : <WorkspaceShellView {...props} />;
+}
+
+function ShellContent({ configure, shell }: { configure(props: ShellProps): void; shell: ShellProps }) {
+  useLayoutEffect(() => { configure(shell); }, [configure, shell]);
+  return shell.children;
+}
 
 function NavigationIcon({ view }: { view: WorkspaceView | "menu" | "close" | "collapse" | "expand" | "signout" }) {
   const paths: Partial<Record<typeof view, ReactNode>> = {
@@ -24,34 +87,24 @@ function NavigationIcon({ view }: { view: WorkspaceView | "menu" | "close" | "co
   return <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[view]}</svg>;
 }
 
-export function WorkspaceShell({
+function WorkspaceShellView({
   children, activeView, accountName, roleLabel, year, collapsed, onCollapsedChange,
   onNavigate, onSignOut, expandable = false, expanded, onExpandedChange,
   institutionLabel = institutionName,
-}: {
-  children: ReactNode;
-  institutionLabel?: string;
-  activeView: WorkspaceView;
-  accountName: string;
-  roleLabel: string;
-  year: string;
-  collapsed: boolean;
-  onCollapsedChange: (collapsed: boolean) => void;
-  onNavigate: (view: WorkspaceView) => void;
-  onSignOut: () => void;
-  expandable?: boolean;
-  expanded: boolean;
-  onExpandedChange: (expanded: boolean) => void;
-}) {
+}: ShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const desktop = useMediaQuery("(min-width:1200px)");
-  const tablet = useMediaQuery("(min-width:768px)");
+  const desktop = useMediaQuery("(min-width:1200px)", { noSsr: true });
+  const tablet = useMediaQuery("(min-width:768px)", { noSsr: true });
+  const previousViewport = useRef({ desktop, tablet });
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const activeArea = ["classes", "rooms", "groups"].includes(activeView) ? "enrollments" : activeView;
   const title = workspaceNavigation.find((item) => item.id === activeArea)?.label ?? "Início";
   const compact = !desktop || collapsed;
 
   useEffect(() => {
+    const previous = previousViewport.current;
+    if (previous.desktop === desktop && previous.tablet === tablet) return;
+    previousViewport.current = { desktop, tablet };
     const timer = window.setTimeout(() => setDrawerOpen(false), 0);
     return () => window.clearTimeout(timer);
   }, [desktop, tablet]);
@@ -104,7 +157,7 @@ export function WorkspaceShell({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-          <span aria-label={`Ano lectivo ${year}`} className="text-xs font-semibold text-slate-600">{year}</span>
+          {year && <span aria-label={`Ano lectivo ${year}`} className="text-xs font-semibold text-slate-600">{year}</span>}
           <div className="lss-account-label text-right text-sm"><p className="font-semibold">{accountName}</p><p className="text-xs text-slate-500">{roleLabel}</p></div>
           <Tooltip title="Sair" arrow><IconButton onClick={onSignOut} aria-label="Sair"><NavigationIcon view="signout"/></IconButton></Tooltip>
         </div>

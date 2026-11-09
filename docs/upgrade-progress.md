@@ -8,6 +8,11 @@ previam PostgreSQL e servidor nesta etapa.
 
 ## Estado actual
 
+O ciclo de melhoria UI/UX de 09/11/2026 é acompanhado em
+[ui-ux-progress.md](ui-ux-progress.md). A UI-1 separa a entrada do arranque
+escolar e introduz skeletons no conteúdo após a sessão; as fases v3 abaixo
+mantêm o seu âmbito histórico. O ciclo é desenvolvido em branch antes de main.
+
 | Fase da v3 | Estado | Resultado |
 | --- | --- | --- |
 | 0 - Confirmar base e rever o plano | Diagnóstico realizado | Base, código, testes e diferenças inventariados. |

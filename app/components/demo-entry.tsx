@@ -4,8 +4,9 @@ import { useState, type FormEvent } from "react";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import Alert from "@mui/material/Alert";
+import CircularProgress from "@mui/material/CircularProgress";
 import { authenticateDemoSession } from "../features/demo/demo-auth";
-import { institutionLogoText, institutionName } from "./school-admin-demo.model";
+import { institutionLogoText, institutionName } from "../lib/workspace-navigation";
 
 export function DemoEntry({ onEnter, schoolName = institutionName, logoText = institutionLogoText }: { onEnter: (accountId: string) => void; schoolName?: string; logoText?: string }) {
   const [username, setUsername] = useState("");
@@ -54,7 +55,9 @@ export function DemoEntry({ onEnter, schoolName = institutionName, logoText = in
             autoComplete="current-password" required fullWidth size="medium" error={Boolean(error)}
           />
           {error && <Alert severity="error">{error}</Alert>}
-          <Button type="submit" variant="contained" fullWidth disabled={submitting}>{submitting ? "A entrar…" : "Entrar"}</Button>
+          <Button type="submit" variant="contained" fullWidth disabled={submitting}
+            startIcon={submitting ? <CircularProgress size={16} color="inherit" aria-hidden="true" /> : undefined}
+          >{submitting ? "A entrar…" : "Entrar"}</Button>
         </form>
         <p className="mt-7 border-t border-slate-100 pt-5 text-sm leading-6 text-slate-500">Para recuperar o acesso, contacte a administração da escola.</p>
       </section>
