@@ -31,6 +31,8 @@ for (const width of [390, 1440]) {
     await signIn(page, "secretaria");
     await expect(page.getByRole("heading", { level: 1, name: "Alunos e turmas", exact: true })).toBeVisible();
     expect(new URL(page.url()).searchParams.get("agroup")).toBe("7A2026");
+    await expect(page.getByRole("button", { name: "Nova matrícula", exact: true })).toBeVisible();
+    await expect.poll(() => snapshot(page)).not.toBeNull();
     const initial = await snapshot(page);
 
     const name = `Ensaio integrado UI5 ${width}`;
