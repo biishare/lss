@@ -79,7 +79,7 @@ for (const width of [360, 1440]) {
     expect(result.paymentProofs![0].status).toBe("pending");
     await page.getByRole("dialog").getByRole("button", { name: "Fechar", exact: true }).click();
     await openCell(page);
-    await expect(page.getByRole("dialog").getByRole("alert")).toContainText(`MPESA-UI3-${width}`);
+    await expect(page.getByRole("dialog").getByRole("alert").filter({ hasText: "Já existe um comprovativo" })).toContainText(`MPESA-UI3-${width}`);
     await page.getByRole("dialog").getByRole("button", { name: "Conferir comprovativo", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.getByRole("button", { name: `Conferir comprovativo MPESA-UI3-${width}`, exact: true }).click();

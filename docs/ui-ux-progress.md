@@ -329,3 +329,11 @@ A revisão das capturas acrescentou contexto visível ao cabeçalho das operaç�
 de conferência, crédito e devolução (aluno, matrícula e ano) e uma referência ao
 recibo de origem nos formulários de crédito/devolução. Não é necessário consultar
 a lista de fundo para identificar a pessoa e o recebimento em revisão.
+
+No workflow `42643814770` (`5857196`), o regresso da consulta ao formulário
+passou com o estado financeiro intacto. Os 221 testes, lint, TypeScript e build
+passaram; 34/36 casos Chromium passaram. Os dois restantes pararam por um
+selector ambíguo do ensaio novo: o formulário apresenta tanto o aviso de
+comprovativo pendente como a explicação de guardar para conferência. O selector
+passou a identificar expressamente o aviso de pendência, mantendo a asserção
+da referência e a passagem pelo atalho de conferência.
