@@ -110,10 +110,13 @@ test("devolução conserva rascunho e ID ao fechar, retomar e mudar de largura",
   await page.getByRole("button", { name: /^Escolher Ana Júlia Mucavele/ }).click();
   await page.getByRole("button", { name: "Registar devolução", exact: true }).click();
   let task = page.getByRole("dialog", { name: "Registar devolução", exact: true });
+  await expect(task).toHaveAccessibleDescription("Ana Júlia Mucavele · LSS-2026-001 · 2026");
+  await expect(task.getByRole("region", { name: "Origem do crédito" })).toContainText("Recibo LSS-2026-000001");
   await task.getByLabel("Valor (MT)", { exact: false }).fill("100");
   await task.getByLabel("Motivo", { exact: false }).fill("Pedido do encarregado");
   const id = await page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)!).tasks[0].id, `lss-service-tasks-v2-${f.state.datasetId}`);
   await task.getByRole("button", { name: "Rever efeito", exact: true }).click();
+  await page.screenshot({ path: info.outputPath("devolucao-revisao-390.png"), animations: "disabled" });
   await task.getByRole("button", { name: "Fechar", exact: true }).click();
   await expect(task).toBeHidden();
   expect((await snapshot(page)).paymentRecords.flatMap((item) => item.creditDebits ?? [])).toHaveLength(0);

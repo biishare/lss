@@ -324,3 +324,8 @@ navegação cancela a acção nativa. O ensaio compara o estado financeiro antes
 depois de cada regresso, além de conservar campo e ID. O percurso de comprovativo
 passa também pelo aviso da célula e atalho para a conferência. Esta correcção
 segue para novo ensaio completo, sem integrar a versão em revisão na main.
+
+A revisão das capturas acrescentou contexto visível ao cabeçalho das operações
+de conferência, crédito e devolução (aluno, matrícula e ano) e uma referência ao
+recibo de origem nos formulários de crédito/devolução. Não é necessário consultar
+a lista de fundo para identificar a pessoa e o recebimento em revisão.

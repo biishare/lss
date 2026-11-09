@@ -137,6 +137,8 @@ test("correcção conserva motivo, cobrança e ID ao fechar e reabrir", async ()
 });
 test("devolução na UI mostra o efeito antes de gravar e recusa exceder o crédito", () => {
   const f = fixture("panel", false, true); fireEvent.click(screen.getByRole("button", { name: "Crédito e devoluções" })); fireEvent.click(screen.getByRole("button", { name: "Registar devolução" }));
+  assert.match(screen.getByRole("dialog").getAttribute("aria-describedby") ?? "", /context$/);
+  assert.match(screen.getByRole("region", { name: "Origem do crédito" }).textContent ?? "", /Recibo LSS-2026-000001/);
   fireEvent.change(screen.getByLabelText(/^Valor \(MT\)/), { target: { value: "250" } }); fireEvent.change(screen.getByLabelText(/^Motivo/), { target: { value: "Pedido do encarregado" } }); submitService();
   assert.match(screen.getByRole("alert").textContent ?? "", /excede o crédito/); assert.equal(f.writes, 0);
   fireEvent.change(screen.getByLabelText(/^Valor \(MT\)/), { target: { value: "150" } }); submitService(); assert.ok(screen.getByRole("button", { name: "Confirmar operação" })); assert.equal(f.writes, 0);
