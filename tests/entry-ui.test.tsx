@@ -2,9 +2,10 @@ import "./dom-environment";
 import assert from "node:assert/strict";
 import { after, afterEach, beforeEach, test } from "node:test";
 import { renderToString } from "react-dom/server";
-import { render, screen, fireEvent, cleanup, configure, within } from "@testing-library/react";
+import { render, screen, fireEvent, cleanup, configure, within, waitFor, act } from "@testing-library/react";
 import { WorkspaceEntry as SchoolAdminDemo } from "../app/components/workspace-entry";
 import { WorkspaceStartup } from "../app/components/workspace-startup";
+import { WorkspaceFrame, WorkspaceShell } from "../app/components/workspace-shell";
 import { createDemoState, demoStorageKey } from "../app/features/demo/demo-state";
 import { demoSessionFor, demoSessionKey } from "../app/features/demo/demo-session";
 import { entryDestination } from "../app/lib/workspace-navigation";
@@ -126,4 +127,29 @@ test("destino de entrada aceita apenas rotas internas e parâmetros de contexto 
   assert.equal(entryDestination("//externo.test", ""), "/dashboard");
   assert.equal(entryDestination("/reports", "?report=receipts&from=2026-01-01&search=pessoa"), "/reports?report=receipts&from=2026-01-01");
   assert.equal(entryDestination("/", "", "groups"), "/students?view=groups");
+});
+
+test("menu e foco sobrevivem à substituição do skeleton pelo conteúdo", async () => {
+  const session = demoSessionFor("demo-director")!;
+  const onSignOut = () => {};
+  const pending = <WorkspaceFrame session={session} initialView="overview" onSignOut={onSignOut}>
+    <WorkspaceStartup session={session} onSignOut={onSignOut} />
+  </WorkspaceFrame>;
+  const loaded = <WorkspaceFrame session={session} initialView="overview" onSignOut={onSignOut}>
+    <WorkspaceShell activeView="overview" accountName="António" roleLabel="Director" year="2026"
+      collapsed={false} onCollapsedChange={() => {}} onNavigate={() => {}} onSignOut={onSignOut}
+      expanded={false} onExpandedChange={() => {}}><h2>Conteúdo pronto</h2></WorkspaceShell>
+  </WorkspaceFrame>;
+  const page = render(pending);
+  const trigger = screen.getByRole("button", { name: "Abrir menu" });
+  act(() => trigger.focus());
+  fireEvent.click(trigger);
+  await screen.findByRole("dialog", { name: "Navegação" });
+  page.rerender(loaded);
+  assert.ok(screen.getByRole("dialog", { name: "Navegação" }));
+  fireEvent.keyDown(screen.getByRole("dialog", { name: "Navegação" }), { key: "Escape" });
+  await waitFor(() => assert.equal(Boolean(screen.queryByRole("dialog", { name: "Navegação" })), false));
+  assert.equal(screen.getByRole("button", { name: "Abrir menu" }), trigger);
+  await waitFor(() => assert.equal(document.activeElement === trigger, true));
+  assert.ok(screen.getByRole("heading", { name: "Conteúdo pronto" }));
 });

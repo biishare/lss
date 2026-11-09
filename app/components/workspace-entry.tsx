@@ -3,8 +3,9 @@
 import { Component, Suspense, lazy, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { DemoEntry } from "./demo-entry";
 import { WorkspaceStartup } from "./workspace-startup";
+import { WorkspaceFrame } from "./workspace-shell";
 import { demoSessionFor, demoSessionKey, readDemoSession, saveDemoSession, type DemoSession } from "../features/demo/demo-session";
-import { entryDestination } from "../lib/workspace-navigation";
+import { entryDestination, workspaceView } from "../lib/workspace-navigation";
 import type { WorkspaceView } from "./school-admin-demo.model";
 
 // This module is the public entry. Neither importing it nor rendering the login
@@ -76,10 +77,13 @@ export function WorkspaceEntry({ initialView = "overview", developerToolsEnabled
 
   if (!session) return <DemoEntry onEnter={enter} />;
 
-  return <WorkspaceLoadBoundary key={session.account.id} session={session} initialView={initialView} onSignOut={signOut}>
-    <Suspense fallback={<WorkspaceStartup session={session} initialView={initialView} onSignOut={signOut} />}>
+  const requestedView = initialView === "overview" ? workspaceView(window.location.pathname) : initialView;
+  return <WorkspaceFrame key={session.account.id} session={session} initialView={requestedView} onSignOut={signOut}>
+  <WorkspaceLoadBoundary session={session} initialView={requestedView} onSignOut={signOut}>
+    <Suspense fallback={<WorkspaceStartup session={session} initialView={requestedView} onSignOut={signOut} />}>
       <SchoolAdminWorkspace session={session} onSignOut={signOut} sessionNotice={sessionNotice}
-        initialView={initialView} developerToolsEnabled={developerToolsEnabled} />
+        initialView={requestedView} developerToolsEnabled={developerToolsEnabled} />
     </Suspense>
-  </WorkspaceLoadBoundary>;
+  </WorkspaceLoadBoundary>
+  </WorkspaceFrame>;
 }

@@ -37,16 +37,17 @@ entrada no workspace.
 
 | Verificação | Resultado |
 | --- | --- |
-| `npm test` | 203 aprovados: 140 de domínio/persistência e 63 de interface. |
+| `npm test` | 204 aprovados: 140 de domínio/persistência e 64 de interface. |
 | `npm run lint` | Sem erros nem avisos. |
 | `npm run build` | Compilação, TypeScript e geração das rotas aprovadas. |
 | `git diff --check` | Aprovado. |
 | HTML do build | Contém o formulário; não contém a antiga mensagem global. |
 | Scripts referidos no HTML inicial | Sem os marcadores textuais da planilha e da confirmação financeira inspeccionados; não é uma medição completa de desempenho. |
 
-Oito testes novos cobrem o primeiro HTML, ausência de leitura/gravação antes
+Nove testes novos cobrem o primeiro HTML, ausência de leitura/gravação antes
 do login, armazenamento vazio/corrompido/bloqueado, destino interno, papel,
-retry sem substituição e shell com skeleton. Dois testes anteriores passam a
+retry sem substituição, shell com skeleton e preservação do menu/foco na
+transição para o conteúdo. Dois testes anteriores passam a
 esperar a importação a frio do workspace, sem impor ao transpilador de testes
 o limite de um segundo. O ensaio do Drawer aguarda o conteúdo pronto antes
 de medir o retorno do foco.
@@ -72,6 +73,21 @@ A remoção de `alert()`, `confirm()` e `prompt()` aplica-se a todo o ciclo.
 A UI-1 não acrescenta estes métodos; as confirmações antigas de matrícula,
 importação/reposição e outras operações serão substituídas nas entregas dos
 respectivos percursos. Não foram removidas silenciosamente protecções de saída.
+
+### Correcção do primeiro ensaio de navegador
+
+O workflow `42615731198` aprovou os 203 testes anteriores, lint, TypeScript e
+build, e executou os 19 casos de Chromium: 16 passaram e três falharam. Dois
+selectores de teste coincidiam com o anunciador de rotas do Next.js; foram
+delimitados à região de entrada. O outro caso revelou que o Drawer podia
+desaparecer quando o skeleton era substituído pelo workspace.
+
+O shell passou a ser propriedade de uma frame acima de Suspense. As áreas
+fornecem apresentação e callbacks, mas só o conteúdo é substituído. O Drawer,
+o seu botão e o foco mantêm-se montados; uma mudança real de breakpoint fecha
+o menu, sem agendar um fecho na primeira montagem. Um novo teste exercita a
+transição com o menu aberto e o retorno do foco ao mesmo botão. A nova execução
+de Chromium e a prévia correspondente são acompanhadas na PR #12.
 
 A `main` e produção não são alteradas por esta implementação em branch.
 Depois da revisão e integração autorizada, verificar o commit/READY na Vercel

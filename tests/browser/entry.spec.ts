@@ -32,7 +32,7 @@ for (const width of [360, 1440]) {
     await page.getByLabel("Utilizador", { exact: false }).fill("antonio");
     await page.getByLabel("Palavra-passe", { exact: false }).fill("incorrecta");
     await page.getByRole("button", { name: "Entrar", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("Utilizador ou palavra-passe incorrectos.");
+    await expect(page.getByRole("region", { name: "Entrar no LSS", exact: true }).getByRole("alert")).toContainText("Utilizador ou palavra-passe incorrectos.");
     expect(await page.evaluate((key) => localStorage.getItem(key), demoStorageKey)).toBeNull();
     expect(await page.evaluate((key) => sessionStorage.getItem(key), demoSessionKey)).toBeNull();
     const size = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
