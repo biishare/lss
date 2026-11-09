@@ -143,7 +143,7 @@ import {
 import { WorkspaceShell } from "./workspace-shell";
 import type { DemoSession } from "../features/demo/demo-session";
 import { WorkspacePlaceholder } from "./workspace-startup";
-import { workspacePath } from "../lib/workspace-navigation";
+import { sidebarPreferenceKey, workspacePath } from "../lib/workspace-navigation";
 import { useWorkspaceContext } from "../features/demo/use-workspace-context";
 import { useWorkspaceScroll } from "../features/demo/use-workspace-scroll";
 import { DashboardWorkspace } from "../features/reports/dashboard";
@@ -189,8 +189,6 @@ function financeCellAriaLabel({
 }) {
   return `${rubric}, ${studentName}, ${state}, saldo ${balance}. Abrir detalhe financeiro.`;
 }
-
-const sidebarPreferenceKey = "lss-demo-sidebar-collapsed";
 
 export function SchoolAdminWorkspace({
   initialView = "overview",

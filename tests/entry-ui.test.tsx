@@ -8,7 +8,7 @@ import { WorkspaceStartup } from "../app/components/workspace-startup";
 import { WorkspaceFrame, WorkspaceShell } from "../app/components/workspace-shell";
 import { createDemoState, demoStorageKey } from "../app/features/demo/demo-state";
 import { demoSessionFor, demoSessionKey } from "../app/features/demo/demo-session";
-import { entryDestination } from "../app/lib/workspace-navigation";
+import { entryDestination, sidebarPreferenceKey } from "../app/lib/workspace-navigation";
 import { domWindow } from "./dom-environment";
 
 configure({ asyncUtilTimeout: 5000 });
@@ -152,4 +152,23 @@ test("menu e foco sobrevivem à substituição do skeleton pelo conteúdo", asyn
   assert.equal(screen.getByRole("button", { name: "Abrir menu" }), trigger);
   await waitFor(() => assert.equal(document.activeElement === trigger, true));
   assert.ok(screen.getByRole("heading", { name: "Conteúdo pronto" }));
+});
+
+test("recolher o menu durante o skeleton conserva a preferência para o workspace", async () => {
+  const previous = window.matchMedia;
+  Object.defineProperty(window, "matchMedia", { configurable: true, value: (query: string) => ({
+    media: query, matches: query.includes("min-width"), onchange: null,
+    addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {}, dispatchEvent() { return true; },
+  }) });
+  try {
+    const session = demoSessionFor("demo-director")!;
+    render(<WorkspaceFrame session={session} initialView="overview" onSignOut={() => {}}>
+      <WorkspaceStartup session={session} onSignOut={() => {}} />
+    </WorkspaceFrame>);
+    fireEvent.click(screen.getByRole("button", { name: "Recolher menu" }));
+    await screen.findByRole("button", { name: "Expandir menu" });
+    assert.equal(storage.values.get(sidebarPreferenceKey), "true");
+    assert.equal(storage.reads, 0);
+    assert.equal(storage.writes, 0);
+  } finally { cleanup(); Object.defineProperty(window, "matchMedia", { configurable: true, value: previous }); }
 });

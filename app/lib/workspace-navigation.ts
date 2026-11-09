@@ -3,6 +3,7 @@ import type { ProfileId, WorkspaceView } from "../components/school-admin-demo.m
 // Public presentation metadata: importing the login or shell must not load the school dataset.
 export const institutionName = "Liceu São Silvestre";
 export const institutionLogoText = "LSS";
+export const sidebarPreferenceKey = "lss-demo-sidebar-collapsed";
 
 export const workspaceNavigation: Array<{
   id: WorkspaceView;

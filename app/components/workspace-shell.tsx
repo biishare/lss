@@ -6,7 +6,7 @@ import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { institutionName, workspaceNavigation } from "../lib/workspace-navigation";
+import { institutionName, sidebarPreferenceKey, workspaceNavigation } from "../lib/workspace-navigation";
 import type { WorkspaceView } from "./school-admin-demo.model";
 import type { DemoSession } from "../features/demo/demo-session";
 
@@ -49,7 +49,12 @@ export function WorkspaceFrame({ session, initialView, onSignOut, children }: {
     <WorkspaceShellView {...configuration}
       onNavigate={(view) => handlers.current.onNavigate(view)}
       onSignOut={() => handlers.current.onSignOut()}
-      onCollapsedChange={(value) => handlers.current.onCollapsedChange(value)}
+      onCollapsedChange={(value) => {
+        // A choice made while the workspace chunk is loading must also be seen
+        // by its later preference restoration. Do not defer this user action.
+        try { window.localStorage.setItem(sidebarPreferenceKey, String(value)); } catch { /* Optional preference. */ }
+        handlers.current.onCollapsedChange(value);
+      }}
       onExpandedChange={(value) => handlers.current.onExpandedChange(value)}>
       {children}
     </WorkspaceShellView>

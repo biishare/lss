@@ -37,17 +37,18 @@ entrada no workspace.
 
 | Verificação | Resultado |
 | --- | --- |
-| `npm test` | 204 aprovados: 140 de domínio/persistência e 64 de interface. |
+| `npm test` | 205 aprovados: 140 de domínio/persistência e 65 de interface. |
 | `npm run lint` | Sem erros nem avisos. |
 | `npm run build` | Compilação, TypeScript e geração das rotas aprovadas. |
 | `git diff --check` | Aprovado. |
 | HTML do build | Contém o formulário; não contém a antiga mensagem global. |
 | Scripts referidos no HTML inicial | Sem os marcadores textuais da planilha e da confirmação financeira inspeccionados; não é uma medição completa de desempenho. |
 
-Nove testes novos cobrem o primeiro HTML, ausência de leitura/gravação antes
+Dez testes novos cobrem o primeiro HTML, ausência de leitura/gravação antes
 do login, armazenamento vazio/corrompido/bloqueado, destino interno, papel,
 retry sem substituição, shell com skeleton e preservação do menu/foco na
-transição para o conteúdo. Dois testes anteriores passam a
+transição para o conteúdo e preferência de sidebar escolhida durante o skeleton.
+Dois testes anteriores passam a
 esperar a importação a frio do workspace, sem impor ao transpilador de testes
 o limite de um segundo. O ensaio do Drawer aguarda o conteúdo pronto antes
 de medir o retorno do foco.
@@ -88,6 +89,12 @@ o seu botão e o foco mantêm-se montados; uma mudança real de breakpoint fecha
 o menu, sem agendar um fecho na primeira montagem. Um novo teste exercita a
 transição com o menu aberto e o retorno do foco ao mesmo botão. A nova execução
 de Chromium e a prévia correspondente são acompanhadas na PR #12.
+
+O segundo ensaio (`42625712352`) passou 18/19 casos de navegador, incluindo
+o Drawer. A sidebar revelou outra transição: uma escolha feita no skeleton
+ficava só em memória e a restauração posterior lia a preferência anterior.
+A frame passou a persistir a escolha no próprio evento, antes de a comunicar
+à área; um teste adicional confirma a gravação sem ler o conjunto escolar.
 
 A `main` e produção não são alteradas por esta implementação em branch.
 Depois da revisão e integração autorizada, verificar o commit/READY na Vercel
