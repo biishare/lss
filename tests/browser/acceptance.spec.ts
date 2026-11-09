@@ -58,10 +58,12 @@ for (const width of [320, 360, 390, 768, 1024, 1280, 1440, 1920]) {
         expect(sheet.width, "A planilha deve ocupar toda a largura, sem reservar o formulário retirado").toBe(grid.width);
       }
       if (route === "reports") {
+        await page.getByRole("button", { name: "Filtros", exact: true }).click();
         for (const name of ["Classe do relatório", "Turma do relatório", "Forma no relatório", "Funcionário do relatório"]) {
           const field = page.getByLabel(name, { exact: true });
           expect(await field.evaluate((el) => el.closest(".MuiFormControl-root")?.querySelector("label")?.getAttribute("data-shrink")), `O rótulo ${name} não deve sobrepor Todas/Todos`).toBe("true");
         }
+        await page.getByRole("button", { name: "Cancelar", exact: true }).click();
       }
       await screenshot(page, info, `${route}-${width}`);
       await noPageOverflow(page);
@@ -170,7 +172,7 @@ for (const width of [390, 1440]) {
     await page.getByRole("button", { name: "Recibo", exact: true }).click();
     await expect(page.locator(".lss-receipt-print")).toContainText("LSS-2026-000001");
     await page.getByRole("dialog").getByRole("button", { name: "Fechar", exact: true }).click();
-    await page.getByRole("button", { name: "Prévia de impressão / PDF", exact: true }).click();
+    await page.getByRole("button", { name: "Imprimir / PDF", exact: true }).click();
     await page.emulateMedia({ media: "print" });
     await expect(page.locator(".lss-report-print")).toBeVisible();
     await page.pdf({ path: info.outputPath(`relatorio-${width}.pdf`), format: "A4", printBackground: true });

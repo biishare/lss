@@ -28,6 +28,7 @@ export function workspaceView(path: string): WorkspaceView {
 
 const contextParameters = new Set([
   "year", "student", "tab", "page", "view", "class", "group", "month", "period", "section", "alert",
+  "layout", "aclass", "agroup", "astatus",
   "rsection", "rpage", "from", "to", "rclass", "rgroup", "method", "actor", "report",
 ]);
 

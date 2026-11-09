@@ -337,3 +337,122 @@ selector ambíguo do ensaio novo: o formulário apresenta tanto o aviso de
 comprovativo pendente como a explicação de guardar para conferência. O selector
 passou a identificar expressamente o aviso de pendência, mantendo a asserção
 da referência e a passagem pelo atalho de conferência.
+
+
+## Integração da UI-3
+
+A PR 14 foi integrada na main em `7846dfaaa8f46ce7626f012fbddba5c6bc936382`.
+O workflow `42648443492` aprovou 144 testes de domínio/persistência, 77 de
+interface e 36 de Chromium, lint, TypeScript e build. A Vercel publicou esse
+commit em produção READY (`dpl_ANYEej8aw2o9bTQst2UWf8Ufmc1p`), com o alias
+lss-iota.vercel.app confirmado e a entrada observada no navegador. A consulta
+de erros/fatal desse deployment nos últimos 15 minutos não devolveu registos.
+
+## UI-4 — Pesquisa, densidade e consistência
+
+Implementação na branch `codex/lss-ui4-density-consistency`, sobre a main UI-3.
+
+### Listas e contexto
+
+Pagamentos abre numa lista compacta em mobile. Sem período escolhido, começa
+no mês corrente que pertença ao ano activo; períodos explicitamente guardados
+continuam a ser respeitados. Desktop conserva a planilha por defeito. Ver
+planilha completa e Ver lista compacta mudam a apresentação, sem limpar
+pesquisa, selecção nem o preenchimento financeiro. Cada linha identifica a
+pessoa, matrícula, mês, saldo e estado textual; inscrição/diversos/síntese ficam
+numa secção secundária. A lista e a tabela reutilizam o mesmo ledger e a mesma
+acção de célula, com consulta para Director. A pesquisa inclui número e contacto.
+
+Uma chave de apresentação identifica a cobrança entre lista e tabela. Se a
+largura mudar durante o pagamento, o foco regressa à cobrança equivalente,
+sem depender de um botão que deixou de existir. Sem mudança de composição,
+o foco e a posição anteriores mantêm-se.
+
+A lista de alunos usa cartões legíveis abaixo de 768 px e tabela em desktop,
+com o mesmo conjunto e paginação. Filtros por classe, turma e situação são
+independentes do contexto obrigatório da planilha; permanecem na ficha, no
+regresso e na recarga. O URL transporta IDs e estados, nunca a pesquisa pessoal.
+
+### Filtros e relatórios
+
+O editor comum abre em bottom sheet no telemóvel e painel compacto em desktop.
+Edita uma cópia controlada: Aplicar publica o conjunto; Cancelar, Fechar,
+Escape e Voltar conservam o anterior. Limpar apenas muda a cópia até Aplicar.
+Mostra a contagem dos filtros secundários e permite removê-los individualmente.
+A cópia não se perde ao redimensionar. Pesquisa, relatório e período continuam
+junto aos resultados; definições extensas e indicadores relacionados ficam
+recolhidos. Os resultados, totais, CSV e PDF usam o mesmo ReportResult dos
+serviços existentes. Conferência geral mostra todos os comprovativos até uma
+escolha explícita de pessoa, sem seleccionar o primeiro aluno.
+
+### Caixa
+
+A página põe as operações e a sessão em atendimento antes do histórico.
+Movimentos usam cartões em mobile e tabela em desktop. O detalhe indica forma,
+quantidade e líquido dos movimentos apresentados; CSV e Imprimir detalhe / PDF
+usam exactamente essas linhas. A conferência e a impressão da sessão completa
+estão identificadas como tal e ficam numa secção secundária; preservam o retrato
+do fecho e os ajustamentos posteriores.
+
+Abertura usa a superfície comum em folha; saída/reforço/fecho usam tarefa em
+ecrã completo móvel. Rever e confirmar continuam separados. Cada preenchimento
+tem ID próprio e referência à sua sessão; fechar, retomar, recarregar e mudar de
+largura não criam uma tentativa nova. Rascunhos opcionais ficam em sessionStorage,
+com recuperação validada, exclusão de IDs já aplicados e memória em caso de
+falha da escrita opcional. Uma tarefa de outra sessão não é aplicada à actual.
+A validação e execução continuam em planCash/executeCash, com o relógio actual.
+
+Foram encurtados rótulos, corrigidas contagens singulares, mantidos estados
+textuais e ampliados alvos de toque. O resumo mensal da planilha passa a usar
+apenas os alunos apresentados, sem alterar o cálculo da emissão da turma.
+Não há alteração de serviços/cálculos financeiros, API, base real, autenticação
+ou dependências.
+
+### Verificação em curso
+
+Os primeiros checks locais aprovaram 147 testes de domínio/persistência e
+80 de interface (227), lint, TypeScript e build. Três novos casos verificam
+estado/recuperação de contexto e rascunhos de caixa; três casos de interface
+cobrem aplicar/cancelar/limpar, retoma do caixa e prévia filtrada. Os ensaios
+anteriores foram adaptados aos controlos explícitos.
+
+Sete casos de navegador acrescentam lista/planilha com selecção e foco,
+filtros temporários com CSV/PDF, saída de caixa retomada e ficha com filtros,
+totalizando 43 casos com os 36 anteriores. A tentativa local de Chromium parou no arranque
+por uma restrição de socket do processo, antes de abrir qualquer página. Não é
+registada como teste funcional aprovado. A execução de navegador, capturas e
+PDFs segue para o workflow da branch, com resultados finais registados na PR.
+Android físico e teclado virtual real continuam na UI-5. Esta branch ainda não
+foi integrada na main.
+
+A revisão acrescenta uma opção explícita para descartar apenas um rascunho de
+caixa, sem tocar em movimentos confirmados. Um teste de interface percorre o
+fecho e abertura de outra sessão: a saída antiga é bloqueada, e descartá-la não
+altera o estado financeiro. Assim uma tarefa da sessão anterior não fica presa
+na lista de retoma. A contagem de interface passa para 81 casos.
+
+O primeiro workflow UI-4 (`42676580509`, commit `e9e0f73`) aprovou os 227 testes,
+lint, TypeScript e build; Chromium passou 42/43 casos. O caso restante detectou
+que entryDestination removia os novos IDs de filtros na recarga de alunos.
+A lista de parâmetros internos admitidos passa a incluir classe/turma/situação
+dos alunos e apresentação lista/planilha, sem admitir pesquisa ou contactos.
+Os testes de contexto percorrem agora também essa fronteira de entrada, e o
+ensaio de pagamentos verifica a apresentação explícita após recarga em desktop.
+A correcção e o descarte de rascunho seguem para nova execução completa.
+
+
+O workflow `42677538167` (`80fb8ee`) aprovou a correcção de entrada, os 228 testes,
+lint, TypeScript, build e todos os 43 ensaios Chromium. A revisão visual das
+capturas a 320 px identificou ainda controlos a empurrar a primeira linha de
+pagamentos para baixo. A navegação secundária passa a ficar recolhida em mobile,
+Mês/Período partilham uma linha, e acções repetidas deixam o cabeçalho principal.
+A expansão da planilha só aparece quando a planilha está em uso. O ensaio exige
+agora que pelo menos metade da primeira linha esteja no viewport, mesmo com
+selecção activa. A captura repõe a posição inicial para não incluir o artefacto
+de cabeçalho fixo de uma captura longa feita a meio da página.
+
+Nos relatórios, as duas datas partilham uma linha a partir de 360 px, mantendo
+largura segura a 320 px. Na caixa, CSV/PDF usam rótulos visuais curtos com nomes
+acessíveis completos, para ficarem junto do filtro sem deslocar os movimentos.
+As etiquetas de turma passam a identificar classe e turma sem repetir a palavra.
+Estes ajustes de composição seguem para nova verificação de navegador.

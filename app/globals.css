@@ -433,6 +433,17 @@ textarea:focus-visible,
 .lss-task-root .lss-task-body { flex: 1 1 auto; min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 20px; scroll-padding: 20px; }
 .lss-task-content { min-width: 0; }
 .lss-task-body .MuiButton-root { min-height: 44px; }
+
+#workspace-content .MuiButton-root,
+#workspace-content .MuiInputBase-root,
+.lss-task-body .MuiInputBase-root { min-height: 44px; }
+@media (max-width: 767px) {
+  #workspace-content input:not([type="checkbox"]):not([type="radio"]),
+  #workspace-content select,
+  .lss-task-body input:not([type="checkbox"]):not([type="radio"]),
+  .lss-task-body select,
+  .lss-task-body textarea { font-size: 16px; }
+}
 .lss-task-root .lss-task-footer { flex: 0 0 auto; flex-wrap: wrap; gap: 8px; padding: 12px 20px; background: white; }
 .lss-task-footer .MuiButton-root { min-height: 44px; margin-left: 0; }
 .lss-task-close-notice { flex-basis: 100%; margin: 0; font-size: 12px; line-height: 1.5; color: #64748b; }
