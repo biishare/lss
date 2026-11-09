@@ -39,7 +39,7 @@ export function ReportsWorkspace({ state, role, context, onContext, executeCash,
   const update = (patch: Partial<ReportFilters>) => { onContext({ reportFilters: { ...filters, ...patch }, reportPage: 0 }); setError(""); };
   const activeFilters: ActiveFilter[] = [
     ...(filters.classId ? [{ key: "class", label: state.classes.find((item) => item.id === filters.classId)?.name ?? "Classe", remove: () => update({ classId: "", groupId: "" }) }] : []),
-    ...(filters.groupId ? [{ key: "group", label: `Turma ${state.groups.find((item) => item.id === filters.groupId)?.name ?? "seleccionada"}`, remove: () => update({ groupId: "" }) }] : []),
+    ...(filters.groupId ? [{ key: "group", label: state.groups.find((item) => item.id === filters.groupId)?.name ?? "Turma seleccionada", remove: () => update({ groupId: "" }) }] : []),
     ...(scope === "movements" && filters.method ? [{ key: "method", label: filters.method, remove: () => update({ method: "" }) }] : []),
     ...(scope === "movements" && filters.actorId ? [{ key: "actor", label: filters.actorId === "demo-secretaria" ? "Marta — Secretaria" : "Autor anterior", remove: () => update({ actorId: "" }) }] : []),
   ];
@@ -56,11 +56,11 @@ export function ReportsWorkspace({ state, role, context, onContext, executeCash,
     <nav aria-label="Áreas de relatórios" className="flex flex-wrap gap-2">{([ ["reports", "Relatórios"], ["cash", "Caixa"], ["proofs", "Conferência"], ["continuity", "Cópias de segurança"] ] as Array<[ReportSection, string]>).map(([value, label]) => <Button key={value} variant={section === value ? "contained" : "outlined"} onClick={() => onContext({ reportSection: value }, true)}>{label}</Button>)}</nav>
     {error && <Alert severity="error">{error}</Alert>}{notice && <Alert severity="success">{notice}</Alert>}
     {section === "reports" && <section className="lss-responsive-card grid gap-3" aria-label="Pesquisa e filtros do relatório">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <TextField select label="Relatório" value={filters.kind} slotProps={{ select: { native: true }, inputLabel: { shrink: true } }} onChange={(event) => update({ kind: event.target.value as ReportKind, method: "", actorId: "" })}>{Object.entries(reportDefinitions).map(([kind, definition]) => <option key={kind} value={kind}>{definition.title}</option>)}</TextField>
+      <div className="grid gap-3 min-[360px]:grid-cols-2 lg:grid-cols-4">
+        <TextField className="min-[360px]:col-span-2 lg:col-span-1" select label="Relatório" value={filters.kind} slotProps={{ select: { native: true }, inputLabel: { shrink: true } }} onChange={(event) => update({ kind: event.target.value as ReportKind, method: "", actorId: "" })}>{Object.entries(reportDefinitions).map(([kind, definition]) => <option key={kind} value={kind}>{definition.title}</option>)}</TextField>
         {scope !== "current" && <><TextField type="date" label="Data inicial" value={filters.from} slotProps={{ inputLabel: { shrink: true } }} onChange={(event) => update({ from: event.target.value })}/><TextField type="date" label="Data final" value={filters.to} slotProps={{ inputLabel: { shrink: true } }} onChange={(event) => update({ to: event.target.value })}/></>}
-        {scope !== "movements" && <TextField select label="Ano do relatório" value={context.yearId} slotProps={{ select: { native: true }, inputLabel: { shrink: true } }} onChange={(event) => onContext({ yearId: event.target.value, reportPage: 0, reportFilters: { ...filters, classId: "", groupId: "" } })}>{source.academic.years.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</TextField>}
-        <TextField type="search" label="Pesquisar no relatório" value={filters.search} onChange={(event) => update({ search: event.target.value })}/>
+        {scope !== "movements" && <TextField className="min-[360px]:col-span-2 lg:col-span-1" select label="Ano do relatório" value={context.yearId} slotProps={{ select: { native: true }, inputLabel: { shrink: true } }} onChange={(event) => onContext({ yearId: event.target.value, reportPage: 0, reportFilters: { ...filters, classId: "", groupId: "" } })}>{source.academic.years.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</TextField>}
+        <TextField className="min-[360px]:col-span-2 lg:col-span-1" type="search" label="Pesquisar no relatório" value={filters.search} onChange={(event) => update({ search: event.target.value })}/>
       </div>
       <FilterPanel title="Filtros do relatório" value={{ classId: filters.classId, groupId: filters.groupId, method: filters.method, actorId: filters.actorId }}
         clear={() => ({ classId: "", groupId: "", method: "", actorId: "" })} apply={update} active={activeFilters}>

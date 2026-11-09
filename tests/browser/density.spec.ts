@@ -35,6 +35,8 @@ for (const width of [320, 390]) test(`pagamentos abre na lista do mês e conserv
   await page.getByRole("searchbox").fill("LSS-2026-001");
   await expect(list.getByRole("article")).toHaveCount(1);
   await list.getByRole("checkbox", { name: "Seleccionar Ana Júlia Mucavele", exact: true }).check();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await expect(list.getByRole("article").first()).toBeInViewport({ ratio: 0.5 });
   await page.screenshot({ path: info.outputPath(`pagamentos-lista-${width}.png`), fullPage: true });
   const cell = list.getByRole("button", { name: /^Maio, Ana Júlia Mucavele/ });
   await cell.click();

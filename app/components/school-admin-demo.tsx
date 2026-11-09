@@ -269,9 +269,10 @@ export function SchoolAdminWorkspace({
   const setSelectedPaymentStudentIds = workspace.field("selectedStudentIds");
   const desktop = useMediaQuery("(min-width:768px)");
   const [expandedTable, setExpandedTable] = useState(false);
+  const [paymentAreasOpen, setPaymentAreasOpen] = useState(false);
   const compactPayments = !expandedTable && (workspace.context.paymentDisplay === "list" || (!workspace.context.paymentDisplay && !desktop));
   const paymentPeriod = workspace.context.paymentPeriod ?? (compactPayments ? "month" : "year");
-  const financeTableVisible = activeView === "payments" && (activePaymentSection === "entry"
+  const financeTableVisible = !compactPayments && activeView === "payments" && (activePaymentSection === "entry"
     || (activeProfile === "director" && activePaymentSection !== "reports"));
   const workspacePositionKey = [activeView, activePaymentSection, selectedClassId, selectedGroupId].join(":");
   useWorkspaceScroll(workspacePositionKey, activeProfile ? demoState?.datasetId : undefined);
@@ -3086,7 +3087,7 @@ export function SchoolAdminWorkspace({
     const visibleMonthKeys = new Set(displayMonths.map((item) => item.key));
     return (
       <div className="grid gap-6">
-        <nav aria-label="Áreas de pagamentos" data-workspace-secondary className="flex flex-wrap gap-2 pb-1">
+        <details data-workspace-secondary open={desktop || paymentAreasOpen} onToggle={(event) => { if (!desktop) setPaymentAreasOpen(event.currentTarget.open); }}><summary className="min-h-11 cursor-pointer content-center text-sm font-semibold text-teal-800 md:hidden">Áreas de pagamentos</summary><nav aria-label="Áreas de pagamentos" className="flex flex-wrap gap-2 pb-1">
           {visiblePaymentSections.map((section) => (
             <button
               key={section.id}
@@ -3102,7 +3103,7 @@ export function SchoolAdminWorkspace({
               {section.label}
             </button>
           ))}
-        </nav>
+        </nav></details>
 
         {currentPaymentSection?.id === "settings" && (
           <div className="grid gap-6">
@@ -3158,27 +3159,23 @@ export function SchoolAdminWorkspace({
                       {compactPayments ? "Pagamentos da turma" : "Planilha financeira da turma"}
                     </h3>
                     <p className="text-sm text-slate-500">
-                      {currentClass?.name ?? "Sem classe"} /{" "}
-                      {currentGroup?.name ?? "Sem turma"} - inscrição,
-                      mensalidades, diversos e dívida.
+                      {currentClass?.name ?? "Sem classe"} · {currentGroup?.name ?? "Sem turma"} · {selectedYearId}
                     </p>
                     {paymentAlertFilter !== "all" && (
                       <p className="mt-2 text-sm font-semibold text-[#185c54]">
                         Filtro: {activePaymentFilterLabel[paymentAlertFilter]}
                       </p>
                     )}
-                    <p className="mt-2 text-sm text-slate-500">
-                      {visiblePaymentRows.length} {visiblePaymentRows.length === 1 ? "aluno" : "alunos"} · {selectedPaymentRows.length} seleccionados.
-                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-slate-500"><p>{visiblePaymentRows.length} {visiblePaymentRows.length === 1 ? "aluno" : "alunos"} · {selectedPaymentRows.length} {selectedPaymentRows.length === 1 ? "seleccionado" : "seleccionados"}.</p>{selectedPaymentRows.length > 0 && <TextButton ariaLabel="Limpar selecção" onClick={() => setSelectedPaymentStudentIds([])}>Limpar</TextButton>}</div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="grid w-full min-w-0 grid-cols-2 items-end gap-2 md:flex md:w-auto md:flex-wrap">
                     <label className="text-xs font-semibold">Mês<select
                     value={billingMonthKey}
                     onChange={(event) => {
                       setBillingMonthKey(event.target.value);
                       setBillingNotice("");
                     }}
-                    className={cx(inputClasses(), "w-44")}
+                    className={cx(inputClasses(), "w-full min-w-0")}
                     aria-label="Mês de mensalidade"
                   >
                     {paymentMonths.map((month) => (
@@ -3188,26 +3185,7 @@ export function SchoolAdminWorkspace({
                     ))}
                   </select></label>
                     <label className="text-xs font-semibold">Período<select aria-label="Período da planilha" className={inputClasses()} value={paymentPeriod} onChange={(event) => workspace.update({ paymentPeriod: event.target.value as "month" | "term" | "year" })}><option value="month">Mês</option><option value="term">Trimestre</option><option value="year">Ano</option></select></label>
-                    {selectedProfile.id === "secretaria" && <PrimaryButton onClick={() => openPaymentEntry()}>Registar pagamento</PrimaryButton>}
-                    {selectedPaymentRows.length > 0 && (
-                      <SecondaryButton
-                        onClick={() => setSelectedPaymentStudentIds([])}
-                      >
-                        Limpar selecção
-                      </SecondaryButton>
-                    )}
-                    {paymentAlertFilter !== "all" && (
-                      <SecondaryButton
-                        onClick={() => setPaymentAlertFilter("all")}
-                      >
-                        Limpar filtro
-                      </SecondaryButton>
-                    )}
-                    <SecondaryButton
-                      onClick={() => setActivePaymentSection("reports")}
-                    >
-                      Ver relatório
-                    </SecondaryButton>
+                    {selectedProfile.id === "secretaria" && <div className="col-span-2 md:col-span-1"><PrimaryButton onClick={() => openPaymentEntry()}>Registar pagamento</PrimaryButton></div>}
                   </div>
                 </div>
 
@@ -3226,7 +3204,7 @@ export function SchoolAdminWorkspace({
                   <FilterPanel title="Filtros dos pagamentos" value={{ alert: paymentAlertFilter }} clear={() => ({ alert: "all" as PaymentAlertFilter })} apply={(value) => setPaymentAlertFilter(value.alert)} active={paymentAlertFilter === "all" ? [] : [{ key: "alert", label: activePaymentFilterLabel[paymentAlertFilter], remove: () => setPaymentAlertFilter("all") }]}>
                     {(draft, change) => <label className="text-sm font-semibold">Estado<select className={inputClasses()} value={draft.alert} onChange={(event) => change({ alert: event.target.value as PaymentAlertFilter })}>{Object.entries(activePaymentFilterLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
                   </FilterPanel>
-                  <SecondaryButton onClick={() => workspace.update({ paymentDisplay: compactPayments ? "sheet" : "list", paymentPeriod: compactPayments ? "year" : "month" })}>{compactPayments ? "Ver planilha completa" : "Ver lista compacta"}</SecondaryButton>
+                  <TextButton ariaLabel={compactPayments ? "Ver planilha completa" : "Ver lista compacta"} onClick={() => workspace.update({ paymentDisplay: compactPayments ? "sheet" : "list", paymentPeriod: compactPayments ? "year" : "month" })}>{compactPayments ? "Planilha completa" : "Lista compacta"}</TextButton>
                 </div>
                 {compactPayments ? <PaymentList rows={visiblePaymentRows} state={demoState} settings={paymentSettings} monthKeys={visibleMonthKeys} selected={selectedPaymentStudentIdSet} onSelect={togglePaymentStudentSelection} onCell={openFinanceCell} onStudent={(id) => workspace.update({ view: "enrollments", personId: id, studentTab: "Financeiro" }, true)}/> : (
                 <div className="table-scroll" data-scroll-id="payments" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>

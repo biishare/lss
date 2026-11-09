@@ -148,7 +148,7 @@ export function AcademicWorkspace({ enrollmentRef, state, role, context, onConte
   const applyStudentFilters = (value: { studentClassId?: string; studentGroupId?: string; studentStatus?: string }) => onContext({ ...value, studentPage: 0 });
   const activeStudentFilters: ActiveFilter[] = [
     ...(context.studentClassId ? [{ key: "class", label: className(context.studentClassId), remove: () => applyStudentFilters({ studentClassId: "", studentGroupId: "" }) }] : []),
-    ...(context.studentGroupId ? [{ key: "group", label: `Turma ${groupName(context.studentGroupId)}`, remove: () => applyStudentFilters({ studentGroupId: "" }) }] : []),
+    ...(context.studentGroupId ? [{ key: "group", label: `${className(state.groups.find((item) => item.id === context.studentGroupId)?.classId ?? "")} · ${groupName(context.studentGroupId)}`, remove: () => applyStudentFilters({ studentGroupId: "" }) }] : []),
     ...(context.studentStatus ? [{ key: "status", label: context.studentStatus === "unregistered" ? "Por matricular" : statuses[context.studentStatus as keyof typeof statuses], remove: () => applyStudentFilters({ studentStatus: "" }) }] : []),
   ];
   const primaryPlacement = primary ? displayPlacement(primary) : undefined;

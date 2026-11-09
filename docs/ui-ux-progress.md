@@ -439,3 +439,20 @@ dos alunos e apresentação lista/planilha, sem admitir pesquisa ou contactos.
 Os testes de contexto percorrem agora também essa fronteira de entrada, e o
 ensaio de pagamentos verifica a apresentação explícita após recarga em desktop.
 A correcção e o descarte de rascunho seguem para nova execução completa.
+
+
+O workflow `42677538167` (`80fb8ee`) aprovou a correcção de entrada, os 228 testes,
+lint, TypeScript, build e todos os 43 ensaios Chromium. A revisão visual das
+capturas a 320 px identificou ainda controlos a empurrar a primeira linha de
+pagamentos para baixo. A navegação secundária passa a ficar recolhida em mobile,
+Mês/Período partilham uma linha, e acções repetidas deixam o cabeçalho principal.
+A expansão da planilha só aparece quando a planilha está em uso. O ensaio exige
+agora que pelo menos metade da primeira linha esteja no viewport, mesmo com
+selecção activa. A captura repõe a posição inicial para não incluir o artefacto
+de cabeçalho fixo de uma captura longa feita a meio da página.
+
+Nos relatórios, as duas datas partilham uma linha a partir de 360 px, mantendo
+largura segura a 320 px. Na caixa, CSV/PDF usam rótulos visuais curtos com nomes
+acessíveis completos, para ficarem junto do filtro sem deslocar os movimentos.
+As etiquetas de turma passam a identificar classe e turma sem repetir a palavra.
+Estes ajustes de composição seguem para nova verificação de navegador.
