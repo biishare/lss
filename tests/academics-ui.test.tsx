@@ -36,6 +36,19 @@ function placement() {
   fireEvent.change(screen.getByLabelText("Turma da matrícula"), { target: { value: "7A2026" } });
   fireEvent.click(screen.getByRole("button", { name: /^Continuar$/ }));
 }
+test("erros da matrícula focam o campo relevante conservando a mesma sessão", async () => {
+  open();
+  fireEvent.click(await screen.findByRole("button", { name: /^Nova matrícula$/ }));
+  const id = JSON.parse(window.sessionStorage.getItem("lss-academic-enrollment-form-v1")!).session.id;
+  fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+  await waitFor(() => assert.equal(document.activeElement, screen.getByLabelText("Nome completo do aluno")));
+  fireEvent.change(screen.getByLabelText("Nome completo do aluno"), { target: { value: "Aluno com foco guiado" } });
+  fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continuar" }));
+  await waitFor(() => assert.equal(document.activeElement, screen.getByLabelText("Turma da matrícula")));
+  assert.equal(JSON.parse(window.sessionStorage.getItem("lss-academic-enrollment-form-v1")!).session.id, id);
+  assert.equal(saved().students.length, 12);
+});
 test("Guardar e pagar confirma matrícula e abre a inscrição do aluno correcto no modal", async () => {
   open(); await identify(); placement();
   fireEvent.click(screen.getByRole("button", { name: /^Guardar e pagar$/ }));
@@ -183,7 +196,7 @@ test("rascunho de inscrição é retomado depois de fechar e recarregar sem dupl
   fireEvent.click(screen.getByRole("button", { name: /^Guardar e pagar$/ }));
   const dialog = await screen.findByRole("dialog", { name: /Registar pagamento/ });
   fireEvent.change(within(dialog).getByLabelText(/^Valor recebido/), { target: { value: "1234.56" } });
-  fireEvent.click(within(dialog).getByRole("button", { name: "Fechar e conservar preenchimento" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: /^Fechar$/ }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null)); page.unmount(); open();
   fireEvent.click(await screen.findByRole("button", { name: /^Pagar inscrição$/ }));
   const resumed = await screen.findByRole("dialog", { name: /Registar pagamento/ });

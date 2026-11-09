@@ -1,9 +1,10 @@
 "use client";
 import { useConfirmation } from "./use-confirmation";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { choiceForCell } from "../features/finance/payment-context";
 import { PaymentDialog } from "../features/finance/payment-dialog";
-import { FinanceServicePanel } from "../features/finance/service-panel";
+import { FinanceServicePanel, type FinanceServiceHandle } from "../features/finance/service-panel";
 import { executeService, type ServiceCommand } from "../features/finance/service-commands";
 import { pendingProofFor, receiptStatus, personCreditSources } from "../features/finance/service-model";
 import { RulesWorkspace } from "../features/finance/rules-workspace";
@@ -225,9 +226,13 @@ export function SchoolAdminWorkspace({
   const repositoryRef = useRef<DemoRepository | null>(null);
   const paymentCommandRef = useRef<string | null>(null);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentEntryMode, setPaymentEntryMode] = useState<"student" | "charge" | "payment">("student");
+  const [canResumePayment, setCanResumePayment] = useState(false);
   const [paymentAttemptId, setPaymentAttemptId] = useState<string | null>(null);
+  const rememberPaymentCommand = useCallback((id: string) => { paymentCommandRef.current = id; setPaymentAttemptId(id); }, []);
   const paymentDraftEdited = useRef(false);
   const financeTrigger = useRef<HTMLElement | null>(null);
+  const financeService = useRef<FinanceServiceHandle>(null);
   const paymentDraftsByYear = useRef<Record<string, { payment: PaymentLaunchDraft; paymentCommandId: string | null }>>({});
   const paymentDraftYear = useRef<string | null>(null);
   const [preferencesReady, setPreferencesReady] = useState(false);
@@ -544,7 +549,6 @@ export function SchoolAdminWorkspace({
   );
 
   const yearClasses = useMemo(() => classes.filter((item) => item.academicYear === selectedYearId), [classes, selectedYearId]);
-  const yearStudents = useMemo(() => students.filter((item) => (item.academicYearId ?? operationalSettings.academicYear) === selectedYearId && item.enrollmentStatus !== "cancelled"), [students, selectedYearId, operationalSettings.academicYear]);
   const currentClass =
     yearClasses.find((schoolClass) => schoolClass.id === selectedClassId) ??
     yearClasses[0];
@@ -1250,48 +1254,27 @@ export function SchoolAdminWorkspace({
   }
 
   function openPaymentEntry(studentId?: string) {
-    if (!studentId && !paymentDraftEdited.current) studentId = paymentDraft.studentId || yearStudents[0]?.id;
     financeTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const resume = !studentId && paymentDraftEdited.current && Boolean(paymentDraft.studentId) && parseMoney(paymentDraft.amount) > 0;
+    setCanResumePayment(resume);
+    setPaymentEntryMode(studentId ? "charge" : "student");
     setPaymentDialogOpen(true);
-    if (studentId) { paymentCommandRef.current = null; setPaymentAttemptId(null); paymentDraftEdited.current = false; }
-    workspace.update({ view: "payments", paymentSection: "entry" }, true);
-
+    if (!resume) { paymentCommandRef.current = null; setPaymentAttemptId(null); }
+    if (workspace.context.view !== "payments") workspace.update({ view: "payments", paymentSection: "entry" }, true);
     if (studentId) {
-      const student = students.find((item) => item.id === studentId);
-      const record =
-        paymentRecords.find((item) => item.studentId === studentId) ??
-        buildPaymentRecord(studentId);
-      const ledger = student
-        ? buildLedger(
-            student,
-            record,
-            paymentMonths,
-            paymentSettings,
-            undefined,
-            effectivePaymentRuleVersions,
-          )
-        : undefined;
-      const registrationPending = (ledger?.registrationBalance ?? 0) > 0;
-      const openMonth = ledger?.monthly.find((month) => month.applicable && month.balance + month.fineBalance > 0);
-
-      setPaymentDraft((draft) => ({
-        ...draft,
-        studentId,
-        selectedChargeIds: [], additionalTargets: [], creditOnly: false, primaryAllocationAmount: undefined,
-        category: registrationPending ? "registration" : "tuition",
-        monthKey: openMonth?.month.key ?? draft.monthKey,
-        amount: registrationPending
-          ? String(ledger?.registrationBalance ?? paymentSettings.inscriptionRenewalFee)
-          : String((openMonth?.balance ?? 0) + (openMonth?.fineBalance ?? 0)),
-        targetChargeId: "",
-        paidOn: today(),
-        allowFutureAllocation: false,
-      }));
+      paymentDraftEdited.current = false;
+      setPaymentDraft((draft) => ({ ...draft, studentId, category: "tuition", monthKey: "", amount: "", targetChargeId: "", description: "", evidenceReference: "", reference: "", lateReason: "", selectedChargeIds: [], additionalTargets: [], creditOnly: false, primaryAllocationAmount: undefined, paidOn: today(), allowFutureAllocation: false }));
     }
   }
 
   function openFinanceCell(selection: FinanceCellSelection) {
     financeTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const choice = demoState && activeProfile === "secretaria" ? choiceForCell(demoState, selection, nowIso()) : undefined;
+    if (choice) {
+      const sameDraft = paymentDraftEdited.current && parseMoney(paymentDraft.amount) > 0 && paymentDraft.studentId === choice.draft.studentId && paymentDraft.category === choice.draft.category && (paymentDraft.category !== "tuition" || paymentDraft.monthKey === choice.draft.monthKey);
+      if (sameDraft) { setPaymentEntryMode("payment"); setSelectedFinanceCell(null); setPaymentDialogOpen(true); return; }
+      registerPaymentFromCell(choice.draft); return;
+    }
     setSelectedFinanceCell(selection);
   }
 
@@ -1301,9 +1284,10 @@ export function SchoolAdminWorkspace({
       studentId: string;
     },
   ) {
+    setPaymentEntryMode(draft.amount ? "payment" : "charge");
+    setCanResumePayment(false);
     setPaymentDialogOpen(true);
-    paymentCommandRef.current = null; setPaymentAttemptId(null); paymentDraftEdited.current = false;
-    workspace.update({ view: "payments", paymentSection: "entry" }, true);
+    paymentCommandRef.current = null; setPaymentAttemptId(null); paymentDraftEdited.current = true;
     setSelectedFinanceCell(null);
     setPaymentDraft((currentDraft) => ({
       ...currentDraft,
@@ -1315,6 +1299,7 @@ export function SchoolAdminWorkspace({
       amount: draft.amount ?? currentDraft.amount,
       paidOn: today(),
       description: draft.description ?? "",
+      evidenceReference: "", reference: "", lateReason: "",
       allowFutureAllocation: draft.allowFutureAllocation ?? false,
     }));
   }
@@ -1599,7 +1584,7 @@ export function SchoolAdminWorkspace({
       students: [...students, newStudent],
       paymentRecords: [...paymentRecords, initialLedger.normalizedRecord],
     }, "manage-enrollment")) return;
-    paymentCommandRef.current = null;
+    paymentCommandRef.current = null; setPaymentAttemptId(null);
     setPaymentDraft((draft) => ({
       ...draft,
       studentId: newStudent.id,
@@ -1945,6 +1930,7 @@ export function SchoolAdminWorkspace({
       return;
     }
 
+    setSelectedFinanceCell(null);
     setPaymentReceipt(receipt);
   }
 
@@ -1976,7 +1962,7 @@ export function SchoolAdminWorkspace({
   }
 
   function changePaymentDraft(draft: PaymentLaunchDraft) {
-    paymentCommandRef.current = null; setPaymentAttemptId(null); paymentDraftEdited.current = true;
+    paymentDraftEdited.current = true;
     setPaymentDraft(draft);
   }
 
@@ -3226,16 +3212,7 @@ export function SchoolAdminWorkspace({
                     <label className="text-xs font-semibold">Mês<select
                     value={billingMonthKey}
                     onChange={(event) => {
-                      paymentCommandRef.current = null;
                       setBillingMonthKey(event.target.value);
-                      setPaymentDraft((draft) => ({
-                        ...draft,
-                        monthKey: event.target.value,
-                        targetChargeId:
-                          draft.category === "miscellaneous"
-                            ? draft.targetChargeId
-                            : "",
-                      }));
                       setBillingNotice("");
                     }}
                     className={cx(inputClasses(), "w-44")}
@@ -3595,11 +3572,11 @@ export function SchoolAdminWorkspace({
           key={paymentReceipt?.id}
           receipt={paymentReceipt}
           status={demoState && paymentReceipt ? receiptStatus(demoState, paymentReceipt) : undefined}
-          onClose={() => setPaymentReceipt(null)}
+          onClose={() => { setPaymentReceipt(null); window.requestAnimationFrame(() => financeTrigger.current?.focus({ preventScroll: true })); }}
           onPrint={() => window.print()}
         />
-        {demoState && <FinanceServicePanel state={demoState} studentId={paymentDraft.studentId} yearId={selectedYearId} readOnly={selectedProfile.id !== "secretaria"} execute={executeServiceCommand} correctionTarget={paymentCorrectionTarget} onCloseCorrection={() => { setPaymentCorrectionTarget(null); window.requestAnimationFrame(() => financeTrigger.current?.focus({ preventScroll: true })); }}/>}
-        {paymentDialogOpen && demoState && selectedProfile.id === "secretaria" && <PaymentDialog onOpenCash={openCashWorkspace} state={demoState} draft={paymentDraft} onChange={changePaymentDraft} onClose={closePaymentDialog} commandId={paymentAttemptId} execute={executeServiceCommand} confirm={(draft, id) => { paymentCommandRef.current = id; setPaymentAttemptId(id); const receipt = confirmAcademicPayment(draft, id).receipt; paymentDraftEdited.current = false; setPaymentDraft((current) => ({ ...current, amount: "0" })); return receipt; }}/>}
+        {demoState && <FinanceServicePanel serviceRef={financeService} state={demoState} studentId={canResumePayment || paymentDialogOpen ? paymentDraft.studentId : ""} yearId={selectedYearId} readOnly={selectedProfile.id !== "secretaria"} execute={executeServiceCommand} correctionTarget={paymentCorrectionTarget} onCloseCorrection={() => { setPaymentCorrectionTarget(null); window.requestAnimationFrame(() => financeTrigger.current?.focus({ preventScroll: true })); }}/>}
+        {paymentDialogOpen && demoState && selectedProfile.id === "secretaria" && <PaymentDialog onOpenProofs={() => { setPaymentDialogOpen(false); financeService.current?.showProofs(paymentDraft.studentId); }} onCommandId={rememberPaymentCommand} onCompleted={() => { paymentDraftEdited.current = false; setCanResumePayment(false); setPaymentDraft((current) => ({ ...current, amount: "0" })); }} draftNotice={draftStorageNotice} entryMode={paymentEntryMode} canResume={canResumePayment} onOpenCash={openCashWorkspace} state={demoState} draft={paymentDraft} onChange={changePaymentDraft} onClose={closePaymentDialog} commandId={paymentAttemptId} execute={executeServiceCommand} confirm={(draft, id) => { paymentCommandRef.current = id; setPaymentAttemptId(id); const receipt = confirmAcademicPayment(draft, id).receipt; paymentDraftEdited.current = false; setPaymentDraft((current) => ({ ...current, amount: "0" })); return receipt; }}/>}
       </div>
     );
   }

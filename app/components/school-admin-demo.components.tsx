@@ -1942,6 +1942,7 @@ function HistoryList({
 }
 export function FinanceCellDialog({
   canManagePayments,
+  inline = false,
   months,
   onClose,
   onCorrectPayment,
@@ -1954,6 +1955,7 @@ export function FinanceCellDialog({
   studentContextLabel,
 }: {
   canManagePayments: boolean;
+  inline?: boolean;
   months: MonthOption[];
   onClose: () => void;
   onCorrectPayment: (studentId: string, paymentId: string) => void;
@@ -2167,42 +2169,17 @@ export function FinanceCellDialog({
         </p>
       );
 
-    action = (
-      <>
-        {canManagePayments && firstOpenCharge && (
-          <PrimaryButton
-            onClick={() =>
-              paymentAction({
-                studentId: student.id,
-                category: "miscellaneous",
-                targetChargeId: firstOpenCharge.id,
-                amount: String(getChargeBalance(row.record, firstOpenCharge)),
-                description: firstOpenCharge.description,
-              })
-            }
-          >
-            Registar pagamento
-          </PrimaryButton>
-        )}
-        {canManagePayments && (
-          <SecondaryButton onClick={onCreateMiscellaneous}>
-            Nova cobrança diversa
-          </SecondaryButton>
-        )}
-      </>
-    );
+    action = <>
+      {canManagePayments && firstOpenCharge && <PrimaryButton onClick={() => paymentAction({ studentId: student.id, category: "miscellaneous", amount: "" })}>Escolher cobrança</PrimaryButton>}
+      {canManagePayments && <SecondaryButton onClick={onCreateMiscellaneous}>Nova cobrança diversa</SecondaryButton>}
+    </>;
   }
 
   if (selection.kind === "debt") {
     const breakdown = getDebtBreakdown(row);
     const timing = row.ledger.totals;
     const total = breakdown.reduce((sum, item) => sum + item.amount, 0);
-    const firstMonthlyDebt = row.ledger.monthly.find(
-      (month) => month.balance + month.fineBalance > 0,
-    );
-    const firstMiscCharge = getMiscellaneousCharges(row.record).find(
-      (charge) => getChargeBalance(row.record, charge) > 0,
-    );
+
 
     title = "Detalhes da síntese";
     subtitle = `${student.fullName} / total ${formatCurrency(total)}`;
@@ -2242,43 +2219,7 @@ export function FinanceCellDialog({
       );
 
     if (canManagePayments && total > 0) {
-      action = (
-        <PrimaryButton
-          onClick={() => {
-            if (row.ledger.registrationBalance + row.ledger.registrationPenaltyBalance > 0) {
-              paymentAction({
-                studentId: student.id,
-                category: "registration",
-                amount: String(row.ledger.registrationBalance + row.ledger.registrationPenaltyBalance),
-                monthKey: getStudentTuitionStartMonth(student, settings),
-              });
-              return;
-            }
-
-            if (firstMonthlyDebt) {
-              paymentAction({
-                studentId: student.id,
-                category: "tuition",
-                monthKey: firstMonthlyDebt.month.key,
-                amount: String(firstMonthlyDebt.balance + firstMonthlyDebt.fineBalance),
-              });
-              return;
-            }
-
-            if (firstMiscCharge) {
-              paymentAction({
-                studentId: student.id,
-                category: "miscellaneous",
-                targetChargeId: firstMiscCharge.id,
-                amount: String(getChargeBalance(row.record, firstMiscCharge)),
-                description: firstMiscCharge.description,
-              });
-            }
-          }}
-        >
-          Registar pagamento
-        </PrimaryButton>
-      );
+      action = <PrimaryButton onClick={() => paymentAction({ studentId: student.id, category: "tuition", amount: "" })}>Escolher cobrança</PrimaryButton>;
     }
   }
 
@@ -2294,15 +2235,7 @@ export function FinanceCellDialog({
     </>
   );
 
-  return (
-    <AppDialog
-      mobile="sheet"
-      actions={footerActions}
-      onClose={onClose}
-      open={Boolean(selection && row)}
-      subtitle={subtitle}
-      title={title}
-    >
+  const content = (
       <div className="grid min-w-0 gap-5">
         <section className="min-w-0">
           <h4 className="text-sm font-bold uppercase text-slate-500">
@@ -2355,8 +2288,10 @@ export function FinanceCellDialog({
           </div>
         </section>
       </div>
-    </AppDialog>
   );
+  if (inline) return <section aria-label={title}><h3 className="mb-4 font-bold">{title}</h3>{content}</section>;
+  return <AppDialog mobile="sheet" actions={footerActions} onClose={onClose}
+    open={Boolean(selection && row)} subtitle={subtitle} title={title}>{content}</AppDialog>;
 }
 
 export function MiscellaneousChargeForm({

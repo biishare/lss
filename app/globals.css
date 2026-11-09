@@ -432,6 +432,7 @@ textarea:focus-visible,
 .lss-task-header .MuiIconButton-root { width: 44px; height: 44px; margin: -6px -8px -6px 0; font-size: 28px; }
 .lss-task-root .lss-task-body { flex: 1 1 auto; min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding: 20px; scroll-padding: 20px; }
 .lss-task-content { min-width: 0; }
+.lss-task-body .MuiButton-root { min-height: 44px; }
 .lss-task-root .lss-task-footer { flex: 0 0 auto; flex-wrap: wrap; gap: 8px; padding: 12px 20px; background: white; }
 .lss-task-footer .MuiButton-root { min-height: 44px; margin-left: 0; }
 .lss-task-close-notice { flex-basis: 100%; margin: 0; font-size: 12px; line-height: 1.5; color: #64748b; }

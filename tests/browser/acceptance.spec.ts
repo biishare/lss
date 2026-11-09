@@ -128,9 +128,9 @@ for (const width of [390, 1440]) {
     await page.getByLabel("Período da planilha", { exact: true }).selectOption("month");
     const cell = page.getByRole("button", { name: /^Maio.*Ana Júlia Mucavele/ });
     await cell.click();
-    await page.getByRole("dialog").getByRole("button", { name: "Registar pagamento", exact: true }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByLabel("Aluno", { exact: true })).toHaveValue("student-001");
+    await expect(dialog.getByRole("region", { name: "Contexto do pagamento" })).toContainText("Ana Júlia Mucavele");
+    await expect(dialog.getByLabel("Aluno", { exact: true })).toHaveCount(0);
     await dialog.getByLabel("Valor recebido", { exact: false }).fill("600");
     await screenshot(page, info, `pagamento-${width}`);
     await noPageOverflow(page);
@@ -186,6 +186,7 @@ test("matrícula móvel conserva erro e Guardar e pagar abre o aluno correcto", 
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "Continuar", exact: true }).click();
   await expect(dialog.getByLabel("Nome completo do aluno", { exact: true })).toHaveAttribute("aria-invalid", "true");
+  await expect(dialog.getByLabel("Nome completo do aluno", { exact: true })).toBeFocused();
   await dialog.getByLabel("Nome completo do aluno", { exact: true }).fill("Aluno do ensaio no navegador");
   await dialog.getByLabel("Nome do encarregado", { exact: true }).fill("Encarregado do ensaio");
   await dialog.getByLabel("Contacto do encarregado", { exact: true }).fill("840000000");
@@ -200,8 +201,8 @@ test("matrícula móvel conserva erro e Guardar e pagar abre o aluno correcto", 
   const saved = await snapshot(page);
   const student = saved.students.find((item) => item.fullName === "Aluno do ensaio no navegador")!;
   expect(student).toBeDefined();
-  await expect(page.getByRole("dialog").getByLabel("Aluno", { exact: true })).toHaveValue(student.id);
-  await expect(page.getByRole("dialog").getByLabel("Item", { exact: true })).toHaveValue("registration");
+  await expect(page.getByRole("dialog").getByRole("region", { name: "Contexto do pagamento" })).toContainText(student.registrationNumber);
+  await expect(page.getByRole("dialog").getByRole("region", { name: "Contexto do pagamento" })).toContainText("Inscrição / Renovação");
   expect(saved.students).toHaveLength(13);
 });
 
