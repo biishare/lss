@@ -98,7 +98,6 @@ import {
   type PaymentReceipt,
   type PaymentRuleDraft,
   type PaymentAlertFilter,
-  type ProfileId,
   type RoomDefinitionDraft,
   type RoomDraft,
   type StudentLedgerRow,
@@ -141,9 +140,10 @@ import {
   TextButton,
 } from "./school-admin-demo.components";
 
-import { DemoEntry } from "./demo-entry";
 import { WorkspaceShell } from "./workspace-shell";
-import { demoSessionFor, demoSessionKey, readDemoSession, saveDemoSession } from "../features/demo/demo-session";
+import type { DemoSession } from "../features/demo/demo-session";
+import { WorkspacePlaceholder } from "./workspace-startup";
+import { workspacePath } from "../lib/workspace-navigation";
 import { useWorkspaceContext } from "../features/demo/use-workspace-context";
 import { useWorkspaceScroll } from "../features/demo/use-workspace-scroll";
 import { DashboardWorkspace } from "../features/reports/dashboard";
@@ -192,12 +192,16 @@ function financeCellAriaLabel({
 
 const sidebarPreferenceKey = "lss-demo-sidebar-collapsed";
 
-export function SchoolAdminDemo({
+export function SchoolAdminWorkspace({
   initialView = "overview",
   developerToolsEnabled = process.env.NEXT_PUBLIC_LSS_DEVELOPER_TOOLS === "true",
+  session, onSignOut, sessionNotice = "",
 }: {
   initialView?: WorkspaceView;
   developerToolsEnabled?: boolean;
+  session: DemoSession;
+  onSignOut(): void;
+  sessionNotice?: string;
 }) {
   const firstClassId = initialClasses[0]?.id ?? "";
   const firstGroupId = initialGroups[0]?.id ?? "";
@@ -206,16 +210,17 @@ export function SchoolAdminDemo({
   const firstRoomId = firstRoom?.id ?? "";
   const firstStageId = initialAcademicStages[0]?.id ?? "";
   const [storageReady, setStorageReady] = useState(false);
-  const [activeProfile, setActiveProfile] = useState<ProfileId | null>(null);
-  const [accountName, setAccountName] = useState("");
+  const activeProfile = session.account.role;
+  const accountName = session.account.name;
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [storageToolsNotice, setStorageToolsNotice] = useState("");
+  const [storageToolsNotice, setStorageToolsNotice] = useState(sessionNotice);
   const [backupNotice, setBackupNotice] = useState("");
   const enrollmentRef = useRef<{ openEnrollment(): void } | null>(null);
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const [storageLoadError, setStorageLoadError] = useState("");
   const [originalStorageRaw, setOriginalStorageRaw] = useState<string | undefined>();
-  const [storageToolsError, setStorageToolsError] = useState(false);
+  const [storageToolsError, setStorageToolsError] = useState(Boolean(sessionNotice));
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [draftStorageNotice, setDraftStorageNotice] = useState("");
   const repositoryRef = useRef<DemoRepository | null>(null);
   const paymentCommandRef = useRef<string | null>(null);
@@ -360,11 +365,6 @@ export function SchoolAdminDemo({
     const restoreSessionId = window.setTimeout(() => {
       let savedSidebar: string | null = null;
       try {
-        const session = readDemoSession(window.sessionStorage);
-        if (session) {
-          setActiveProfile(session.account.role);
-          setAccountName(session.account.name);
-        }
         savedSidebar = window.localStorage.getItem(sidebarPreferenceKey);
       } catch { /* As preferências não substituem a leitura obrigatória dos dados. */ }
 
@@ -489,7 +489,7 @@ export function SchoolAdminDemo({
     }, 0);
 
     return () => window.clearTimeout(loadStateId);
-  }, [developerToolsEnabled]);
+  }, [developerToolsEnabled, loadAttempt]);
 
   useEffect(() => {
     if (!storageReady || !demoState || activeProfile !== "secretaria") return;
@@ -761,19 +761,6 @@ export function SchoolAdminDemo({
     }
   }
 
-  function enterDemo(accountId: string) {
-    const session = demoSessionFor(accountId);
-    if (!session) return;
-    try { saveDemoSession(window.sessionStorage, session); }
-    catch {
-      setStorageToolsError(true);
-      setStorageToolsNotice("A sessão não pôde ser guardada. Ao recarregar, será necessário entrar novamente.");
-    }
-    setAccountName(session.account.name);
-    setActiveProfile(session.account.role);
-    workspace.update({ view: activeView }, true);
-  }
-
   function switchPaymentDraftYear(yearId: string) {
     const sourceYear = students.find((item) => item.id === paymentDraft.studentId)?.academicYearId ?? paymentDraftYear.current ?? operationalSettings.academicYear;
     if (!yearId || sourceYear === yearId) { paymentDraftYear.current = yearId || sourceYear; return; }
@@ -806,17 +793,13 @@ export function SchoolAdminDemo({
   }
 
   function signOut() {
-    try { window.sessionStorage.removeItem(demoSessionKey); } catch { /* Sair continua disponível. */ }
-    setActiveProfile(null);
-    setPaymentDialogOpen(false); setPaymentCorrectionTarget(null); setPaymentReceipt(null);
-    setAccountName("");
-    setExpandedTable(false);
-    window.history.replaceState(null, "", "/");
+    onSignOut();
   }
 
   function navigateTo(view: WorkspaceView) {
     setSelectedFinanceCell(null);
     setExpandedTable(false);
+    if (!workspace.ready) window.history.pushState(null, "", workspacePath(view));
     setActiveView(view);
   }
 
@@ -1998,15 +1981,18 @@ export function SchoolAdminDemo({
   }
 
   if (!storageReady || (demoState && !workspace.ready)) {
-    return <main className="grid min-h-screen place-items-center p-6" role="status">A carregar os dados do LSS…</main>;
-  }
-  if (!activeProfile) {
-    return <DemoEntry onEnter={enterDemo} schoolName={academic?.institution.name} logoText={academic?.institution.logoText} />;
+    return <WorkspaceShell activeView={activeView} accountName={accountName} roleLabel={session.account.roleLabel}
+      year="" collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed}
+      onNavigate={navigateTo} onSignOut={signOut} expanded={false} onExpandedChange={setExpandedTable}>
+      <WorkspacePlaceholder view={activeView} />
+    </WorkspaceShell>;
   }
 
   if (storageLoadError || !demoState) {
     return (
-      <main className="grid min-h-screen place-items-center bg-slate-50 p-6">
+      <WorkspaceShell activeView={activeView} accountName={accountName} roleLabel={session.account.roleLabel}
+        year="" collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed}
+        onNavigate={navigateTo} onSignOut={signOut} expanded={false} onExpandedChange={setExpandedTable}>
         <section className="lss-responsive-card" aria-label="Acesso aos dados do LSS">
           <h1 className="text-xl font-bold">{storageLoadError ? "Não foi possível abrir os dados" : "Preparar o LSS"}</h1>
           <p className="mt-3 text-sm text-slate-600">
@@ -2032,11 +2018,14 @@ export function SchoolAdminDemo({
           ) : <p className="mt-4 text-sm">A Secretaria deve preparar ou recuperar o cenário antes da consulta pelo Director.</p>)}
           {storageToolsNotice && <p role="alert" className="mt-4 text-sm text-rose-800">{storageToolsNotice}</p>}
           <div className="lss-actions mt-4">
-            <SecondaryButton onClick={() => window.location.reload()}>Tentar novamente</SecondaryButton>
+            <SecondaryButton onClick={() => {
+              setStorageReady(false); setStorageLoadError(""); setOriginalStorageRaw(undefined);
+              repositoryRef.current = null; setLoadAttempt((attempt) => attempt + 1);
+            }}>Tentar novamente</SecondaryButton>
             <SecondaryButton onClick={signOut}>Sair</SecondaryButton>
           </div>
         </section>
-      </main>
+      </WorkspaceShell>
     );
   }
 

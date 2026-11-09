@@ -6,7 +6,8 @@ import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { institutionName, workspaceNavigation, type WorkspaceView } from "./school-admin-demo.model";
+import { institutionName, workspaceNavigation } from "../lib/workspace-navigation";
+import type { WorkspaceView } from "./school-admin-demo.model";
 
 function NavigationIcon({ view }: { view: WorkspaceView | "menu" | "close" | "collapse" | "expand" | "signout" }) {
   const paths: Partial<Record<typeof view, ReactNode>> = {
@@ -104,7 +105,7 @@ export function WorkspaceShell({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
-          <span aria-label={`Ano lectivo ${year}`} className="text-xs font-semibold text-slate-600">{year}</span>
+          {year && <span aria-label={`Ano lectivo ${year}`} className="text-xs font-semibold text-slate-600">{year}</span>}
           <div className="lss-account-label text-right text-sm"><p className="font-semibold">{accountName}</p><p className="text-xs text-slate-500">{roleLabel}</p></div>
           <Tooltip title="Sair" arrow><IconButton onClick={onSignOut} aria-label="Sair"><NavigationIcon view="signout"/></IconButton></Tooltip>
         </div>

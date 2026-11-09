@@ -1,13 +1,17 @@
 import "./dom-environment";
 import assert from "node:assert/strict";
 import { after, afterEach, beforeEach, test } from "node:test";
-import { render, screen, fireEvent, waitFor, cleanup, within, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, within, act, configure } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
-import { SchoolAdminDemo } from "../app/components/school-admin-demo";
+import { WorkspaceEntry as SchoolAdminDemo } from "../app/components/workspace-entry";
 import { createDemoState, demoStorageKey } from "../app/features/demo/demo-state";
 import { domWindow } from "./dom-environment";
 import { prepareBilling } from "../app/features/finance/billing-commands";
 import type { WorkspaceView } from "../app/components/school-admin-demo.model";
+
+// The workspace is now imported only after session recognition. The cold import
+// includes TSX transformation in Node; these tests assert results, not load time.
+configure({ asyncUtilTimeout: 5000 });
 
 class TestStorage {
   values = new Map<string, string>();
@@ -281,7 +285,8 @@ test("falha ao preparar a primeira utilização não apresenta sucesso nem entra
   open();
   await screen.findByRole("heading", { name: "Não foi possível abrir os dados" });
   assert.equal(storage.getItem(demoStorageKey), null);
-  assert.equal(screen.queryByRole("heading", { level: 1, name: "Início" }), null);
+  assert.equal(screen.queryByRole("searchbox"), null);
+  assert.doesNotMatch(document.body.textContent ?? "", /0 alunos|Nenhum aluno/);
 });
 
 test("layout partilhado conserva pesquisa, selecção e rascunho entre áreas", async () => {
@@ -365,6 +370,7 @@ test("Drawer fecha por Escape, por destino e por toque fora, devolvendo o foco",
   storage.values.set("lss-demo-sidebar-collapsed", "true");
   open();
   await screen.findByRole("heading", { level: 1, name: "Início" });
+  await screen.findByRole("heading", { name: "Atendimento" });
   const trigger = screen.getByRole("button", { name: "Abrir menu" });
   act(() => trigger.focus());
   fireEvent.click(trigger);

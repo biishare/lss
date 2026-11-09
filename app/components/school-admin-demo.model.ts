@@ -344,8 +344,7 @@ export type StoredDemoState = {
 };
 
 export const storageKey = "gestao-academica-demo-state-v2";
-export const institutionName = "Liceu São Silvestre";
-export const institutionLogoText = "LSS";
+export { institutionName, institutionLogoText, workspaceNavigation } from "../lib/workspace-navigation";
 
 export type ProfileConfig = {
   id: ProfileId;
@@ -373,19 +372,6 @@ export const profiles: ProfileConfig[] = [
     accent: "border-t-[#2867d8]",
     surface: "bg-blue-50 text-[#2459bd]",
   },
-];
-
-export const workspaceNavigation: Array<{
-  id: WorkspaceView;
-  label: string;
-  href: string;
-  profiles: ProfileId[];
-}> = [
-  { id: "overview", label: "Início", href: "/dashboard", profiles: ["director", "secretaria"] },
-  { id: "enrollments", label: "Alunos e turmas", href: "/students", profiles: ["director", "secretaria"] },
-  { id: "payments", label: "Pagamentos", href: "/payments", profiles: ["director", "secretaria"] },
-  { id: "reports", label: "Relatórios", href: "/reports", profiles: ["director", "secretaria"] },
-  { id: "catalog", label: "Configurações", href: "/settings", profiles: ["director", "secretaria"] },
 ];
 
 export const paymentSections: Array<{
