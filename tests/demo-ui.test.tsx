@@ -6,6 +6,7 @@ import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/a
 import { SchoolAdminDemo } from "../app/components/school-admin-demo";
 import { createDemoState, demoStorageKey } from "../app/features/demo/demo-state";
 import { domWindow } from "./dom-environment";
+import { prepareBilling } from "../app/features/finance/billing-commands";
 import type { WorkspaceView } from "../app/components/school-admin-demo.model";
 
 class TestStorage {
@@ -34,7 +35,8 @@ const router: AppRouterInstance = {
 beforeEach(() => {
   window.history.replaceState(null, "", "/");
   storage = new TestStorage();
-  const seed = createDemoState("example", { now: "2026-11-08T12:00:00.000Z", datasetId: "ui-scenario" });
+  const initial = createDemoState("example", { now: "2026-11-08T12:00:00.000Z", datasetId: "ui-scenario" });
+  const seed = { ...initial, ...prepareBilling(initial, "2026-11-08T12:00:00.000Z") };
   storage.values.set(demoStorageKey, JSON.stringify({ ...seed, revision: 1 }));
   Object.defineProperty(window, "localStorage", { value: storage, configurable: true });
   window.sessionStorage.clear();
@@ -60,17 +62,18 @@ test("falha de pagamento mantém formulário e dados; nova tentativa emite um re
   open("payments");
   await screen.findByRole("button", { name: "Planilha financeira" });
   fireEvent.click(screen.getByRole("button", { name: "Planilha financeira" }));
+  fireEvent.change(screen.getByLabelText("Mes da mensalidade"), { target: { value: "jun" } });
   const amount = screen.getByLabelText("Valor recebido") as HTMLInputElement;
   fireEvent.change(amount, { target: { value: "1000" } });
   const raw = storage.getItem(demoStorageKey);
   storage.failed = true;
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar pagamento" }));
+  fireEvent.submit(screen.getByRole("button", { name: "Confirmar pagamento" }).closest("form")!);
   await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /Não foi possível guardar/));
   assert.equal(amount.value, "1000");
   assert.equal(storage.getItem(demoStorageKey), raw);
   assert.equal(screen.queryByRole("dialog"), null);
   storage.failed = false;
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar pagamento" }));
+  fireEvent.submit(screen.getByRole("button", { name: "Confirmar pagamento" }).closest("form")!);
   const dialog = await screen.findByRole("dialog");
   assert.match(dialog.textContent ?? "", /Recibo REC-/);
   assert.equal(storage.financialWrites, 1);
@@ -150,7 +153,7 @@ test("outra aba invalida a prévia e não emite recibo", async () => {
   current.revision++;
   storage.values.set(demoStorageKey, JSON.stringify(current));
   const raw = storage.getItem(demoStorageKey);
-  fireEvent.click(screen.getByRole("button", { name: "Confirmar pagamento" }));
+  fireEvent.submit(screen.getByRole("button", { name: "Confirmar pagamento" }).closest("form")!);
   await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /noutra aba/));
   assert.equal(storage.getItem(demoStorageKey), raw);
   assert.equal(screen.queryByRole("dialog"), null);

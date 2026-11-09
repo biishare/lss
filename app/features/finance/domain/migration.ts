@@ -530,7 +530,7 @@ function buildRuleVersions(
     ]),
   );
 
-  return [...keys]
+  const defaults: PaymentRuleVersion[] = [...keys]
     .filter((key) => !key.includes("undefined"))
     .sort()
     .map((key) => {
@@ -564,6 +564,7 @@ function buildRuleVersions(
         validFrom: `${academicYearId}-01-01`,
       };
     });
+  return [...existingRules, ...defaults.filter((rule) => !existingRules.some((item) => item.id === rule.id))];
 }
 
 function discountPercentForStudentMonth(student: Student, monthKey: string) {
@@ -814,7 +815,7 @@ function buildFinanceBook(
       }
     };
 
-    financialAid.push(...buildFinancialAid(context));
+    financialAid.push(...(record.billingVersion === 3 ? record.financialAid ?? [] : buildFinancialAid(context)));
 
     safeArray(record.charges).forEach((charge) => {
       registerCharge(
@@ -823,9 +824,9 @@ function buildFinanceBook(
           kind: charge.category === "miscellaneous" ? "miscellaneous" : charge.category,
           description: charge.description,
           baseAmount: charge.baseAmount ?? charge.snapshot?.originalAmount ?? charge.amount,
-          discountPercent: charge.snapshot?.discountPercent,
-          discountAmount: charge.discountAmount ?? charge.snapshot?.discountAmount,
-          dueAmount: charge.dueAmount ?? charge.amount,
+          discountPercent: charge.adjustedBenefit?.percent ?? charge.snapshot?.discountPercent,
+          discountAmount: charge.adjustedDueAmount !== undefined && !charge.academicCancellation ? roundMoney((charge.baseAmount ?? charge.amount) - charge.adjustedDueAmount) : charge.discountAmount ?? charge.snapshot?.discountAmount,
+          dueAmount: charge.adjustedDueAmount ?? charge.dueAmount ?? charge.amount,
           monthKey: charge.monthKey,
           dueOn: charge.dueOn,
           createdAt: charge.createdAt,
@@ -837,7 +838,7 @@ function buildFinanceBook(
       );
     });
 
-    if (!chargeById.has(registrationChargeId(context.student.id))) {
+    if (record.billingVersion !== 3 && !chargeById.has(registrationChargeId(context.student.id))) {
       registerCharge(
         createCharge(context, settings, {
           id: registrationChargeId(context.student.id),
@@ -853,6 +854,7 @@ function buildFinanceBook(
     }
 
     getMonthsInRange(settings.startMonth, settings.endMonth).forEach((month) => {
+      if (record.billingVersion === 3) return;
       if (!isTuitionApplicable(context.student, month.key, settings)) {
         return;
       }
@@ -894,16 +896,17 @@ function buildFinanceBook(
         enrollmentId: context.enrollmentId,
         academicYearId: context.academicYearId,
         stage: penalty.stage,
-        amount: penalty.amount,
+        amount: penalty.adjustedAmount ?? penalty.amount,
         createdAt: penalty.createdAt,
         snapshot: {
           thresholdDay: penalty.snapshot.thresholdDay,
           percent: penalty.snapshot.percent,
-          fixedAmount: penalty.amount,
+          fixedAmount: penalty.adjustedAmount ?? penalty.amount,
         },
       });
     });
 
+    for (const adjustment of record.financialAdjustments ?? []) auditEvents.push({ id: `AUD-${adjustment.id}`, entityId: adjustment.chargeId, type: "correction", occurredAt: adjustment.recordedAt, recordedBy: adjustment.recordedBy, detail: `${adjustment.reason}: ${adjustment.previousAmount} → ${adjustment.nextAmount}; ${adjustment.evidenceReference ?? ""}` });
     safeArray(record.corrections).forEach((correction) => {
       auditEvents.push({
         id: `AUD-${correction.id}`,

@@ -2196,6 +2196,7 @@ export function PaymentForm({
             onChange={(event) => onChange({ ...draft, amount: event.target.value })}
             className={inputClasses()}
             min="0"
+            step="0.01"
             type="number"
           />
         </FieldLabel>
@@ -2209,6 +2210,11 @@ export function PaymentForm({
             type="date"
           />
         </FieldLabel>
+        {draft.paidOn && draft.paidOn < today() && <>
+          <FieldLabel label="Comprovativo / evidência"><input className={inputClasses()} value={draft.evidenceReference ?? ""} onChange={(event) => onChange({ ...draft, evidenceReference: event.target.value })} /></FieldLabel>
+          <FieldLabel label="Motivo da apresentação posterior"><input className={inputClasses()} value={draft.lateReason ?? ""} onChange={(event) => onChange({ ...draft, lateReason: event.target.value })} /></FieldLabel>
+        </>}
+
 
         {effectiveDateFuture && (
           <p className="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-rose-100">
@@ -3015,6 +3021,7 @@ export function MiscellaneousChargeForm({
             onChange={(event) => onChange({ ...draft, amount: event.target.value })}
             className={inputClasses()}
             min="0"
+            step="0.01"
             type="number"
           />
         </FieldLabel>

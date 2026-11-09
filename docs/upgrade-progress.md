@@ -14,7 +14,7 @@ previam PostgreSQL e servidor nesta etapa.
 | 1 - Dados e serviços fiáveis | Parcial face à v3 integral; âmbito local entregue na main | Snapshot v3, validação, revisão, comandos, recuperação, recibo persistido e rascunhos. Base central, transacções e backups adiados para a API. |
 | 2 - Login, MUI e navegação | Parte local implementada; fase integral parcial | Login e navegação de apresentação com cinco áreas. Autenticação/recuperação/autorização reais adiadas. Revisão visual pendente. |
 | 3 - Alunos e estrutura | Implementada e validada no âmbito local; revisão visual pendente | Ficha permanente, matrículas anuais, configuração guiada, vagas, pautas, rascunhos, renovação, transferência e saída. Validação de servidor aguarda a API. |
-| 4 - Regras e cobranças | Pendente | Emissão, benefícios, dinheiro exacto e multas conforme v3. |
+| 4 - Regras e cobranças | Implementada no âmbito local; revisão visual pendente | Vigências por nível, calendário/emissão automática, benefícios com prévia, dinheiro exacto e multas v3; legado preservado. Entrega em branch para revisão. |
 | 5 - Atendimento, crédito e recibos | Pendente | Modal completo, conferência, crédito, devoluções e série de recibos. |
 | 6 - Relatórios, caixa e continuidade | Pendente | Totais detalháveis, CSV/PDF, caixa e fechos; backups centrais para a API. |
 | 7 - Validar, apresentar e preparar piloto | Pendente | Matriz de aceitação, ensaio de atendimento e critérios de piloto/servidor. |
@@ -164,7 +164,13 @@ A experiência permanece normal para o cliente, sem rótulos de demo ou pormenor
 
 Ver [registo detalhado e limites](phase-3-2026-11-08.md). Validação: 107 testes aprovados (75 domínio/persistência e 32 UI), TypeScript, lint sem avisos, diff check e build aprovados. O primeiro envio foi bloqueado pela revisão automática. O utilizador autorizou posteriormente a integração com «Pode colocar no main», incluindo envio para `biishare/lss`, PR e publicação ligada à Vercel. A integração e o deploy devem ser confirmados externamente. Os critérios de servidor/piloto continuam pendentes da API.
 
-## Evidência histórica
+## Fase 4 — Regras e cobranças
+
+Branch `codex/lss-v3-rules-lifecycle`, baseada na `main` `7c12939`. Regras por ano/nível, calendário individual, emissão automática sem comando mensal, antecipação atómica, benefícios explícitos, maior desconto elegível, ajustamentos retroactivos/crédito, cêntimos exactos, Clock Africa/Maputo, multa simples e segunda etapa opcional. Prova tardia conserva multa original, exige evidência/motivo e ajusta a distribuição final. Novas vigências e transferências não reescrevem emitidas/recibos. O Director mantém consulta. Não foi criada API ou base real.
+
+Ver [registo detalhado e limites](phase-4-2026-11-08.md). `npm test`: 135 aprovados (98 domínio/persistência e 37 UI); zero falhas. TypeScript, lint sem avisos, `git diff --check` e build de produção aprovados. A revisão visual em navegador permanece pendente porque o lançador de prévia fornece opções Vite a `next dev`.
+
+## Evidência histórica anterior
 
 A implementação anterior declarava as oito fases da demo v2 concluídas e tinha
 29 testes aprovados. O [diagnóstico de 08/11/2026](diagnostico-demo-v2-2026-11-08.md)

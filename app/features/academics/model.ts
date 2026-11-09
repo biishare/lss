@@ -37,6 +37,7 @@ export type AcademicState = {
 };
 
 export type EnrollmentInput = {
+  benefitAppliesToRegistration?: boolean;
   personId?: string; fullName: string; guardianName: string; guardianPhone: string;
   yearId: string; groupId: string; enrolledOn: string; tuitionStartMonth: string;
   financeStatus: "regular" | "scholarship" | "partial_scholarship" | "exception";
@@ -50,7 +51,7 @@ export function isEnrollmentInput(value: unknown): value is EnrollmentInput {
   return ["fullName", "guardianName", "guardianPhone", "yearId", "groupId", "enrolledOn", "tuitionStartMonth", "benefitStart", "benefitEnd", "benefitReason"].every((key) => typeof data[key] === "string")
     && ["regular", "scholarship", "partial_scholarship", "exception"].includes(String(data.financeStatus))
     && typeof data.discountPercent === "number" && Number.isFinite(data.discountPercent) && data.discountPercent >= 0 && data.discountPercent <= 100
-    && typeof data.duplicateReviewed === "boolean" && (data.personId === undefined || typeof data.personId === "string");
+    && typeof data.duplicateReviewed === "boolean" && (data.benefitAppliesToRegistration === undefined || typeof data.benefitAppliesToRegistration === "boolean") && (data.personId === undefined || typeof data.personId === "string");
 }
 
 export function textKey(value: string) {
@@ -192,6 +193,7 @@ export function projectStudents(state: DemoState, academic: AcademicState, asOf:
       enrollmentStatus: enrollment.status, tuitionEndMonth: enrollment.endsOn ? monthOptions[Number(enrollment.endsOn.slice(5, 7)) - 1].key : undefined,
       billingMonths: academic.years.find((year) => year.id === enrollment.yearId)?.billingMonths,
       ...(placement ? { classId: placement.classId, groupId: placement.groupId, stableNumber: placement.rosterNumber,
+        pricingLevelId: state.classDefinitions.find((item) => item.id === (state.classes.find((item) => item.id === placement.classId)?.definitionId ?? state.classes.find((item) => item.id === placement.classId)?.educationLevelId ?? placement.classId))?.stageId,
         educationLevelId: state.classes.find((item) => item.id === placement.classId)?.educationLevelId ?? placement.classId } : {}),
     };
   });

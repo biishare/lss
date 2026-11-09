@@ -105,5 +105,10 @@ ficha/separador/ano/página ao regressar ou recarregar. Guardar e pagar abre a
 inscrição correcta num Dialog; operações e recibo usam o repositório comum.
 
 O [registo da fase 3](docs/phase-3-2026-11-08.md) descreve compatibilidade, 107
-testes, medições sintéticas e limites. A revisão visual completa, as vigências
-financeiras da fase 4 e os requisitos centrais da API continuam separados.
+testes, medições sintéticas e limites.
+
+A [fase 4](docs/phase-4-2026-11-08.md) acrescenta regras por vigência/nível,
+calendário e emissão automática, benefícios com prévia e ajustamentos,
+dinheiro exacto e multas simples com segunda etapa opcional. As cobranças e
+os recibos anteriores conservam os originais. A revisão visual completa,
+o atendimento da fase 5 e os requisitos centrais da API continuam separados.
