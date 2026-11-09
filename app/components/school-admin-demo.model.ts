@@ -176,6 +176,10 @@ export type PaymentCorrectionDraft = {
 };
 
 export type PaymentLaunchDraft = {
+  primaryAllocationAmount?: string;
+  additionalTargets?: Array<{ studentId: string; chargeId: string; amount?: string }>;
+  selectedChargeIds?: string[];
+  creditOnly?: boolean;
   evidenceReference?: string;
   lateReason?: string;
   studentId: string;
@@ -257,6 +261,8 @@ export type DebtBreakdownItem = {
 };
 
 export type PaymentHistoryItem = {
+  kind?: Payment["kind"];
+  origin?: Payment["origin"];
   id: string;
   paidOn: string;
   effectivePaymentDate: string;
@@ -270,6 +276,7 @@ export type PaymentHistoryItem = {
 };
 
 export type PaymentAllocationPreviewItem = {
+  academicYearId?: string;
   chargeId: string;
   label: string;
   kind: "base" | "penalty";
@@ -292,6 +299,9 @@ export type PaymentPreview = {
 };
 
 export type PaymentReceipt = {
+  institution?: { id: string; name: string; contact: string; currency: "MT"; timezone: "Africa/Maputo" };
+  academicYearId?: string;
+  replacesReceiptId?: string;
   id: string;
   studentId: string;
   studentName: string;
@@ -416,6 +426,8 @@ export const paymentMethods = [
   "Transferência",
   "Multicaixa",
   "Depósito bancário",
+  "M-Pesa",
+  "e-Mola",
 ];
 
 export const statusOptions: Array<{ value: EntityStatus; label: string }> = [
@@ -1097,9 +1109,10 @@ export function getChargePaymentEntry(
     0,
   );
   const relatedPayments = chargeAllocations
-    .map((allocation) =>
-      (record.payments ?? []).find((payment) => payment.id === allocation.paymentId),
-    )
+    .map((allocation) => {
+      const payment = (record.payments ?? []).find((payment) => payment.id === allocation.paymentId);
+      return payment && allocation.effectiveOn ? { ...payment, effectivePaymentDate: allocation.effectiveOn, method: "Crédito existente" } : payment;
+    })
     .filter((payment): payment is Payment => Boolean(payment))
     .sort((a, b) =>
       (a.effectivePaymentDate ?? a.paidOn).localeCompare(
@@ -2343,6 +2356,9 @@ export function distributeMonthlyPayment(
 }
 
 export type RecordStudentPaymentInput = {
+  allocationLimit?: number;
+  selectedChargeIds?: string[];
+  creditOnly?: boolean;
   record: StudentPaymentRecord;
   student: Student;
   months: MonthOption[];
@@ -2412,6 +2428,8 @@ function paymentAllocationTargets({
   targetChargeId,
   allowFutureAllocation,
   assessmentDate,
+  selectedChargeIds,
+  creditOnly,
 }: {
   record: StudentPaymentRecord;
   student: Student;
@@ -2422,6 +2440,8 @@ function paymentAllocationTargets({
   targetChargeId?: string;
   allowFutureAllocation: boolean;
   assessmentDate: string;
+  selectedChargeIds?: string[];
+  creditOnly?: boolean;
 }) {
   const targets: AllocationTarget[] = [];
   const targetIds = new Set<string>();
@@ -2462,13 +2482,22 @@ function paymentAllocationTargets({
 
   if (
     selectedCharge &&
-    (selectedCharge.category === "miscellaneous" ||
+    (record.billingVersion === 3 || selectedCharge.category === "miscellaneous" ||
       !isChargeFuture(selectedCharge, assessmentDate) ||
       allowFutureAllocation)
   ) {
     addBaseChargeWithPenalty(selectedCharge);
   }
 
+  if (creditOnly) return [];
+  if (selectedChargeIds !== undefined) {
+    for (const id of selectedChargeIds) {
+      const charge = record.charges.find((item) => item.id === id);
+      if (!charge || charge.studentId !== student.id) throw new Error("A cobrança adicional não pertence a este aluno.");
+      addBaseChargeWithPenalty(charge);
+    }
+    return targets;
+  }
   // Excess on the chosen item remains credit until another item is selected.
   if (record.billingVersion === 3) return targets;
   const overdueCharges = record.charges
@@ -2572,6 +2601,9 @@ export function previewStudentPayment({
   reference,
   description,
   allowFutureAllocation = false,
+  selectedChargeIds,
+  creditOnly = false,
+  allocationLimit,
 }: RecordStudentPaymentInput): PaymentPreview {
   const officialEffectivePaymentDate = effectivePaymentDate ?? paidOn;
   let nextRecord = normalizePaymentRecord(
@@ -2583,7 +2615,7 @@ export function previewStudentPayment({
     officialEffectivePaymentDate,
   );
   const normalizedAmount = roundMoney(Math.max(0, amount));
-  if (record.billingVersion === 3 && category !== "miscellaneous") {
+  if (record.billingVersion === 3 && category !== "miscellaneous" && !creditOnly) {
     const selected = record.billingCalendar?.find((item) => item.kind === category && (category === "registration" || item.monthKey === monthKey));
     if (selected && !nextRecord.charges.some((charge) => charge.id === selected.id) && allowFutureAllocation) {
       const charge = projectedCharge(student, selected, paymentRuleVersions, record.financialAid ?? [], recordedAt);
@@ -2608,7 +2640,7 @@ export function previewStudentPayment({
     payment.reference = legacyReference;
   }
 
-  if (category === "miscellaneous" && !targetChargeId) {
+  if (category === "miscellaneous" && !targetChargeId && !creditOnly) {
     const charge = createMiscellaneousCharge(
       nextRecord,
       student,
@@ -2634,8 +2666,10 @@ export function previewStudentPayment({
     targetChargeId,
     allowFutureAllocation,
     assessmentDate: officialEffectivePaymentDate,
+    selectedChargeIds,
+    creditOnly,
   });
-  let remaining = normalizedAmount;
+  let remaining = Math.min(normalizedAmount, allocationLimit ?? normalizedAmount);
   const allocations: Array<Omit<PaymentAllocation, "id">> = [];
   const items: PaymentAllocationPreviewItem[] = [];
 
@@ -2981,7 +3015,7 @@ export function buildLedger(
     normalizedRecord,
     registrationCharge.id,
   );
-  const totalReceived = normalizedRecord.payments.reduce(
+  const totalReceived = normalizedRecord.payments.filter((payment) => !payment.reversedBy && payment.kind !== "credit-application").reduce(
     (total, payment) => total + payment.amount,
     0,
   );
@@ -3128,7 +3162,7 @@ export function buildLedger(
       paid: totalReceived,
       balance: roundMoney(totalBalance),
       fine: roundMoney(totalFine),
-      carry: roundMoney(Math.max(0, totalReceived - totalAllocated)),
+      carry: roundMoney(Math.max(0, normalizedRecord.payments.filter((payment) => !payment.reversedBy).reduce((sum, payment) => sum + payment.amount, 0) - totalAllocated - (normalizedRecord.creditDebits ?? []).reduce((sum, debit) => sum + debit.amount, 0))),
       miscellaneous: miscellaneousPaid,
       overdueDebt: roundMoney(timing.overdueDebt),
       futureDue: roundMoney(timing.futureDue),
@@ -3376,6 +3410,7 @@ export function getPaymentsForCharges(
   return (record.payments ?? [])
     .filter((payment) => amountByPayment.has(payment.id))
     .map((payment) => ({
+      ...(payment.kind ? { kind: payment.kind, origin: payment.origin } : {}),
       id: payment.id,
       paidOn: payment.paidOn,
       effectivePaymentDate: payment.effectivePaymentDate ?? payment.paidOn,

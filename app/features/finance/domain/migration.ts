@@ -175,7 +175,7 @@ function legacyEntryAmount(entry: PaymentEntry | undefined) {
 
 function sumLegacyRecordPayments(record: StudentPaymentRecord) {
   if (safeArray(record.payments).length > 0) {
-    return safeArray(record.payments).reduce(
+    return safeArray(record.payments).filter((payment) => !payment.reversedBy && payment.kind !== "credit-application").reduce(
       (total, payment) => total + payment.amount,
       0,
     );
@@ -930,7 +930,7 @@ function buildFinanceBook(
           });
         }
 
-        payments.push(buildFinancePayment(payment, context, options.recordedBy));
+        payments.push({ ...buildFinancePayment(payment, context, options.recordedBy), kind: payment.kind, reversedBy: payment.reversedBy });
       });
 
       safeArray(record.allocations).forEach((allocation) => {

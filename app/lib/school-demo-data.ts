@@ -214,6 +214,10 @@ export type PenaltyCharge = {
 };
 
 export type Payment = {
+  kind?: "credit-application" | "replacement";
+  origin?: { studentId: string; paymentId: string; movementId: string };
+  reversedBy?: string;
+  replaces?: { studentId: string; paymentId: string };
   id: string;
   studentId: string;
   amount: number;
@@ -228,6 +232,7 @@ export type Payment = {
 };
 
 export type PaymentAllocation = {
+  effectiveOn?: string;
   id: string;
   paymentId: string;
   chargeId: string;
@@ -246,6 +251,8 @@ export type PaymentCorrection = {
 };
 
 export type StudentPaymentRecord = {
+  creditDebits?: import("../features/finance/service-model").CreditDebit[];
+  reversals?: import("../features/finance/service-model").PaymentReversal[];
   billingVersion?: 3;
   billingCalendar?: import("../features/finance/domain/entities").BillingCalendarItem[];
   financialAid?: import("../features/finance/domain/entities").FinancialAid[];

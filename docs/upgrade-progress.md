@@ -14,8 +14,8 @@ previam PostgreSQL e servidor nesta etapa.
 | 1 - Dados e serviços fiáveis | Parcial face à v3 integral; âmbito local entregue na main | Snapshot v3, validação, revisão, comandos, recuperação, recibo persistido e rascunhos. Base central, transacções e backups adiados para a API. |
 | 2 - Login, MUI e navegação | Parte local implementada; fase integral parcial | Login e navegação de apresentação com cinco áreas. Autenticação/recuperação/autorização reais adiadas. Revisão visual pendente. |
 | 3 - Alunos e estrutura | Implementada e validada no âmbito local; revisão visual pendente | Ficha permanente, matrículas anuais, configuração guiada, vagas, pautas, rascunhos, renovação, transferência e saída. Validação de servidor aguarda a API. |
-| 4 - Regras e cobranças | Implementada no âmbito local; revisão visual pendente | Vigências por nível, calendário/emissão automática, benefícios com prévia, dinheiro exacto e multas v3; legado preservado. Entrega em branch para revisão. |
-| 5 - Atendimento, crédito e recibos | Pendente | Modal completo, conferência, crédito, devoluções e série de recibos. |
+| 4 - Regras e cobranças | Implementada no âmbito local; revisão visual pendente | Vigências por nível, calendário/emissão automática, benefícios com prévia, dinheiro exacto e multas v3; legado preservado. Integrada na main pela PR #7 (`88e1fea`). |
+| 5 - Atendimento, crédito e recibos | Implementada e validada no âmbito local; revisão visual pendente | Pagamento e recibo no mesmo Dialog, Mês/Trimestre/Ano, conferência, crédito entre anos, correcções e devoluções. Entrega em branch para revisão. |
 | 6 - Relatórios, caixa e continuidade | Pendente | Totais detalháveis, CSV/PDF, caixa e fechos; backups centrais para a API. |
 | 7 - Validar, apresentar e preparar piloto | Pendente | Matriz de aceitação, ensaio de atendimento e critérios de piloto/servidor. |
 
@@ -176,3 +176,45 @@ A implementação anterior declarava as oito fases da demo v2 concluídas e tinh
 29 testes aprovados. O [diagnóstico de 08/11/2026](diagnostico-demo-v2-2026-11-08.md)
 confirmou diferenças de persistência, UI e cálculos; a tabela actual acima
 substitui essa marcação histórica como estado de execução.
+
+## Fase 5 — Atendimento, crédito e recibos
+
+Branch `codex/lss-v3-service-credit-receipts`, criada da `main` `88e1fea`
+(PR #7 já integrada e publicada). Referência: fase 5 da especificação mesclada
+v3 acordada, incluindo as decisões posteriores de apresentação normal e API dedicada futura.
+
+- Formulário permanente retirado; ficha, Guardar e pagar e planilha usam o mesmo
+  Dialog com prévia, pagamento, recibo, impressão/PDF e retorno ao contexto.
+- Períodos Mês/Trimestre/Ano recuperáveis no URL; filtros, pesquisa privada,
+  selecção, scroll e foco da célula conservados. Resumos compactos e ficha
+  acessível a partir do nome.
+- Distribuição explícita, incluindo valores por cobrança e anos distintos da
+  mesma pessoa. Parciais, antecipação, crédito puro e excedente separados.
+- Comprovativos em análise não liquidam saldos; conferência/rejeição guardam
+  evidência, decisão e autor. Referência repetida é recusada. Novo cenário de
+  exemplo inclui um comprovativo consultável; cenários existentes não são repostos.
+- Crédito aplica sem novo recebimento, com origem/destino; devolução exige
+  valor disponível, data, forma e motivo. Correcção conserva original,
+  aplicações anteriores e recibo; substituto ligado conta uma única entrada física.
+- Recibos novos `LSS-<ano local de emissão>-<sequência>` guardam escola,
+  aluno, anos, distribuição e crédito num snapshot. A reimpressão usa esse
+  snapshot; estado anulado é apresentado sem reescrever os valores originais.
+- Operações, referências, reenvio, falha de escrita, conflito de revisão e
+  importação das extensões passam pelo mesmo repositório local. O espelho
+  financeiro exclui transferências de crédito e estornados do recebido físico.
+
+Validação: **158 testes aprovados** (112 domínio/persistência e 46 UI), zero
+falhas. TypeScript, lint sem avisos, diff check e build de produção aprovados.
+O registo [phase-5-2026-11-09.md](phase-5-2026-11-09.md) detalha a cobertura e
+os limites, incluindo impressão/teclado/mobile ainda sem ensaio real.
+
+A tentativa de prévia com `sites-preview start` terminou em `unknown option
+'--host'`: o lançador acrescenta opções Vite ao `next dev`. `sites-preview status`
+confirmou a prévia parada. Não se alteraram scripts da aplicação ou rede para
+contornar o lançador. Os testes DOM verificam as interacções, não as oito
+larguras nem a impressão do navegador.
+
+A correcção de uma origem cujo crédito já saiu para outro ano ou foi devolvido
+fica bloqueada para revisão dos movimentos associados. Não há estorno
+silencioso desses movimentos. A API central, segurança real, fechos/relatórios
+completos e piloto mantêm os âmbitos das fases seguintes.

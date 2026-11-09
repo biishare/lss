@@ -163,6 +163,8 @@ export type PenaltyCharge = {
 };
 
 export type FinancePayment = {
+  kind?: "credit-application" | "replacement";
+  reversedBy?: string;
   id: string;
   studentId: string;
   enrollmentId: string;

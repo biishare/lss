@@ -430,3 +430,23 @@ textarea:focus-visible,
 .lss-workspace[data-expanded="true"] .lss-shell-grid { grid-template-columns: minmax(0, 1fr); }
 .lss-workspace[data-expanded="true"] .lss-workspace-sidebar,
 .lss-workspace[data-expanded="true"] [data-workspace-secondary] { display: none; }
+
+@media print {
+  body:has(.lss-receipt-print) * { visibility: hidden !important; }
+  body .lss-receipt-print, body .lss-receipt-print * { visibility: visible !important; }
+  body:has(.lss-receipt-print) .MuiDialog-root,
+  body:has(.lss-receipt-print) .MuiDialog-container,
+  body:has(.lss-receipt-print) .MuiDialog-paper,
+  body:has(.lss-receipt-print) .MuiDialogContent-root {
+    position: static !important; display: block !important; transform: none !important;
+    overflow: visible !important; width: 100% !important; max-width: none !important;
+    height: auto !important; max-height: none !important; margin: 0 !important;
+    padding: 0 !important; box-shadow: none !important; border: 0 !important;
+  }
+  body:has(.lss-receipt-print) .MuiBackdrop-root,
+  body:has(.lss-receipt-print) .MuiDialogTitle-root,
+  body:has(.lss-receipt-print) .MuiDialogActions-root,
+  body:has(.lss-receipt-print) .lss-workspace { display: none !important; }
+  .lss-receipt-print { position: absolute !important; inset: 0 auto auto 0; width: 100%; padding: 10mm !important; color: black !important; }
+  .lss-receipt-print tr { break-inside: avoid; }
+}

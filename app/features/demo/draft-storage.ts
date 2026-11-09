@@ -14,6 +14,14 @@ export type DemoDrafts = {
 const paymentStrings = ["studentId", "category", "monthKey", "targetChargeId", "amount", "paidOn", "method", "description"];
 const enrollmentStrings = ["fullName", "guardianName", "guardianPhone", "enrollmentType", "enrollmentDate", "tuitionStartMonth", "financeStatus", "discountPercent", "exceptionStartMonth", "exceptionEndMonth", "exceptionReason", "classId", "groupId"];
 
+function validPaymentExtensions(value: Record<string, unknown>) {
+  if (value.creditOnly !== undefined && typeof value.creditOnly !== "boolean") return false;
+  for (const key of ["evidenceReference", "lateReason", "reference", "primaryAllocationAmount"]) if (value[key] !== undefined && typeof value[key] !== "string") return false;
+  if (value.selectedChargeIds !== undefined && (!Array.isArray(value.selectedChargeIds) || value.selectedChargeIds.length > 2000 || value.selectedChargeIds.some((id) => typeof id !== "string"))) return false;
+  if (value.additionalTargets !== undefined && (!Array.isArray(value.additionalTargets) || value.additionalTargets.length > 2000 || value.additionalTargets.some((target) => !isObject(target) || typeof target.studentId !== "string" || typeof target.chargeId !== "string" || (target.amount !== undefined && typeof target.amount !== "string")))) return false;
+  return true;
+}
+
 export function readDemoDrafts(storage: DemoStorage, datasetId: string): DemoDrafts | null {
   try {
     const raw = storage.getItem(demoDraftKey);
@@ -22,7 +30,7 @@ export function readDemoDrafts(storage: DemoStorage, datasetId: string): DemoDra
     if (!isObject(value) || value.version !== 1 || value.datasetId !== datasetId ||
         !isObject(value.payment) || !isObject(value.enrollment)) return null;
     const payment = value.payment, enrollment = value.enrollment;
-    if (paymentStrings.some((key) => typeof payment[key] !== "string") ||
+    if (!validPaymentExtensions(payment) || paymentStrings.some((key) => typeof payment[key] !== "string") ||
         enrollmentStrings.some((key) => typeof enrollment[key] !== "string") ||
         typeof payment.allowFutureAllocation !== "boolean" ||
         !["registration", "tuition", "miscellaneous"].includes(String(payment.category)) ||
@@ -34,7 +42,7 @@ export function readDemoDrafts(storage: DemoStorage, datasetId: string): DemoDra
       for (const [year, entry] of Object.entries(value.paymentByYear)) {
         if (!/^\d{4}$/.test(year) || !isObject(entry) || !isObject(entry.payment) ||
             paymentStrings.some((key) => typeof (entry.payment as Record<string, unknown>)[key] !== "string") ||
-            typeof entry.payment.allowFutureAllocation !== "boolean" ||
+            !validPaymentExtensions(entry.payment) || typeof entry.payment.allowFutureAllocation !== "boolean" ||
             (entry.paymentCommandId !== null && typeof entry.paymentCommandId !== "string")) return null;
       }
     }

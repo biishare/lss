@@ -111,3 +111,29 @@ O nome abre a ficha permanente. Dados/contactos corrigidos pedem motivo e mantê
 A ficha reúne todos os anos. **Abrir pagamentos de [ano]** leva à planilha com o ano, classe e turma correspondentes. Comprovativos mostra os pagamentos/referências e recibos já guardados; não inventa recibos de movimentos antigos sem snapshot. A gestão completa de conferência/anexos, crédito/devolução e impressão pertence à fase 5.
 
 Os calendários desta etapa usam os meses de um ano civil identificado por quatro algarismos. A vigência de novos preços por nível, emissão automática e precisão/multas completas continuam para a fase 4. Contas reais e validação central/concorrência entre postos dependem da API posterior.
+
+## Atendimento da fase 5
+
+Em Pagamentos, escolha turma/período e abra uma célula ou Registar pagamento.
+Confirme a distribuição antes de guardar; o recibo surge no mesmo Dialog.
+Fechar conserva o contexto. Imprimir / Guardar PDF usa o documento guardado;
+repetir impressão não recebe dinheiro novamente.
+
+Acrescentar outras cobranças permite distribuir um valor por anos da mesma
+pessoa. Indique montantes por item quando necessário; o excedente fica em
+crédito. Receber apenas crédito exige seleccionar esse destino.
+
+Consultar movimentos reúne comprovativos, recibos, origens de crédito e
+histórico. Guardar para conferência mantém a dívida; confirmar exige comparar
+referência, data e valor com a evidência. Rejeitar conserva a decisão. O cenário
+inicial novo inclui `DEP-2026-008` para ensaiar essa consulta.
+
+Aplicar crédito e Registar devolução mostram o efeito antes de guardar e
+recusam exceder o saldo. Corrigir recebimento preserva o original e liga um
+substituto, sem duplicar a entrada física. Se o crédito já saiu para outro ano
+ou foi devolvido, a correcção automática é bloqueada para revisão dos movimentos.
+Não apagar histórico nem editar o saldo para contornar esse bloqueio.
+
+Ver cobertura e limites em [phase-5-2026-11-09.md](phase-5-2026-11-09.md).
+Relatórios detalhados, fecho/caixa e continuidade fazem parte da fase 6;
+segurança e dados centrais aguardam a API dedicada.

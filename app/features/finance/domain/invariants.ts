@@ -37,7 +37,7 @@ export function summarizeFinanceBook(book: FinanceBook): FinanceBookTotals {
     (total, charge) => total + charge.amount,
     0,
   );
-  const paymentTotal = book.payments.reduce(
+  const paymentTotal = book.payments.filter((payment) => !payment.reversedBy && payment.kind !== "credit-application").reduce(
     (total, payment) => total + payment.amount,
     0,
   );

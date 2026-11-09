@@ -3,6 +3,7 @@ import type { PaymentAlertFilter, PaymentWorkspaceSection, WorkspaceView } from 
 export const workspaceContextKey = "lss-demo-workspace-v1";
 
 export type WorkspaceContext = {
+  paymentPeriod?: "month" | "term" | "year";
   yearId: string;
   personId: string;
   studentTab: string;
@@ -43,6 +44,7 @@ export function readWorkspaceContext(raw: string | null, datasetId: string): Par
       classId: typeof context.classId === "string" ? context.classId : "",
       groupId: typeof context.groupId === "string" ? context.groupId : "",
       month: typeof context.month === "string" ? context.month : "",
+      paymentPeriod: ["month", "term", "year"].includes(context.paymentPeriod) ? context.paymentPeriod : "year",
       paymentSection: sections.includes(context.paymentSection) ? context.paymentSection : "entry",
       alertFilter: alerts.includes(context.alertFilter) ? context.alertFilter : "all",
       search: typeof context.search === "string" ? context.search.slice(0, 500) : "",
@@ -68,6 +70,7 @@ export function contextFromLocation(path: string, query: string, fallback: Works
     classId: params.get("class") ?? fallback.classId,
     groupId: params.get("group") ?? fallback.groupId,
     month: params.get("month") ?? fallback.month,
+    paymentPeriod: ["month", "term", "year"].includes(params.get("period") ?? "") ? params.get("period") as "month" | "term" | "year" : fallback.paymentPeriod ?? "year",
     paymentSection: sections.includes(section) ? section : fallback.paymentSection,
     alertFilter: alerts.includes(alert) ? alert : fallback.alertFilter,
   };
@@ -110,6 +113,7 @@ export function workspaceUrl(context: WorkspaceContext, year: string): string {
   if (context.groupId) params.set("group", context.groupId);
   if (context.month) params.set("month", context.month);
   if (context.view === "payments") {
+    if (context.paymentPeriod && context.paymentPeriod !== "year") params.set("period", context.paymentPeriod);
     params.set("section", context.paymentSection);
     if (context.alertFilter !== "all") params.set("alert", context.alertFilter);
   }

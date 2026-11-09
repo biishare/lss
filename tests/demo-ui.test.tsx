@@ -62,20 +62,21 @@ test("falha de pagamento mantém formulário e dados; nova tentativa emite um re
   open("payments");
   await screen.findByRole("button", { name: "Planilha financeira" });
   fireEvent.click(screen.getByRole("button", { name: "Planilha financeira" }));
-  fireEvent.change(screen.getByLabelText("Mes da mensalidade"), { target: { value: "jun" } });
-  const amount = screen.getByLabelText("Valor recebido") as HTMLInputElement;
+  fireEvent.click(screen.getByRole("button", { name: /^Registar pagamento$/ }));
+  fireEvent.change(screen.getByLabelText("Mês da mensalidade"), { target: { value: "jun" } });
+  const amount = screen.getByLabelText(/^Valor recebido/) as HTMLInputElement;
   fireEvent.change(amount, { target: { value: "1000" } });
   const raw = storage.getItem(demoStorageKey);
   storage.failed = true;
-  fireEvent.submit(screen.getByRole("button", { name: "Confirmar pagamento" }).closest("form")!);
+  fireEvent.submit(document.getElementById("payment-service-form")!);
   await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /Não foi possível guardar/));
   assert.equal(amount.value, "1000");
   assert.equal(storage.getItem(demoStorageKey), raw);
-  assert.equal(screen.queryByRole("dialog"), null);
+  assert.ok(screen.getByRole("dialog"));
   storage.failed = false;
-  fireEvent.submit(screen.getByRole("button", { name: "Confirmar pagamento" }).closest("form")!);
+  fireEvent.submit(document.getElementById("payment-service-form")!);
   const dialog = await screen.findByRole("dialog");
-  assert.match(dialog.textContent ?? "", /Recibo REC-/);
+  assert.match(dialog.textContent ?? "", /Recibo LSS-/);
   assert.equal(storage.financialWrites, 1);
   const state = JSON.parse(storage.getItem(demoStorageKey)!);
   assert.equal(state.receipts.length, 1);
@@ -122,14 +123,16 @@ test("rascunho de pagamento é retomado ao reabrir sem alterar o cenário", asyn
   const page = open("payments");
   await screen.findByRole("button", { name: "Planilha financeira" });
   fireEvent.click(screen.getByRole("button", { name: "Planilha financeira" }));
-  fireEvent.change(screen.getByLabelText("Valor recebido"), { target: { value: "1234" } });
+  if (!screen.queryByRole("dialog")) fireEvent.click(screen.getByRole("button", { name: /^Registar pagamento$/ }));
+  fireEvent.change(screen.getByLabelText(/^Valor recebido/), { target: { value: "1234" } });
   // Navegar imediatamente também conserva o último valor, antes do temporizador.
   page.unmount();
   assert.match(window.sessionStorage.getItem("lss-demo-drafts-v1") ?? "", /1234/);
   open("payments");
   await screen.findByRole("button", { name: "Planilha financeira" });
   fireEvent.click(screen.getByRole("button", { name: "Planilha financeira" }));
-  assert.equal((screen.getByLabelText("Valor recebido") as HTMLInputElement).value, "1234");
+  if (!screen.queryByRole("dialog")) fireEvent.click(screen.getByRole("button", { name: /^Registar pagamento$/ }));
+  assert.equal((screen.getByLabelText(/^Valor recebido/) as HTMLInputElement).value, "1234");
   assert.equal(storage.financialWrites, 0);
 });
 
@@ -149,14 +152,16 @@ test("outra aba invalida a prévia e não emite recibo", async () => {
   open("payments");
   await screen.findByRole("button", { name: "Planilha financeira" });
   fireEvent.click(screen.getByRole("button", { name: "Planilha financeira" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Registar pagamento$/ }));
+  fireEvent.change(screen.getByLabelText("Mês da mensalidade"), { target: { value: "jun" } });
   const current = JSON.parse(storage.getItem(demoStorageKey)!);
   current.revision++;
   storage.values.set(demoStorageKey, JSON.stringify(current));
   const raw = storage.getItem(demoStorageKey);
-  fireEvent.submit(screen.getByRole("button", { name: "Confirmar pagamento" }).closest("form")!);
+  fireEvent.submit(document.getElementById("payment-service-form")!);
   await waitFor(() => assert.match(screen.getByRole("alert").textContent ?? "", /noutra aba/));
   assert.equal(storage.getItem(demoStorageKey), raw);
-  assert.equal(screen.queryByRole("dialog"), null);
+  assert.ok(screen.getByRole("dialog"));
 });
 
 test("preferência de menu é lida antes de qualquer gravação da preferência", async () => {
@@ -284,7 +289,9 @@ test("layout partilhado conserva pesquisa, selecção e rascunho entre áreas", 
   await screen.findByRole("heading", { name: "Planilha financeira da turma" });
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Ana" } });
   fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Ana Júlia Mucavele" }));
-  fireEvent.change(screen.getByLabelText("Valor recebido"), { target: { value: "1234" } });
+  if (!screen.queryByRole("dialog")) fireEvent.click(screen.getByRole("button", { name: /^Registar pagamento$/ }));
+  fireEvent.change(screen.getByLabelText(/^Valor recebido/), { target: { value: "1234" } });
+  if (screen.queryByRole("dialog")) fireEvent.click(screen.getByRole("button", { name: "Fechar e conservar preenchimento" }));
   fireEvent.click(mainNavigation().getByRole("button", { name: "Relatórios" }));
   await screen.findByRole("heading", { level: 1, name: "Relatórios" });
   assert.equal(window.location.pathname, "/reports");
@@ -293,7 +300,8 @@ test("layout partilhado conserva pesquisa, selecção e rascunho entre áreas", 
   await screen.findByRole("heading", { name: "Planilha financeira da turma" });
   assert.equal((screen.getByRole("searchbox") as HTMLInputElement).value, "Ana");
   assert.equal((screen.getByRole("checkbox", { name: "Seleccionar Ana Júlia Mucavele" }) as HTMLInputElement).checked, true);
-  assert.equal((screen.getByLabelText("Valor recebido") as HTMLInputElement).value, "1234");
+  if (!screen.queryByRole("dialog")) fireEvent.click(screen.getByRole("button", { name: /^Registar pagamento$/ }));
+  assert.equal((screen.getByLabelText(/^Valor recebido/) as HTMLInputElement).value, "1234");
   assert.equal(storage.financialWrites, 0);
 });
 
@@ -302,7 +310,9 @@ test("recarregar recupera classe, turma, pesquisa, selecção e rascunho da mesm
   await screen.findByRole("heading", { name: "Planilha financeira da turma" });
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Bruno" } });
   fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Bruno Ernesto Macamo" }));
-  fireEvent.change(screen.getByLabelText("Valor recebido"), { target: { value: "567" } });
+  if (!screen.queryByRole("dialog")) fireEvent.click(screen.getByRole("button", { name: /^Registar pagamento$/ }));
+  fireEvent.change(screen.getByLabelText(/^Valor recebido/), { target: { value: "567" } });
+  fireEvent.click(screen.getByRole("button", { name: "Fechar e conservar preenchimento" }));
   const href = window.location.href;
   page.unmount();
   open();
@@ -310,7 +320,8 @@ test("recarregar recupera classe, turma, pesquisa, selecção e rascunho da mesm
   assert.equal(window.location.href, href);
   assert.equal((screen.getByRole("searchbox") as HTMLInputElement).value, "Bruno");
   assert.equal((screen.getByRole("checkbox", { name: "Seleccionar Bruno Ernesto Macamo" }) as HTMLInputElement).checked, true);
-  assert.equal((screen.getByLabelText("Valor recebido") as HTMLInputElement).value, "567");
+  fireEvent.click(screen.getByRole("button", { name: /^Registar pagamento$/ }));
+  assert.equal((screen.getByLabelText(/^Valor recebido/) as HTMLInputElement).value, "567");
   assert.equal(storage.financialWrites, 0);
 });
 
@@ -318,6 +329,7 @@ test("Voltar e Avançar recuperam as áreas sem repor os dados ou perder o filtr
   open("payments");
   await screen.findByRole("heading", { name: "Planilha financeira da turma" });
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Ana" } });
+  if (screen.queryByRole("dialog")) fireEvent.click(screen.getByRole("button", { name: "Fechar e conservar preenchimento" }));
   fireEvent.click(mainNavigation().getByRole("button", { name: "Relatórios" }));
   await screen.findByRole("heading", { level: 1, name: "Relatórios" });
   await act(async () => { window.history.back(); });
@@ -333,7 +345,9 @@ test("vista expandida e Escape conservam a selecção, o formulário e a prefer�
   open("payments");
   await screen.findByRole("heading", { name: "Planilha financeira da turma" });
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Carla" } });
-  fireEvent.change(screen.getByLabelText("Valor recebido"), { target: { value: "987" } });
+  if (!screen.queryByRole("dialog")) fireEvent.click(screen.getByRole("button", { name: /^Registar pagamento$/ }));
+  fireEvent.change(screen.getByLabelText(/^Valor recebido/), { target: { value: "987" } });
+  fireEvent.click(screen.getByRole("button", { name: "Fechar e conservar preenchimento" }));
   const region = screen.getByRole("region", { name: "Tabela com deslocamento horizontal" });
   region.scrollLeft = 250;
   fireEvent.click(screen.getByRole("button", { name: "Expandir planilha" }));
@@ -342,7 +356,8 @@ test("vista expandida e Escape conservam a selecção, o formulário e a prefer�
   fireEvent.keyDown(window, { key: "Escape" });
   assert.ok(screen.getByRole("button", { name: "Expandir planilha" }));
   assert.equal((screen.getByRole("searchbox") as HTMLInputElement).value, "Carla");
-  assert.equal((screen.getByLabelText("Valor recebido") as HTMLInputElement).value, "987");
+  fireEvent.click(screen.getByRole("button", { name: /^Registar pagamento$/ }));
+  assert.equal((screen.getByLabelText(/^Valor recebido/) as HTMLInputElement).value, "987");
   assert.equal(storage.getItem("lss-demo-sidebar-collapsed"), "false");
 });
 
@@ -394,10 +409,45 @@ test("posição horizontal da planilha é restaurada depois de visitar outra ár
   const region = screen.getByRole("region", { name: "Tabela com deslocamento horizontal" });
   region.scrollLeft = 420;
   fireEvent.scroll(region);
+  if (screen.queryByRole("dialog")) fireEvent.click(screen.getByRole("button", { name: "Fechar e conservar preenchimento" }));
   fireEvent.click(mainNavigation().getByRole("button", { name: "Relatórios" }));
   await screen.findByRole("heading", { level: 1, name: "Relatórios" });
   fireEvent.click(mainNavigation().getByRole("button", { name: "Pagamentos" }));
   await screen.findByRole("heading", { name: "Planilha financeira da turma" });
   await waitFor(() => assert.equal(screen.getByRole("region", { name: "Tabela com deslocamento horizontal" }).scrollLeft, 420));
   assert.equal(storage.financialWrites, 0);
+});
+
+test("planilha abre sem formulário permanente e recupera Mês/Trimestre/Ano pelo URL", async () => {
+  const page = open("payments");
+  await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  assert.equal(screen.queryByLabelText(/^Valor recebido/), null);
+  const region = screen.getByRole("region", { name: "Tabela com deslocamento horizontal" });
+  const annualColumns = within(region).getAllByRole("columnheader").length;
+  fireEvent.change(screen.getByLabelText("Período da planilha"), { target: { value: "month" } });
+  assert.equal(within(region).getAllByRole("columnheader").length, annualColumns - 8);
+  assert.match(window.location.search, /period=month/);
+  fireEvent.change(screen.getByLabelText("Período da planilha"), { target: { value: "term" } });
+  assert.equal(within(region).getAllByRole("columnheader").length, annualColumns - 6);
+  page.unmount(); open(); await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  assert.equal((screen.getByLabelText("Período da planilha") as HTMLSelectElement).value, "term");
+  assert.equal(storage.financialWrites, 0);
+});
+test("célula, pagamento e recibo conservam filtro, selecção, scroll e foco na mesma célula", async () => {
+  open("payments"); await screen.findByRole("heading", { name: "Planilha financeira da turma" });
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Ana" } });
+  fireEvent.click(screen.getByRole("checkbox", { name: "Seleccionar Ana Júlia Mucavele" }));
+  const region = screen.getByRole("region", { name: "Tabela com deslocamento horizontal" }); region.scrollLeft = 450;
+  const trigger = screen.getByRole("button", { name: /Novembro.*Ana Júlia Mucavele/ });
+  act(() => trigger.focus()); fireEvent.click(trigger);
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Registar pagamento" }));
+  const paymentDialog = screen.getByRole("dialog"); assert.match(paymentDialog.textContent ?? "", /Ana Júlia Mucavele/);
+  fireEvent.change(screen.getByLabelText(/^Valor recebido/), { target: { value: "400" } });
+  fireEvent.submit(document.getElementById("payment-service-form")!);
+  await waitFor(() => assert.match(screen.getByRole("dialog").textContent ?? "", /Recibo LSS-/));
+  fireEvent.click(screen.getByRole("button", { name: /^Fechar$/ }));
+  await waitFor(() => assert.equal(document.activeElement, trigger));
+  assert.equal(region.scrollLeft, 450); assert.equal((screen.getByRole("searchbox") as HTMLInputElement).value, "Ana");
+  assert.equal((screen.getByRole("checkbox", { name: "Seleccionar Ana Júlia Mucavele" }) as HTMLInputElement).checked, true);
+  assert.equal(storage.financialWrites, 1);
 });

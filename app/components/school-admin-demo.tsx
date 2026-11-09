@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { PaymentDialog } from "../features/finance/payment-dialog";
+import { FinanceServicePanel } from "../features/finance/service-panel";
+import { executeService, type ServiceCommand } from "../features/finance/service-commands";
+import { pendingProofFor, receiptStatus, personCreditSources } from "../features/finance/service-model";
 import { RulesWorkspace } from "../features/finance/rules-workspace";
 import { executeBilling, synchronizeSchool, type BillingCommand } from "../features/finance/billing-commands";
 import {
@@ -38,7 +42,6 @@ import {
   buildPaymentRecord,
   buildPaymentRuleDraft,
   buildStudentFinanceProfile,
-  correctStudentPayment,
   createPaymentPolicyVersions,
   currentAcademicYear,
   cx,
@@ -74,7 +77,6 @@ import {
   paymentMethods,
   paymentSections,
   profiles,
-  previewStudentPayment,
   rowMatchesPaymentAlertFilter,
   roomById,
   roomLabel,
@@ -95,7 +97,6 @@ import {
   type FinanceSettingsDraft,
   type GroupDraft,
   type MiscellaneousChargeDraft,
-  type PaymentCorrectionDraft,
   type PaymentLaunchDraft,
   type PaymentReceipt,
   type PaymentRuleDraft,
@@ -128,8 +129,6 @@ import {
   GroupForm,
   MetricCard,
   MiscellaneousChargeForm,
-  PaymentCorrectionDialog,
-  PaymentForm,
   PaymentReceiptDialog,
   PaymentRuleDialog,
   PaymentRulesTable,
@@ -217,6 +216,10 @@ export function SchoolAdminDemo({
   const [draftStorageNotice, setDraftStorageNotice] = useState("");
   const repositoryRef = useRef<DemoRepository | null>(null);
   const paymentCommandRef = useRef<string | null>(null);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentAttemptId, setPaymentAttemptId] = useState<string | null>(null);
+  const paymentDraftEdited = useRef(false);
+  const financeTrigger = useRef<HTMLElement | null>(null);
   const paymentDraftsByYear = useRef<Record<string, { payment: PaymentLaunchDraft; paymentCommandId: string | null }>>({});
   const paymentDraftYear = useRef<string | null>(null);
   const [preferencesReady, setPreferencesReady] = useState(false);
@@ -341,12 +344,6 @@ export function SchoolAdminDemo({
   const [paymentReceipt, setPaymentReceipt] = useState<PaymentReceipt | null>(null);
   const [paymentCorrectionTarget, setPaymentCorrectionTarget] =
     useState<{ studentId: string; paymentId: string } | null>(null);
-  const [paymentCorrectionDraft, setPaymentCorrectionDraft] =
-    useState<PaymentCorrectionDraft>({
-      paymentId: "",
-      amount: "0",
-      reason: "",
-    });
   const [miscellaneousChargeDraft, setMiscellaneousChargeDraft] =
     useState<MiscellaneousChargeDraft>({
       type: "Prova",
@@ -483,7 +480,7 @@ export function SchoolAdminDemo({
         paymentDraftsByYear.current = drafts.paymentByYear ?? {};
         setPaymentDraft(drafts.payment);
         setEnrollmentDraft(drafts.enrollment);
-        paymentCommandRef.current = drafts.paymentCommandId;
+        paymentCommandRef.current = drafts.paymentCommandId; setPaymentAttemptId(drafts.paymentCommandId); paymentDraftEdited.current = true;
       }
       setStorageReady(true);
     }, 0);
@@ -513,7 +510,7 @@ export function SchoolAdminDemo({
       window.removeEventListener("pagehide", flush);
       flush();
     };
-  }, [storageReady, demoState, activeProfile, paymentDraft, enrollmentDraft]);
+  }, [storageReady, demoState, activeProfile, paymentDraft, enrollmentDraft, paymentAttemptId]);
 
   useEffect(() => {
     if (!storageReady || !demoState || activeProfile !== "secretaria" || !repositoryRef.current) return;
@@ -780,29 +777,23 @@ export function SchoolAdminDemo({
       (item) => item.month.key === billingMonthKey,
     );
 
-    return total + (month?.paid ?? 0);
+    return total + (month?.paid ?? 0) + (month?.finePaid ?? 0);
   }, 0);
   const selectedMonthBalance = paymentRows.reduce((total, row) => {
     const month = row.ledger.monthly.find(
       (item) => item.month.key === billingMonthKey,
     );
 
-    return total + (month?.balance ?? 0);
+    return total + (month?.balance ?? 0) + (month?.fineBalance ?? 0);
   }, 0);
-  const selectedMonthCarryOut = paymentRows.reduce((total, row) => {
-    const month = row.ledger.monthly.find(
-      (item) => item.month.key === billingMonthKey,
-    );
-
-    return total + (month?.carryOut ?? 0);
-  }, 0);
+  const selectedMonthCarryOut = paymentRows.reduce((total, row) => total + (demoState ? personCreditSources(demoState, row.student.id).reduce((sum, source) => sum + source.available, 0) : row.ledger.totals.carry), 0);
   const dashboardSummary = useMemo(() => {
     const monthRevenue = allPaymentRows.reduce((total, row) => {
       const month = row.ledger.monthly.find(
         (item) => item.month.key === billingMonthKey,
       );
 
-      return total + (month?.paid ?? 0);
+      return total + (month?.paid ?? 0) + (month?.finePaid ?? 0);
     }, 0);
     const totalDebt = allPaymentRows.reduce(
       (total, row) => total + getStudentDebt(row.ledger, row.record),
@@ -966,71 +957,6 @@ export function SchoolAdminDemo({
   const paymentAlerts = paymentAlertItems.filter((alert) => alert.count > 0);
   const selectedProfile =
     profiles.find((profile) => profile.id === activeProfile) ?? profiles[1];
-  const selectedPaymentStudentForDraft =
-    allStudentsAlphabetically.find(
-      (student) => student.id === paymentDraft.studentId,
-    ) ?? allStudentsAlphabetically[0];
-  const paymentRecordedAtPreview = nowIso();
-  const selectedPaymentPreview = useMemo(() => {
-    const amount = parseMoney(paymentDraft.amount);
-
-    if (!selectedPaymentStudentForDraft || amount <= 0 || !paymentDraft.paidOn) {
-      return undefined;
-    }
-
-    const existingRecord =
-      paymentRecords.find(
-        (record) => record.studentId === selectedPaymentStudentForDraft.id,
-      ) ?? buildPaymentRecord(selectedPaymentStudentForDraft.id);
-
-    return previewStudentPayment({
-      record: existingRecord,
-      student: selectedPaymentStudentForDraft,
-      months: paymentMonths,
-      settings: paymentSettings,
-      paymentRuleVersions: effectivePaymentRuleVersions,
-      category: paymentDraft.category,
-      monthKey: paymentDraft.monthKey,
-      targetChargeId: paymentDraft.targetChargeId,
-      amount,
-      paidOn: paymentDraft.paidOn,
-      effectivePaymentDate: paymentDraft.paidOn,
-      recordedAt: paymentRecordedAtPreview,
-      recordedBy: selectedProfile.title,
-      method: paymentDraft.method,
-      description: paymentDraft.description.trim(),
-      allowFutureAllocation: paymentDraft.allowFutureAllocation,
-    });
-  }, [
-    effectivePaymentRuleVersions,
-    paymentDraft,
-    paymentMonths,
-    paymentRecords,
-    paymentRecordedAtPreview,
-    paymentSettings,
-    selectedPaymentStudentForDraft,
-    selectedProfile.title,
-  ]);
-  const paymentCorrectionRow = paymentCorrectionTarget
-    ? allPaymentRows.find((row) => row.student.id === paymentCorrectionTarget.studentId)
-    : undefined;
-  const paymentCorrectionPayment = paymentCorrectionTarget
-    ? paymentCorrectionRow?.record.payments.find(
-        (payment) => payment.id === paymentCorrectionTarget.paymentId,
-      )
-    : undefined;
-  const paymentCorrectionMaxAmount = paymentCorrectionPayment
-    ? (() => {
-        const allocated =
-          paymentCorrectionRow?.record.allocations
-            .filter((allocation) => allocation.paymentId === paymentCorrectionPayment.id)
-            .reduce((total, allocation) => total + allocation.amount, 0) ?? 0;
-
-        return allocated > 0 ? allocated : paymentCorrectionPayment.amount;
-      })()
-    : 0;
-  const paymentCorrectionRecordedAtPreview = nowIso();
-
   function guardMutation(
     action: FinanceAction,
     onDenied: (message: string) => void = setFinanceNotice,
@@ -1065,7 +991,7 @@ export function SchoolAdminDemo({
     const settings = academic?.years.find((year) => year.id === yearId)?.settings ?? operationalSettings;
     const student = students.find((item) => item.academicYearId === yearId);
     setPaymentDraft(saved?.payment ?? { ...paymentDraft, studentId: student?.id ?? "", category: "tuition", monthKey: settings.startMonth, targetChargeId: "", amount: student ? String(settings.monthlyFee) : "0", paidOn: today(), description: "", allowFutureAllocation: false });
-    paymentCommandRef.current = saved?.paymentCommandId ?? null;
+    paymentCommandRef.current = saved?.paymentCommandId ?? null; setPaymentAttemptId(saved?.paymentCommandId ?? null); paymentDraftEdited.current = Boolean(saved);
     paymentDraftYear.current = yearId;
     setSelectedFinanceCell(null);
   }
@@ -1091,6 +1017,7 @@ export function SchoolAdminDemo({
   function signOut() {
     try { window.sessionStorage.removeItem(demoSessionKey); } catch { /* Sair continua disponível. */ }
     setActiveProfile(null);
+    setPaymentDialogOpen(false); setPaymentCorrectionTarget(null); setPaymentReceipt(null);
     setAccountName("");
     setExpandedTable(false);
     window.history.replaceState(null, "", "/");
@@ -1559,8 +1486,10 @@ export function SchoolAdminDemo({
   }
 
   function openPaymentEntry(studentId?: string) {
-    setExpandedTable(false);
-    paymentCommandRef.current = null;
+    if (!studentId && !paymentDraftEdited.current) studentId = paymentDraft.studentId || yearStudents[0]?.id;
+    financeTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setPaymentDialogOpen(true);
+    if (studentId) { paymentCommandRef.current = null; setPaymentAttemptId(null); paymentDraftEdited.current = false; }
     workspace.update({ view: "payments", paymentSection: "entry" }, true);
 
     if (studentId) {
@@ -1579,17 +1508,17 @@ export function SchoolAdminDemo({
           )
         : undefined;
       const registrationPending = (ledger?.registrationBalance ?? 0) > 0;
+      const openMonth = ledger?.monthly.find((month) => month.applicable && month.balance + month.fineBalance > 0);
 
       setPaymentDraft((draft) => ({
         ...draft,
         studentId,
-        category: registrationPending ? "registration" : draft.category,
-        monthKey: student
-          ? getStudentTuitionStartMonth(student, paymentSettings)
-          : draft.monthKey,
+        selectedChargeIds: [], additionalTargets: [], creditOnly: false, primaryAllocationAmount: undefined,
+        category: registrationPending ? "registration" : "tuition",
+        monthKey: openMonth?.month.key ?? draft.monthKey,
         amount: registrationPending
           ? String(ledger?.registrationBalance ?? paymentSettings.inscriptionRenewalFee)
-          : draft.amount,
+          : String((openMonth?.balance ?? 0) + (openMonth?.fineBalance ?? 0)),
         targetChargeId: "",
         paidOn: today(),
         allowFutureAllocation: false,
@@ -1598,6 +1527,7 @@ export function SchoolAdminDemo({
   }
 
   function openFinanceCell(selection: FinanceCellSelection) {
+    financeTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setSelectedFinanceCell(selection);
   }
 
@@ -1607,13 +1537,14 @@ export function SchoolAdminDemo({
       studentId: string;
     },
   ) {
-    setExpandedTable(false);
-    paymentCommandRef.current = null;
+    setPaymentDialogOpen(true);
+    paymentCommandRef.current = null; setPaymentAttemptId(null); paymentDraftEdited.current = false;
     workspace.update({ view: "payments", paymentSection: "entry" }, true);
     setSelectedFinanceCell(null);
     setPaymentDraft((currentDraft) => ({
       ...currentDraft,
       studentId: draft.studentId,
+      selectedChargeIds: [], additionalTargets: [], creditOnly: false, primaryAllocationAmount: undefined,
       category: draft.category,
       monthKey: draft.monthKey ?? currentDraft.monthKey,
       targetChargeId: draft.targetChargeId ?? "",
@@ -2239,6 +2170,8 @@ export function SchoolAdminDemo({
 
   function showPaymentReceipt(studentId: string, paymentId: string) {
     const row = allPaymentRows.find((item) => item.student.id === studentId);
+    const payment = row?.record.payments.find((item) => item.id === paymentId);
+    if (payment?.kind === "credit-application") { setBillingNotice(`Aplicação de crédito. Consulte o recebimento de origem ${payment.origin?.paymentId ?? "na ficha"}.`); return; }
     const receipt = demoState?.receipts.find((item) => item.studentId === studentId && item.paymentId === paymentId) ?? (row
       ? buildPaymentReceiptFromRecord(row.student, row.record, paymentId)
       : undefined);
@@ -2252,102 +2185,25 @@ export function SchoolAdminDemo({
   }
 
   function openPaymentCorrection(studentId: string, paymentId: string) {
-    if (!guardMutation("correct-payment", setBillingNotice)) {
-      return;
-    }
-
-    const row = allPaymentRows.find((item) => item.student.id === studentId);
-    const payment = row?.record.payments.find((item) => item.id === paymentId);
-
-    if (!row || !payment) {
-      setBillingNotice("Pagamento nao encontrado para correcao.");
-      return;
-    }
-
-    const allocated = row.record.allocations
-      .filter((allocation) => allocation.paymentId === payment.id)
-      .reduce((total, allocation) => total + allocation.amount, 0);
-    const maxAmount = allocated > 0 ? allocated : payment.amount;
-
+    if (!guardMutation("correct-payment", setBillingNotice)) return;
     setSelectedFinanceCell(null);
     setPaymentCorrectionTarget({ studentId, paymentId });
-    setPaymentCorrectionDraft({
-      paymentId,
-      amount: String(maxAmount),
-      reason: "",
-    });
   }
 
-  function submitPaymentCorrection(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (!paymentCorrectionTarget) {
-      return;
-    }
-
-    if (!guardMutation("correct-payment", setBillingNotice)) {
-      return;
-    }
-
-    const row = allPaymentRows.find(
-      (item) => item.student.id === paymentCorrectionTarget.studentId,
-    );
-
-    if (!row) {
-      setBillingNotice("Pagamento nao encontrado para correcao.");
-      return;
-    }
-
-    const result = correctStudentPayment({
-      record: row.record,
-      student: row.student,
-      paymentId: paymentCorrectionTarget.paymentId,
-      amount: parseMoney(paymentCorrectionDraft.amount),
-      reason: paymentCorrectionDraft.reason,
-      recordedAt: nowIso(),
-      recordedBy: selectedProfile.title,
-    });
-
-    if (!result.correction) {
-      setBillingNotice("Informe um motivo e um valor valido para corrigir.");
-      return;
-    }
-
-    if (!commitChanges({ paymentRecords: updateValue(paymentRecords, (items) =>
-      items.some((record) => record.studentId === row.student.id)
-        ? items.map((record) =>
-            record.studentId === row.student.id ? result.record : record,
-          )
-        : [...items, result.record]) }, "correct-payment")) return;
-    setPaymentCorrectionTarget(null);
-    setPaymentCorrectionDraft({ paymentId: "", amount: "0", reason: "" });
-    setBillingNotice(
-      `Correcao ${result.correction.id} registada com ajuste de ${formatCurrency(result.correction.amount)}.`,
-    );
+  function executeServiceCommand(command: ServiceCommand, id: string) {
+    if (!repositoryRef.current || !demoState || !activeProfile) throw new Error("Aguarde os dados da escola.");
+    const result = executeService(repositoryRef.current, demoState, command, { id, role: activeProfile, recordedAt: nowIso() });
+    setDemoState(result.state);
+    return { receipt: result.result.receipt as PaymentReceipt | null, message: String(result.result.message) };
+  }
+  function closePaymentDialog() {
+    setPaymentDialogOpen(false);
+    window.requestAnimationFrame(() => financeTrigger.current?.focus({ preventScroll: true }));
   }
 
   function changePaymentDraft(draft: PaymentLaunchDraft) {
-    paymentCommandRef.current = null;
+    paymentCommandRef.current = null; setPaymentAttemptId(null); paymentDraftEdited.current = true;
     setPaymentDraft(draft);
-  }
-
-  function launchPayment(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!guardMutation("record-payment", setBillingNotice)) return;
-    try {
-      if (!repositoryRef.current || !demoState || activeProfile !== "secretaria") return;
-      paymentCommandRef.current ??= crypto.randomUUID();
-      const committed = confirmDemoPayment(repositoryRef.current, {
-        expected: demoState, role: activeProfile, commandId: paymentCommandRef.current,
-        draft: paymentDraft, recordedAt: nowIso(),
-      });
-      setDemoState(committed.state);
-      setStorageToolsError(false);
-      setStorageToolsNotice("");
-      setPaymentReceipt(committed.receipt);
-      setBillingNotice(`Pagamento registado. Recibo ${committed.receipt.id} disponível.`);
-      setPaymentDraft((draft) => ({ ...draft, amount: "0", description: "", allowFutureAllocation: false }));
-    } catch (error) { showStorageError(error, setBillingNotice); }
   }
 
   if (!storageReady || (demoState && !workspace.ready)) {
@@ -2417,7 +2273,7 @@ export function SchoolAdminDemo({
         {financeSettingsNotice && <p role="status" className="mb-4 rounded-md bg-slate-50 p-3 text-sm">{financeSettingsNotice}</p>}
         {developerToolsEnabled && demoState?.migrationWarnings?.map((warning) => <p key={warning} role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{warning}</p>)}
         {activeView === "overview" && renderOverview()}
-        {demoState && activeProfile && <AcademicWorkspace state={demoState} role={activeProfile} context={workspace.context} onContext={workspace.update} execute={executeAcademicCommand} confirmPayment={confirmAcademicPayment}/>}
+        {demoState && activeProfile && <AcademicWorkspace state={demoState} role={activeProfile} context={workspace.context} onContext={workspace.update} execute={executeAcademicCommand} confirmPayment={confirmAcademicPayment} serviceExecute={executeServiceCommand}/>}
         {developerToolsEnabled && activeView === "catalog" && (demoState?.academic ? renderDeveloperTools() : renderCatalog())}
         {developerToolsEnabled && !demoState?.academic && activeView === "classes" && renderClasses()}
         {developerToolsEnabled && !demoState?.academic && activeView === "rooms" && renderRooms()}
@@ -2450,7 +2306,7 @@ export function SchoolAdminDemo({
               accent="border-l-[#25965a]"
             />
             <MetricCard
-              label="Receita do mes"
+              label="Aplicado no mês"
               value={formatCurrency(dashboardSummary.monthRevenue)}
               supporting={monthLabel(billingMonthKey)}
               accent="border-l-[#185c54]"
@@ -3678,13 +3534,6 @@ export function SchoolAdminDemo({
   }
 
   function renderPayments() {
-    const selectedPaymentStudent =
-      allStudentsAlphabetically.find(
-        (student) => student.id === paymentDraft.studentId,
-      ) ?? allStudentsAlphabetically[0];
-    const selectedPaymentRow = selectedPaymentStudent
-      ? allPaymentRows.find((row) => row.student.id === selectedPaymentStudent.id)
-      : undefined;
     const visiblePaymentSections = paymentSections.filter((section) =>
       section.profiles.includes(selectedProfile.id),
     );
@@ -3702,6 +3551,12 @@ export function SchoolAdminDemo({
       "rules-ending": "Regras a terminar",
     };
 
+    const displayMonths = paymentMonths.filter((month, index) => {
+      if (workspace.context.paymentPeriod === "month") return month.key === billingMonthKey;
+      if (workspace.context.paymentPeriod === "term") return Math.floor(index / 3) === Math.floor(Math.max(0, paymentMonths.findIndex((item) => item.key === billingMonthKey)) / 3);
+      return true;
+    });
+    const visibleMonthKeys = new Set(displayMonths.map((item) => item.key));
     return (
       <div className="grid gap-6">
         <nav aria-label="Áreas de pagamentos" data-workspace-secondary className="flex flex-wrap gap-2 pb-1">
@@ -3777,30 +3632,7 @@ export function SchoolAdminDemo({
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <select
-                    value={billingMonthKey}
-                    onChange={(event) => {
-                      paymentCommandRef.current = null;
-                      setBillingMonthKey(event.target.value);
-                      setPaymentDraft((draft) => ({
-                        ...draft,
-                        monthKey: event.target.value,
-                        targetChargeId:
-                          draft.category === "miscellaneous"
-                            ? draft.targetChargeId
-                            : "",
-                      }));
-                      setBillingNotice("");
-                    }}
-                    className={cx(inputClasses(), "w-44")}
-                    aria-label="Mês de mensalidade"
-                  >
-                    {paymentMonths.map((month) => (
-                      <option key={month.key} value={month.key}>
-                        {month.label}
-                      </option>
-                    ))}
-                  </select>
+
                   {developerToolsEnabled && selectedProfile.id === "secretaria" && (
                     <PrimaryButton onClick={generateMonthlyBilling}>
                       Gerar propinas
@@ -3809,37 +3641,13 @@ export function SchoolAdminDemo({
                 </div>
               </div>
 
-              <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-5">
-                <MetricCard
-                  label="Previsto"
-                  value={formatCurrency(selectedMonthExpected)}
-                  supporting={`${paymentRows.length} alunos da turma`}
-                  accent="border-l-[#2867d8]"
-                />
-                <MetricCard
-                  label="Pago aplicado"
-                  value={formatCurrency(selectedMonthPaid)}
-                  supporting={`Aplicado em ${selectedMonth?.shortLabel ?? "mes"}`}
-                  accent="border-l-[#25965a]"
-                />
-                <MetricCard
-                  label="Saldo do mes"
-                  value={formatCurrency(selectedMonthBalance)}
-                  supporting="Por cobrar"
-                  accent="border-l-[#d08a19]"
-                />
-                <MetricCard
-                  label="Crédito disponível"
-                  value={formatCurrency(selectedMonthCarryOut)}
-                  supporting="Aguarda aplicação"
-                  accent="border-l-[#0ea5c7]"
-                />
-                <MetricCard
-                  label="Descontos"
-                  value={formatCurrency(selectedMonthDiscount)}
-                  supporting={selectedMonthBillingRun ? "Cobranças emitidas" : "Conforme calendário individual"}
-                  accent="border-l-[#8b5cf6]"
-                />
+              <div className="flex flex-wrap gap-x-6 gap-y-2 px-5 py-3 text-sm text-slate-600">
+                <span>Previsto: <strong>{formatCurrency(selectedMonthExpected)}</strong></span>
+                <span>Aplicado: <strong>{formatCurrency(selectedMonthPaid)}</strong></span>
+                <span>Saldo: <strong>{formatCurrency(selectedMonthBalance)}</strong></span>
+                <span>Crédito: <strong>{formatCurrency(selectedMonthCarryOut)}</strong></span>
+                <span>Descontos: <strong>{formatCurrency(selectedMonthDiscount)}</strong></span>
+                {selectedMonthBillingRun && <span>Cobranças emitidas</span>}
               </div>
 
               {billingNotice && (
@@ -3872,6 +3680,32 @@ export function SchoolAdminDemo({
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <label className="text-xs font-semibold">Mês<select
+                    value={billingMonthKey}
+                    onChange={(event) => {
+                      paymentCommandRef.current = null;
+                      setBillingMonthKey(event.target.value);
+                      setPaymentDraft((draft) => ({
+                        ...draft,
+                        monthKey: event.target.value,
+                        targetChargeId:
+                          draft.category === "miscellaneous"
+                            ? draft.targetChargeId
+                            : "",
+                      }));
+                      setBillingNotice("");
+                    }}
+                    className={cx(inputClasses(), "w-44")}
+                    aria-label="Mês de mensalidade"
+                  >
+                    {paymentMonths.map((month) => (
+                      <option key={month.key} value={month.key}>
+                        {month.label}
+                      </option>
+                    ))}
+                  </select></label>
+                    <label className="text-xs font-semibold">Período<select aria-label="Período da planilha" className={inputClasses()} value={workspace.context.paymentPeriod ?? "year"} onChange={(event) => workspace.update({ paymentPeriod: event.target.value as "month" | "term" | "year" })}><option value="month">Mês</option><option value="term">Trimestre</option><option value="year">Ano</option></select></label>
+                    {selectedProfile.id === "secretaria" && <PrimaryButton onClick={() => openPaymentEntry()}>Registar pagamento</PrimaryButton>}
                     {selectedPaymentRows.length > 0 && (
                       <SecondaryButton
                         onClick={() => setSelectedPaymentStudentIds([])}
@@ -3906,7 +3740,7 @@ export function SchoolAdminDemo({
                 />
 
                 <div className="table-scroll" data-scroll-id="payments" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
-                                    <table className="lss-finance-table w-full min-w-[1720px] text-left text-sm">
+                                    <table className="lss-finance-table w-full text-left text-sm" style={{ minWidth: Math.max(950, 780 + displayMonths.length * 120) }}>
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                       <tr>
                         <th className="finance-sticky-select px-4 py-3 font-semibold">
@@ -3927,7 +3761,7 @@ export function SchoolAdminDemo({
                         <th className="finance-sticky-student px-5 py-3 font-semibold">Aluno</th>
                         <th className="px-4 py-3 font-semibold">Nível/Turma</th>
                         <th className="px-4 py-3 font-semibold">Inscrição</th>
-                        {paymentMonths.map((month) => (
+                        {displayMonths.map((month) => (
                           <th key={month.key} className="px-3 py-3 font-semibold">
                             {month.shortLabel}
                           </th>
@@ -3980,9 +3814,7 @@ export function SchoolAdminDemo({
                                 {stableNumber}
                               </td>
                               <td className="finance-sticky-student bg-white px-5 py-4 group-hover:bg-slate-50/80">
-                                <span className="block break-words font-semibold text-slate-950">
-                                  {row.student.fullName}
-                                </span>
+                                <button type="button" className="block break-words font-semibold text-left text-teal-800 hover:underline" onClick={() => workspace.update({ view: "enrollments", personId: row.student.personId ?? row.student.id, studentTab: "Financeiro" }, true)}>{row.student.fullName}</button>
                                 <span className="mt-1 block break-words text-xs text-slate-500">
                                   {row.student.registrationNumber}
                                 </span>
@@ -4019,7 +3851,7 @@ export function SchoolAdminDemo({
                                   })}
                                 />
                               </td>
-                              {row.ledger.monthly.map((month) => {
+                              {row.ledger.monthly.filter((month) => visibleMonthKeys.has(month.month.key)).map((month) => {
                                 const monthState = getMonthCellState(
                                   month,
                                   paymentSettings,
@@ -4032,6 +3864,7 @@ export function SchoolAdminDemo({
                                     paymentSettings,
                                   );
                                 const monthBalance = month.balance + month.fineBalance;
+                                const awaitingProof = demoState ? pendingProofFor(demoState, row.student.id, undefined, month.month.key) : undefined;
                                 const monthSupporting = month.applicable
                                   ? monthBalance > 0
                                     ? installmentNumber
@@ -4051,7 +3884,7 @@ export function SchoolAdminDemo({
                                           monthKey: month.month.key,
                                         })
                                       }
-                                      supporting={monthSupporting}
+                                      supporting={awaitingProof ? "Em análise · saldo mantido" : monthSupporting}
                                       symbol={monthState.symbol}
                                       tone={monthState.tone}
                                       title={financeCellAriaLabel({
@@ -4176,7 +4009,7 @@ export function SchoolAdminDemo({
                       ) : (
                         <tr>
                           <td
-                            colSpan={paymentMonths.length + 10}
+                            colSpan={displayMonths.length + 10}
                             className="px-5 py-10 text-center text-slate-500"
                           >
                             Sem alunos para os filtros seleccionados.
@@ -4188,21 +4021,7 @@ export function SchoolAdminDemo({
                 </div>
               </section>
 
-              {selectedProfile.id === "secretaria" && (
-                <div data-workspace-secondary><PaymentForm
-                  allRows={allPaymentRows}
-                  allStudents={allStudentsAlphabetically}
-                  draft={paymentDraft}
-                  months={paymentMonths}
-                  preview={selectedPaymentPreview}
-                  recordedAtPreview={paymentRecordedAtPreview}
-                  selectedRow={selectedPaymentRow}
-                  selectedStudent={selectedPaymentStudent}
-                  settings={paymentSettings}
-                  onChange={changePaymentDraft}
-                  onSubmit={launchPayment}
-                /></div>
-              )}
+
             </div>
           </div>
         )}
@@ -4230,20 +4049,14 @@ export function SchoolAdminDemo({
           onSubmit={submitPaymentRule}
         />
         <PaymentReceiptDialog
+          key={paymentReceipt?.id}
           receipt={paymentReceipt}
+          status={demoState && paymentReceipt ? receiptStatus(demoState, paymentReceipt) : undefined}
           onClose={() => setPaymentReceipt(null)}
           onPrint={() => window.print()}
         />
-        <PaymentCorrectionDialog
-          draft={paymentCorrectionDraft}
-          maxAmount={paymentCorrectionMaxAmount}
-          payment={paymentCorrectionPayment}
-          recordedAtPreview={paymentCorrectionRecordedAtPreview}
-          studentName={paymentCorrectionRow?.student.fullName ?? ""}
-          onChange={setPaymentCorrectionDraft}
-          onClose={() => setPaymentCorrectionTarget(null)}
-          onSubmit={submitPaymentCorrection}
-        />
+        {demoState && <FinanceServicePanel state={demoState} studentId={paymentDraft.studentId} yearId={selectedYearId} readOnly={selectedProfile.id !== "secretaria"} execute={executeServiceCommand} correctionTarget={paymentCorrectionTarget} onCloseCorrection={() => { setPaymentCorrectionTarget(null); window.requestAnimationFrame(() => financeTrigger.current?.focus({ preventScroll: true })); }}/>}
+        {paymentDialogOpen && demoState && selectedProfile.id === "secretaria" && <PaymentDialog state={demoState} draft={paymentDraft} onChange={changePaymentDraft} onClose={closePaymentDialog} commandId={paymentAttemptId} execute={executeServiceCommand} confirm={(draft, id) => { paymentCommandRef.current = id; setPaymentAttemptId(id); const receipt = confirmAcademicPayment(draft, id).receipt; paymentDraftEdited.current = false; setPaymentDraft((current) => ({ ...current, amount: "0" })); return receipt; }}/>}
       </div>
     );
   }
@@ -4378,7 +4191,7 @@ export function SchoolAdminDemo({
             <div>
               <h3 className="text-base font-semibold">Pagamentos diversos</h3>
               <p className="text-sm text-slate-500">
-                Recebimentos que não abatem inscrição nem mensalidades.
+                Pagamentos e crédito aplicados a cobranças extras.
               </p>
             </div>
             {selectedProfile.id === "secretaria" && (
