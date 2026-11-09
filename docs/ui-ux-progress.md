@@ -202,3 +202,138 @@ no h2. Chromium anunciava, por exemplo, «Nova matrícula Fechar tarefa» em vez
 do título exacto. O cabeçalho recebeu um ID próprio, distinto do h2; um teste
 verifica o nome e a unicidade da referência. Os selectores de navegador
 mantêm os nomes exactos para comprovar a correcção, em vez de a contornar.
+
+## UI-2 — Integração confirmada
+
+A PR #13 foi integrada em `main`, commit `7425ef5`. O workflow `42634948952`
+terminou com sucesso. A Vercel publicou o mesmo commit em produção, READY,
+no deployment `dpl_EaWmPKeRHrC7RTpNyRtnEoabMU2A`, com o alias
+`lss-iota.vercel.app`. O ensaio final anterior à integração aprovou 211 testes
+e 28 casos de Chromium, com 66 capturas e quatro PDFs.
+
+## UI-3 — Percursos de atendimento
+
+Base: `main` `7425ef5`. Branch: `codex/lss-ui3-service-flows`.
+
+### Entrada e contexto do pagamento
+
+O atalho geral abre «Escolher aluno»: pesquisa por nome, número, contacto ou
+ano e escolha explícita da matrícula. Só depois mostra as cobranças elegíveis;
+não escolhe o primeiro aluno nem a primeira cobrança. Um preenchimento pendente
+pode ser retomado por uma acção explícita com o nome do aluno.
+
+Uma célula de inscrição/mensalidade com saldo abre directamente o pagamento
+para Secretaria. Director mantém o detalhe de consulta. Células regularizadas,
+não aplicáveis e sínteses continuam a abrir consulta. Diversos e síntese deixam
+a cobrança a escolher, em vez de aproveitar silenciosamente o primeiro item.
+O cálculo e a elegibilidade continuam no ledger e nos serviços existentes.
+
+O formulário apresenta aluno, número, ano e cobrança como contexto; as acções
+Alterar cobrança/Alterar aluno são explícitas. Valor, data e forma são os campos
+principais. Antecipação aparece para competência futura ou item ainda não
+emitido; uma cobrança já emitida no mês corrente não é tratada como previsão
+apenas porque o vencimento ainda não chegou.
+
+«Outras opções do recebimento» reúne crédito e distribuição. A distribuição
+extensa passa a ecrã completo, conservando a mesma montagem/ID. O detalhe
+contabilístico é uma vista opcional da mesma tarefa. Consultar um recibo anterior
+e voltar não empilha superfícies nem confirma novamente o pagamento pendente.
+O estado anulado/confirmado do recibo mantém a definição anterior.
+
+Uma única acção principal corresponde ao estado. No não numerário, o padrão é
+Guardar para conferência, mantendo a dívida e sem recibo. A confirmação imediata
+exige a indicação explícita de que referência, valor e data foram conferidos;
+alterar esses dados limpa essa indicação. Comprovativos pendentes são visíveis
+no contexto e oferecem acesso à lista de conferência da pessoa.
+
+### Continuidade e operações
+
+O ID da tentativa é comunicado ao proprietário ao abrir a tarefa e mantém-se
+ao editar, consultar, fechar/reabrir e redimensionar. Reabrir a mesma célula
+retoma um preenchimento pendente dessa cobrança. Mudar o mês da planilha só
+altera a consulta; já não modifica o pagamento em curso. Uma operação concluída,
+incluindo comprovativo guardado, deixa de ser apresentada como pagamento por
+concluir com o ID já aplicado.
+
+Movimentos, comprovativos e crédito têm consultas separadas na página. As
+superfícies servem à operação escolhida, em vez de obrigar a abrir uma janela
+com todas as operações. A pesquisa substitui o selector extenso de matrículas.
+A lista e os seus botões mantêm-se montados sob a tarefa para devolver o foco;
+quando o botão deixa de existir após concluir, o foco regressa ao controlo
+correspondente da consulta.
+
+Conferência usa folha alta; aplicação de crédito/devolução usam ecrã completo
+móvel, com rever → confirmar na mesma tarefa. ID e data de preparação pertencem
+a cada preenchimento. Rascunhos independentes por comprovativo/origem podem
+ser retomados; uma falha de sessionStorage conserva-os em memória. A gravação
+mescla os outros rascunhos disponíveis e retira apenas a operação concluída.
+O formato anterior é lido quando válido; IDs já aplicados e entradas ilegíveis
+não são retomados. Isto não executa movimentos financeiros na leitura.
+
+A correcção recupera aluno/cobrança do movimento original, conserva valor físico,
+campos, motivo e ID ao reabrir. A gravação opcional bem-sucedida permite fechar
+sem aviso repetido; se o preenchimento não estiver conservado, o fecho pede
+continuar ou descartar na própria tarefa.
+
+### Matrícula e benefícios
+
+A matrícula conserva os três passos. Guardar rascunho e Anterior ficam no corpo;
+o rodapé destaca Continuar ou as duas escolhas finais Guardar matrícula /
+Guardar e pagar. Erros focam o campo relevante e podem regressar ao passo
+correspondente, conservando a sessão. Guardar e pagar mantém a nova inscrição
+e a pessoa; comprovativo/recibo ocupam o resultado da mesma tarefa.
+
+Benefícios começam pela escolha explícita da matrícula. Vigência, benefício e
+respectivo término passam à superfície comum em ecrã completo móvel, com a
+prévia anterior e decisão de descarte apenas para alterações por guardar.
+As fórmulas, valores, definições, permissões e serviços anteriores mantêm-se.
+
+### Verificação e limites da UI-3
+
+Acrescentados quatro testes de apresentação/recuperação de rascunhos, sem
+reescrever os cálculos, e seis casos de interface: escolha de outra pessoa,
+consulta/retoma com ID, foco da matrícula, conferência não numerária, devolução
+com falhas e correcção retomada. Os testes anteriores percorrem agora a escolha
+explícita e o pagamento directo, conservando as suas verificações financeiras.
+
+Oito novos ensaios de navegador cobrem o atalho e comprovativo → conferência →
+recibo a 360/1440 px, devolução retomada com ID, consulta de recibo anterior na
+mesma tarefa, recibo de célula liquidada com foco de retorno e Director sem mutações. Reusam os 28 casos anteriores, incluindo
+as oito larguras, falha/retry, PDFs, rascunho e foco ao voltar à célula.
+Resultados, capturas e prévia são acompanhados na PR. Emulação e viewport curto
+não comprovam teclado virtual nem Android físico.
+
+A UI-4 continuará a densidade das páginas, filtros secundários, listas móveis,
+caixa e textos. A UI-5 fará a verificação integrada. Não foi criada API/base real,
+alterada a autenticação de servidor ou actualizado o lockfile. A integração em
+main/produção continua separada da implementação e revisão desta branch.
+
+Validação local: 144 testes de domínio/persistência e 77 de interface aprovados;
+lint, TypeScript, build e `git diff --check` aprovados. Após as últimas alterações
+de validação dos rascunhos, repetidos os quatro testes desse módulo e os 15 de
+regras/atendimento, todos aprovados. Os oito ensaios novos de Chromium seguem
+para o workflow, juntamente com os 28 anteriores. O executável não está instalado
+no executor; a evidência de navegador e da prévia será registada na PR.
+
+O primeiro workflow UI-3 (`42642170376`, commit `62ebc1a`) aprovou os 221 testes,
+lint, TypeScript e build; Chromium passou 35/36 casos. O ensaio de recibo anterior
+detectou uma submissão indevida ao regressar ao formulário: React reutilizava
+o nó do botão Voltar como botão submit antes da acção nativa do clique. Os
+controlos receberam identidades distintas por função, tipo explícito e a
+navegação cancela a acção nativa. O ensaio compara o estado financeiro antes e
+depois de cada regresso, além de conservar campo e ID. O percurso de comprovativo
+passa também pelo aviso da célula e atalho para a conferência. Esta correcção
+segue para novo ensaio completo, sem integrar a versão em revisão na main.
+
+A revisão das capturas acrescentou contexto visível ao cabeçalho das operações
+de conferência, crédito e devolução (aluno, matrícula e ano) e uma referência ao
+recibo de origem nos formulários de crédito/devolução. Não é necessário consultar
+a lista de fundo para identificar a pessoa e o recebimento em revisão.
+
+No workflow `42643814770` (`5857196`), o regresso da consulta ao formulário
+passou com o estado financeiro intacto. Os 221 testes, lint, TypeScript e build
+passaram; 34/36 casos Chromium passaram. Os dois restantes pararam por um
+selector ambíguo do ensaio novo: o formulário apresenta tanto o aviso de
+comprovativo pendente como a explicação de guardar para conferência. O selector
+passou a identificar expressamente o aviso de pendência, mantendo a asserção
+da referência e a passagem pelo atalho de conferência.

@@ -53,6 +53,7 @@ test("falha conserva formulário e tentativa; repetir guarda uma única regra", 
 });
 test("benefício permite âmbito explícito, prova de autorização e prévia antes de guardar", () => {
   const f = fixture("aid"), count = f.saved.paymentRecords[0].financialAid?.length ?? 0;
+  fireEvent.click(screen.getByRole("button", { name: /^Escolher Ana Júlia Mucavele/ }));
   fireEvent.click(screen.getByRole("button", { name: "Adicionar benefício" }));
   const dialog = screen.getByRole("dialog"); assert.equal((within(dialog).getByRole("checkbox", { name: "Abrange inscrição" }) as HTMLInputElement).checked, false);
   fireEvent.change(within(dialog).getByLabelText(/^Motivo/), { target: { value: "Apoio ao aluno" } }); fireEvent.change(within(dialog).getByLabelText(/Referência de autorização/), { target: { value: "AUT-2026-15" } });
@@ -62,5 +63,5 @@ test("benefício permite âmbito explícito, prova de autorização e prévia an
 });
 test("Director consulta regras e calendário sem acções de escrita", () => {
   fixture("rules", true); assert.equal(screen.queryByRole("button", { name: "Nova vigência" }), null); assert.ok(screen.getByRole("table")); cleanup();
-  fixture("aid", true); assert.equal(screen.queryByRole("button", { name: "Adicionar benefício" }), null); assert.equal(screen.queryByRole("button", { name: "Terminar benefício" }), null);
+  fixture("aid", true); fireEvent.click(screen.getByRole("button", { name: /^Escolher Ana Júlia Mucavele/ })); assert.equal(screen.queryByRole("button", { name: "Adicionar benefício" }), null); assert.equal(screen.queryByRole("button", { name: "Terminar benefício" }), null);
 });

@@ -23,7 +23,6 @@ async function openPayment(page: Page) {
   await page.getByLabel("Mês de mensalidade", { exact: true }).selectOption("may");
   await page.getByLabel("Período da planilha", { exact: true }).selectOption("month");
   await page.getByRole("button", { name: /^Maio.*Ana Júlia Mucavele/ }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Registar pagamento", exact: true }).click();
   return page.getByRole("dialog", { name: /Registar pagamento/ });
 }
 
@@ -46,7 +45,7 @@ for (const width of [320, 360, 390, 768, 1024, 1440]) {
     }
     await payment.getByLabel("Valor recebido", { exact: false }).fill("625");
     await page.screenshot({ path: info.outputPath(`folha-pagamento-${width}.png`), animations: "disabled" });
-    await payment.getByRole("button", { name: "Fechar e conservar preenchimento" }).click();
+    await payment.getByRole("button", { name: "Fechar", exact: true }).click();
     await expect(payment).toBeHidden();
     await page.goto("/students");
     await page.getByRole("button", { name: "Nova matrícula", exact: true }).click();

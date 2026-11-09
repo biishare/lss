@@ -1,7 +1,9 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import { Alert, Box, Button, Checkbox, Dialog, DialogActions, DialogContent, DialogTitle, FormControlLabel, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, Checkbox, FormControlLabel, MenuItem, Stack, TextField, Typography } from "@mui/material";
+import { StudentSearch } from "./student-search";
+import { TaskSurface } from "../../components/task-surface";
 import type { DemoState } from "../demo/demo-state";
 import type { BillingCommand } from "./billing-commands";
 import { billingForecast } from "./billing-commands";
@@ -22,7 +24,8 @@ export function RulesWorkspace({ state, yearId, mode, readOnly, execute, recorde
   const students = projectStudents(state, academic, today).filter((student) => student.academicYearId === yearId);
   const year = academic.years.find((item) => item.id === yearId);
   const [studentId, setStudentId] = useState("");
-  const selectedId = students.some((student) => student.id === studentId) ? studentId : students[0]?.id ?? "";
+  const selectedId = students.some((student) => student.id === studentId) ? studentId : "";
+  const [choosingStudent, setChoosingStudent] = useState(false);
   const student = students.find((item) => item.id === selectedId), record = state.paymentRecords.find((item) => item.studentId === selectedId);
   const forecast = student ? billingForecast(state, student.id, recordedAt) : [];
   const levels = [...new Map(state.classes.filter((item) => item.academicYear === yearId).map((item) => { const id = state.classDefinitions.find((definition) => definition.id === (item.definitionId ?? item.educationLevelId ?? item.id))?.stageId ?? item.educationLevelId ?? item.id; return [id, { id, name: state.academicStages.find((level) => level.id === id)?.name ?? item.stage }]; })).values()];
@@ -35,6 +38,7 @@ export function RulesWorkspace({ state, yearId, mode, readOnly, execute, recorde
   const [error, setError] = useState("");
   const [revoke, setRevoke] = useState<{ id: string; on: string; reason: string } | null>(null);
   const [commandId, setCommandId] = useState("");
+  const [initialTask, setInitialTask] = useState("");
   const changeRule = (patch: Partial<PaymentRuleVersion>) => { setRule((value) => value ? { ...value, ...patch } : value); setReview(false); setError(""); };
   const changeAid = (patch: Partial<FinancialAid>) => { setAid((value) => value ? { ...value, ...patch } : value); setReview(false); setError(""); };
   function openRule() {
@@ -42,12 +46,14 @@ export function RulesWorkspace({ state, yearId, mode, readOnly, execute, recorde
     const example = students.find((student) => (student.pricingLevelId ?? student.educationLevelId) === levels[0].id) ?? { ...students[0], academicYearId: yearId, pricingLevelId: levels[0].id, educationLevelId: levels[0].id };
     const template = defaultRule(example, year.settings, state.paymentRuleVersions, recordedAt);
     setRuleAmounts({ inscriptionFee: String(template.inscriptionFee), monthlyFee: String(template.monthlyFee) });
-    setRule({ ...template, validFrom: today < year.startsOn ? year.startsOn : today > year.endsOn ? year.endsOn : today, reason: "" });
+    const next = { ...template, validFrom: today < year.startsOn ? year.startsOn : today > year.endsOn ? year.endsOn : today, reason: "" };
+    setRule(next); setInitialTask(JSON.stringify(next));
     setReview(false); setError(""); setCommandId(crypto.randomUUID());
   }
   function openAid() {
     if (!student) return;
-    setAid({ id: "", enrollmentId: student.enrollmentId ?? student.id, kind: "partial_scholarship", percent: 50, appliesToRegistration: false, appliesToTuition: true, effectiveFrom: today < year!.startsOn ? year!.startsOn : today, reason: "", authorizedBy: "", registeredBy: "", registeredAt: "" });
+    const next: FinancialAid = { id: "", enrollmentId: student.enrollmentId ?? student.id, kind: "partial_scholarship", percent: 50, appliesToRegistration: false, appliesToTuition: true, effectiveFrom: today < year!.startsOn ? year!.startsOn : today, reason: "", authorizedBy: "", registeredBy: "", registeredAt: "" };
+    setAid(next); setInitialTask(JSON.stringify(next));
     setRetroactive(false); setReview(false); setError(""); setCommandId(crypto.randomUUID());
   }
   function save(event: FormEvent) {
@@ -74,17 +80,20 @@ export function RulesWorkspace({ state, yearId, mode, readOnly, execute, recorde
       <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", gap: 2, flexWrap: "wrap" }}><div><Typography variant="h6">Regras de cobrança · {year?.label ?? yearId}</Typography><Typography variant="body2" color="text.secondary">As cobranças emitidas conservam o preço e a regra da sua emissão.</Typography></div>{!readOnly && <Button variant="contained" disabled={!levels.length || year?.status === "closed"} onClick={openRule}>Nova vigência</Button>}</Stack>
       <div className="mt-4 max-w-full overflow-x-auto"><table className="w-full text-sm"><thead><tr>{["Nível / versão", "Vigência", "Inscrição", "Mensalidade", "Multa", "Registo"].map((label) => <th className={cell} key={label}>{label}</th>)}</tr></thead><tbody>{state.paymentRuleVersions.filter((item) => item.academicYearId === yearId).map((item) => <tr key={item.id} className="border-t border-slate-100"><td className={cell}>{levels.find((level) => level.id === item.educationLevelId)?.name ?? state.classDefinitions.find((definition) => definition.id === item.educationLevelId)?.name ?? item.educationLevelId} · v{item.version}</td><td className={cell}>{item.validFrom} → {item.supersededBy ? "Substituída antes da emissão" : item.validUntil ?? "em vigor"}</td><td className={cell}>{currency(item.inscriptionFee)}</td><td className={cell}>{currency(item.monthlyFee)}</td><td className={cell}>{item.calculationVersion === "v3" ? <>{item.penaltyPolicy?.firstPercent}% · {item.penaltyPolicy?.firstAfterDays} dia(s) após vencimento<br />{item.penaltyPolicy?.secondEnabled ? `${item.penaltyPolicy.secondPercent}% acumulados · ${item.penaltyPolicy.secondAfterDays} dias` : "Uma única etapa"}<br />Só mensalidades</> : "Regra anterior preservada"}</td><td className={cell}>{item.registeredBy ?? "Origem anterior"}<br />{item.reason}</td></tr>)}</tbody></table></div>
     </Box> : <Box className="min-w-0 rounded-lg border border-slate-200 bg-white p-4">
-      <Stack spacing={2}><Typography variant="h6">Benefícios e calendário individual</Typography><TextField select label="Matrícula" value={selectedId} onChange={(event) => setStudentId(event.target.value)}>{students.map((item) => <MenuItem key={item.id} value={item.id}>{item.fullName} · {item.registrationNumber}</MenuItem>)}</TextField>
+      <Stack spacing={2}><Typography variant="h6">Benefícios e calendário individual</Typography>{!student || choosingStudent ? <StudentSearch students={students} label="Pesquisar matrícula para benefício" onChoose={(item) => { setStudentId(item.id); setChoosingStudent(false); }} /> : <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-semibold">{student.fullName} · {student.registrationNumber}</p><Button onClick={() => setChoosingStudent(true)}>Alterar matrícula</Button></div>}
         {student?.financialProfile.status === "weighted" && <Alert severity="warning">Esta condição anterior precisa de revisão. Os valores originais foram conservados.</Alert>}
         {student && !readOnly && <Button variant="outlined" onClick={openAid}>Adicionar benefício</Button>}
-        {(record?.financialAid ?? []).map((item) => <Box key={item.id} className="rounded border border-slate-200 p-3"><Typography>{item.kind === "exception" ? "Isenção temporária" : item.kind === "scholarship" ? "Bolsa integral" : "Bolsa/desconto"} · {item.percent}%{item.revokedOn ? ` · termina em ${item.revokedOn}` : ""}</Typography><Typography variant="body2">{item.appliesToRegistration ? "Inscrição e " : ""}{item.appliesToTuition ? "mensalidades" : "inscrição"} · {monthOptions.find((month) => month.key === item.startMonth)?.label ?? "início"} a {monthOptions.find((month) => month.key === item.endMonth)?.label ?? "fim"} · {item.reason}</Typography><Typography variant="caption">{item.registeredBy} · {item.registeredAt}{item.authorizationReference ? ` · ${item.authorizationReference}` : ""}</Typography>{!readOnly && !item.revokedOn && <Button size="small" onClick={() => { setRevoke({ id: item.id, on: today, reason: "" }); setReview(false); setError(""); setCommandId(crypto.randomUUID()); }}>Terminar benefício</Button>}</Box>)}
+        {(record?.financialAid ?? []).map((item) => <Box key={item.id} className="rounded border border-slate-200 p-3"><Typography>{item.kind === "exception" ? "Isenção temporária" : item.kind === "scholarship" ? "Bolsa integral" : "Bolsa/desconto"} · {item.percent}%{item.revokedOn ? ` · termina em ${item.revokedOn}` : ""}</Typography><Typography variant="body2">{item.appliesToRegistration ? "Inscrição e " : ""}{item.appliesToTuition ? "mensalidades" : "inscrição"} · {monthOptions.find((month) => month.key === item.startMonth)?.label ?? "início"} a {monthOptions.find((month) => month.key === item.endMonth)?.label ?? "fim"} · {item.reason}</Typography><Typography variant="caption">{item.registeredBy} · {item.registeredAt}{item.authorizationReference ? ` · ${item.authorizationReference}` : ""}</Typography>{!readOnly && !item.revokedOn && <Button size="small" onClick={() => { const next = { id: item.id, on: today, reason: "" }; setRevoke(next); setInitialTask(JSON.stringify(next)); setReview(false); setError(""); setCommandId(crypto.randomUUID()); }}>Terminar benefício</Button>}</Box>)}
         <div className="max-w-full overflow-x-auto"><table className="w-full text-sm"><thead><tr>{["Item", "Estado", "Base", "Benefício", "Devido", "Vencimento / regra"].map((label) => <th className={cell} key={label}>{label}</th>)}</tr></thead><tbody>{forecast.map(({ item, issued, forecast }) => { const charge = issued ?? forecast; return <tr key={item.id} className="border-t border-slate-100"><td className={cell}>{charge?.description ?? item.competence}</td><td className={cell}>{issued ? effectiveAmount(issued) === 0 ? effectiveBenefitLabel(issued)?.includes("Bolsa") ? "Bolseiro" : "Isento" : "Emitido" : "Previsto"}</td><td className={cell}>{charge ? currency(charge.baseAmount ?? charge.amount) : "—"}</td><td className={cell}>{charge ? effectiveBenefitLabel(charge) ?? "Regular" : "Regra por configurar"}</td><td className={cell}>{charge ? currency(effectiveAmount(charge)) : "Por configurar"}</td><td className={cell}>{charge?.dueOn}<br />{charge?.snapshot?.ruleVersion ? `Versão ${charge.snapshot.ruleVersion}` : "Regra anterior"}</td></tr>; })}</tbody></table></div>
         {!!record?.penaltyCharges?.length && <div><Typography variant="subtitle1">Multas</Typography>{record.penaltyCharges.map((penalty) => <Typography key={penalty.id} variant="body2">{penalty.effectiveOn} · base {currency(penalty.snapshot.baseBalance)} × {penalty.snapshot.percent}% = {currency(penalty.amount)}{penalty.adjustedAmount !== undefined ? ` · após correcção ${currency(penalty.adjustedAmount)}` : ""}</Typography>)}</div>}
         {!!record?.financialAdjustments?.length && <div><Typography variant="subtitle1">Ajustamentos</Typography>{record.financialAdjustments.map((item) => <Typography key={item.id} variant="body2">{item.recordedAt} · {currency(item.previousAmount)} → {currency(item.nextAmount)} · {item.reason} · {item.evidenceReference} · {item.recordedBy}</Typography>)}</div>}
       </Stack>
     </Box>}
-    <Dialog open={Boolean(rule || aid || revoke)} onClose={() => { setRule(null); setAid(null); setRevoke(null); }} fullWidth maxWidth="sm">
-      <Box component="form" onSubmit={save}><DialogTitle>{rule ? "Nova vigência" : aid ? "Adicionar benefício" : "Terminar benefício"}</DialogTitle><DialogContent><Stack spacing={2} sx={{ pt: 1 }}>
+    <TaskSurface open={Boolean(rule || aid || revoke)} title={rule ? "Nova vigência" : aid ? "Adicionar benefício" : "Terminar benefício"} mobile="full-screen"
+      dirty={JSON.stringify(rule ?? aid ?? revoke) !== initialTask || Boolean(aid && retroactive)}
+      onClose={() => { setRule(null); setAid(null); setRevoke(null); }}
+      actions={(close) => <><Button onClick={close}>Cancelar</Button><Button variant="contained" type="submit" form="rules-task-form">{review ? "Confirmar alteração" : "Rever efeito"}</Button></>}>
+      <Box component="form" id="rules-task-form" onSubmit={save}><Stack spacing={2} sx={{ pt: 1 }}>
         {error && <Alert severity="error">{error}</Alert>}
         {rule && <><TextField select label="Nível" value={rule.educationLevelId} onChange={(event) => changeRule({ educationLevelId: event.target.value })}>{levels.map((level) => <MenuItem key={level.id} value={level.id}>{level.name}</MenuItem>)}</TextField><TextField required type="date" label="Em vigor a partir de" slotProps={{ inputLabel: { shrink: true } }} value={rule.validFrom} onChange={(event) => changeRule({ validFrom: event.target.value })} />
           <TextField required label="Inscrição (MT)" value={ruleAmounts.inscriptionFee} onChange={(event) => { setRuleAmounts({ ...ruleAmounts, inscriptionFee: event.target.value }); changeRule({ inscriptionFee: Number(event.target.value) }); }} type="number" slotProps={{ htmlInput: { min: 0, step: "0.01" } }} /><TextField required label="Mensalidade (MT)" value={ruleAmounts.monthlyFee} onChange={(event) => { setRuleAmounts({ ...ruleAmounts, monthlyFee: event.target.value }); changeRule({ monthlyFee: Number(event.target.value) }); }} type="number" slotProps={{ htmlInput: { min: 0, step: "0.01" } }} /><TextField required label="Dia do vencimento" type="number" value={rule.monthlyDueDay} onChange={(event) => changeRule({ monthlyDueDay: Number(event.target.value) })} slotProps={{ htmlInput: { min: 1, max: 31 } }} />
@@ -101,7 +110,7 @@ export function RulesWorkspace({ state, yearId, mode, readOnly, execute, recorde
           <TextField required label="Motivo" value={aid.reason ?? ""} onChange={(event) => changeAid({ reason: event.target.value })} /><TextField label="Autorizado por" value={aid.authorizedBy} onChange={(event) => changeAid({ authorizedBy: event.target.value })} /><TextField label="Referência de autorização" value={aid.authorizationReference ?? ""} onChange={(event) => changeAid({ authorizationReference: event.target.value })} /><FormControlLabel control={<Checkbox checked={retroactive} onChange={(event) => { setRetroactive(event.target.checked); setReview(false); }} />} label="Aplicar também a cobranças já emitidas (retroactivo)" />
           {review && <Alert severity="info">Aplica-se o maior benefício elegível. Extras mantêm-se independentes.{aidPreview.length ? aidPreview.map((item) => item && <div key={item.id}>{item.label}: {currency(item.before)} → {currency(item.after)}{item.credit > 0 ? `; crédito ${currency(item.credit)}` : ""}</div>) : <div>Sem alteração nas cobranças existentes; será aplicado às futuras elegíveis.</div>}</Alert>}</>}
         {revoke && <><TextField required type="date" label="Termina a partir de" value={revoke.on} onChange={(event) => { setRevoke({ ...revoke, on: event.target.value }); setReview(false); }} slotProps={{ inputLabel: { shrink: true } }} /><TextField required label="Motivo" value={revoke.reason} onChange={(event) => { setRevoke({ ...revoke, reason: event.target.value }); setReview(false); }} />{review && <Alert severity="info">O benefício deixa de se aplicar a partir desta data. Cobranças emitidas conservam o histórico.</Alert>}</>}
-      </Stack></DialogContent><DialogActions><Button onClick={() => { setRule(null); setAid(null); setRevoke(null); }}>Cancelar</Button><Button variant="contained" type="submit">{review ? "Confirmar alteração" : "Rever efeito"}</Button></DialogActions></Box>
-    </Dialog>
+      </Stack></Box>
+    </TaskSurface>
   </Stack>;
 }
