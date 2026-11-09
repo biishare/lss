@@ -1,3 +1,5 @@
+import { addDays } from "../features/finance/domain/billing";
+
 import { useId, type FormEvent, type ReactNode } from "react";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -14,7 +16,6 @@ import {
   type EntityStatus,
   type FinanceStatus,
   type MonthOption,
-  type Payment,
   type PaymentSettings,
   type RoomDefinition,
   type SchoolClass,
@@ -45,11 +46,8 @@ import {
   inputClasses,
   monthLabel,
   parseMoney,
-  paymentCategories,
-  paymentMethods,
   profiles,
   registrationChargeId,
-  today,
   secondPenaltyDateForMonth,
   sortClasses,
   stageLabel,
@@ -63,12 +61,9 @@ import {
   type FinanceProfileDraft,
   type FinanceSettingsDraft,
   type GroupDraft,
-  type PaymentCorrectionDraft,
   type MiscellaneousChargeDraft,
   type PaymentCategory,
   type PaymentLaunchDraft,
-  type PaymentPreview,
-  type PaymentReceipt,
   type PaymentRuleDraft,
   type RoomDraft,
   type StudentLedgerRow,
@@ -1935,557 +1930,8 @@ export function StudentFinanceForm({
   );
 }
 
-function daysBetweenDates(startDate: string, endDate: string) {
-  const start = new Date(`${startDate}T00:00:00.000Z`).getTime();
-  const end = new Date(`${endDate}T00:00:00.000Z`).getTime();
+export { ReceiptDialog as PaymentReceiptDialog } from "../features/finance/receipt-view";
 
-  if (Number.isNaN(start) || Number.isNaN(end)) {
-    return 0;
-  }
-
-  return Math.max(0, Math.round((end - start) / 86400000));
-}
-
-export function PaymentForm({
-  allRows,
-  allStudents,
-  draft,
-  months,
-  preview,
-  recordedAtPreview,
-  selectedRow,
-  selectedStudent,
-  settings,
-  onChange,
-  onSubmit,
-}: {
-  allRows: StudentLedgerRow[];
-  allStudents: Student[];
-  draft: PaymentLaunchDraft;
-  months: MonthOption[];
-  preview?: PaymentPreview;
-  recordedAtPreview: string;
-  selectedRow?: StudentLedgerRow;
-  selectedStudent?: Student;
-  settings: PaymentSettings;
-  onChange: (draft: PaymentLaunchDraft) => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-}) {
-  const selectedRowForDraft =
-    selectedRow ?? allRows.find((row) => row.student.id === draft.studentId);
-  const selectedStudentForDraft = selectedStudent ?? selectedRowForDraft?.student;
-  const selectedMonthLedger = selectedRowForDraft?.ledger.monthly.find(
-    (item) => item.month.key === draft.monthKey,
-  );
-  const receivedAmount = parseMoney(draft.amount);
-  const canAllocateFuture = draft.category !== "miscellaneous";
-  const miscellaneousCharges = selectedRowForDraft
-    ? getMiscellaneousCharges(selectedRowForDraft.record)
-    : [];
-  const effectiveDateFuture = Boolean(draft.paidOn && draft.paidOn > today());
-  const recordLagDays = draft.paidOn
-    ? daysBetweenDates(draft.paidOn, recordedAtPreview.slice(0, 10))
-    : 0;
-  const suggestedAmountFor = (
-    category: PaymentCategory,
-    row: StudentLedgerRow | undefined,
-    monthKey: string,
-    targetChargeId?: string,
-  ) => {
-    if (!row) {
-      return category === "registration"
-        ? settings.inscriptionRenewalFee
-        : category === "tuition"
-          ? settings.monthlyFee
-          : 0;
-    }
-
-    if (category === "registration") {
-      return row.ledger.registrationBalance + row.ledger.registrationPenaltyBalance;
-    }
-
-    if (category === "tuition") {
-      const month = row.ledger.monthly.find((item) => item.month.key === monthKey);
-
-      return month ? month.balance + month.fineBalance : settings.monthlyFee;
-    }
-
-    const charge = getMiscellaneousCharges(row.record).find(
-      (item) => item.id === targetChargeId,
-    );
-
-    return charge ? getChargeBalance(row.record, charge) : 0;
-  };
-  const previewItems = preview?.items ?? [];
-
-  return (
-    <form onSubmit={onSubmit} className="lss-responsive-card">
-      <div>
-        <h3 className="text-base font-semibold">Lancar pagamento</h3>
-        <p className="text-sm text-slate-500">
-          Recebimentos de inscricao/renovacao, mensalidade e pagamentos diversos.
-        </p>
-      </div>
-
-      {canAllocateFuture && (
-        <div className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-100">
-          Meses futuros so recebem saldo remanescente com pagamento antecipado activo.
-        </div>
-      )}
-
-      <div className="mt-5 grid gap-4">
-        <FieldLabel label="Aluno">
-          <select
-            value={draft.studentId}
-            onChange={(event) => {
-              const nextStudentId = event.target.value;
-              const nextStudent = allStudents.find(
-                (student) => student.id === nextStudentId,
-              );
-              const nextRow = allRows.find((row) => row.student.id === nextStudentId);
-              const nextMonthKey = nextStudent
-                ? getStudentTuitionStartMonth(nextStudent, settings)
-                : draft.monthKey;
-
-              onChange({
-                ...draft,
-                studentId: nextStudentId,
-                monthKey: draft.category === "tuition" ? draft.monthKey : nextMonthKey,
-                targetChargeId: "",
-                amount: String(
-                  suggestedAmountFor(
-                    draft.category,
-                    nextRow,
-                    draft.category === "tuition" ? draft.monthKey : nextMonthKey,
-                  ),
-                ),
-              });
-            }}
-            className={inputClasses()}
-            disabled={allStudents.length === 0}
-          >
-            {allStudents.length > 0 ? (
-              allStudents.map((student) => (
-                <option key={student.id} value={student.id}>
-                  {student.fullName}
-                </option>
-              ))
-            ) : (
-              <option value="">Sem alunos</option>
-            )}
-          </select>
-        </FieldLabel>
-
-        <FieldLabel label="Tipo de pagamento">
-          <select
-            value={draft.category}
-            onChange={(event) => {
-              const category = event.target.value as PaymentCategory;
-              const nextMonthKey =
-                category === "registration" && selectedStudentForDraft
-                  ? getStudentTuitionStartMonth(selectedStudentForDraft, settings)
-                  : draft.monthKey;
-
-              onChange({
-                ...draft,
-                category,
-                monthKey: nextMonthKey,
-                targetChargeId: "",
-                amount: String(
-                  suggestedAmountFor(category, selectedRowForDraft, nextMonthKey),
-                ),
-                description: category === "miscellaneous" ? "" : draft.description,
-                allowFutureAllocation:
-                  category === "miscellaneous" ? false : draft.allowFutureAllocation,
-              });
-            }}
-            className={inputClasses()}
-          >
-            {paymentCategories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.label}
-              </option>
-            ))}
-          </select>
-        </FieldLabel>
-
-        <FieldLabel label="Mes da mensalidade">
-          <select
-            value={draft.monthKey}
-            onChange={(event) => {
-              const monthKey = event.target.value;
-
-              onChange({
-                ...draft,
-                monthKey,
-                amount:
-                  draft.category === "tuition"
-                    ? String(
-                        suggestedAmountFor(
-                          "tuition",
-                          selectedRowForDraft,
-                          monthKey,
-                        ),
-                      )
-                    : draft.amount,
-              });
-            }}
-            className={inputClasses()}
-            disabled={draft.category !== "tuition"}
-          >
-            {months.map((month) => (
-              <option key={month.key} value={month.key}>
-                {month.label}
-              </option>
-            ))}
-          </select>
-        </FieldLabel>
-
-        {draft.category === "miscellaneous" && (
-          <FieldLabel label="Cobranca diversa">
-            <select
-              value={draft.targetChargeId ?? ""}
-              onChange={(event) => {
-                const charge = miscellaneousCharges.find(
-                  (item) => item.id === event.target.value,
-                );
-
-                onChange({
-                  ...draft,
-                  targetChargeId: event.target.value,
-                  amount: charge
-                    ? String(selectedRowForDraft ? getChargeBalance(selectedRowForDraft.record, charge) : charge.amount)
-                    : "0",
-                  description: charge?.description ?? "",
-                });
-              }}
-              className={inputClasses()}
-            >
-              <option value="">Novo recebimento diverso</option>
-              {miscellaneousCharges.map((charge) => {
-                const balance = selectedRowForDraft
-                  ? getChargeBalance(selectedRowForDraft.record, charge)
-                  : charge.amount;
-
-                return (
-                  <option key={charge.id} value={charge.id}>
-                    {charge.description} - saldo {formatCurrency(balance)}
-                  </option>
-                );
-              })}
-            </select>
-          </FieldLabel>
-        )}
-
-        {draft.category === "miscellaneous" && !draft.targetChargeId && (
-          <FieldLabel label="Descricao do pagamento diverso">
-            <input
-              value={draft.description}
-              onChange={(event) =>
-                onChange({ ...draft, description: event.target.value })
-              }
-              className={inputClasses()}
-              placeholder="Ex.: Uniforme, certificado, transporte"
-            />
-          </FieldLabel>
-        )}
-
-        <FieldLabel label="Valor recebido">
-          <input
-            value={draft.amount}
-            onChange={(event) => onChange({ ...draft, amount: event.target.value })}
-            className={inputClasses()}
-            min="0"
-            step="0.01"
-            type="number"
-          />
-        </FieldLabel>
-
-        <FieldLabel label="Data efectiva do pagamento (no comprovativo)">
-          <input
-            value={draft.paidOn}
-            onChange={(event) => onChange({ ...draft, paidOn: event.target.value })}
-            className={inputClasses()}
-            max={today()}
-            type="date"
-          />
-        </FieldLabel>
-        {draft.paidOn && draft.paidOn < today() && <>
-          <FieldLabel label="Comprovativo / evidência"><input className={inputClasses()} value={draft.evidenceReference ?? ""} onChange={(event) => onChange({ ...draft, evidenceReference: event.target.value })} /></FieldLabel>
-          <FieldLabel label="Motivo da apresentação posterior"><input className={inputClasses()} value={draft.lateReason ?? ""} onChange={(event) => onChange({ ...draft, lateReason: event.target.value })} /></FieldLabel>
-        </>}
-
-
-        {effectiveDateFuture && (
-          <p className="rounded-md bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 ring-1 ring-rose-100">
-            A data efectiva nao pode estar no futuro.
-          </p>
-        )}
-
-        {recordLagDays > 7 && (
-          <p className="rounded-md bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900 ring-1 ring-amber-100">
-            O comprovativo tem {recordLagDays} dias face ao registo de hoje.
-          </p>
-        )}
-
-        {canAllocateFuture && (
-          <label className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-3 text-sm font-semibold text-slate-700">
-            <input
-              checked={draft.allowFutureAllocation}
-              onChange={(event) =>
-                onChange({
-                  ...draft,
-                  allowFutureAllocation: event.target.checked,
-                })
-              }
-              type="checkbox"
-              className="size-5 accent-[#207a70]"
-            />
-            <span>Pagamento antecipado para meses futuros</span>
-          </label>
-        )}
-
-        <FieldLabel label="Forma de pagamento">
-          <select
-            value={draft.method}
-            onChange={(event) => onChange({ ...draft, method: event.target.value })}
-            className={inputClasses()}
-          >
-            {paymentMethods.map((method) => (
-              <option key={method}>{method}</option>
-            ))}
-          </select>
-        </FieldLabel>
-      </div>
-
-      <div className="mt-5 grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <SummaryLine label="Aluno" value={selectedStudentForDraft?.fullName ?? "Sem aluno"} />
-        {draft.category === "tuition" && selectedMonthLedger && (
-          <SummaryLine
-            label="Regra"
-            value={`${selectedMonthLedger.ruleLabel} / devido ${formatCurrency(selectedMonthLedger.due)}`}
-          />
-        )}
-        {draft.category === "registration" && selectedRowForDraft && (
-          <SummaryLine
-            label="Inscricao devida"
-            value={formatCurrency(selectedRowForDraft.ledger.registrationDue)}
-          />
-        )}
-        <SummaryLine label="Data efectiva" value={draft.paidOn ? formatDate(draft.paidOn) : "Obrigatoria"} />
-        <SummaryLine label="Data de registo" value={formatDateTime(recordedAtPreview)} />
-        <SummaryLine label="Valor" value={formatCurrency(receivedAmount)} />
-        <SummaryLine label="Multa prevista" value={formatCurrency(preview?.penaltyTotal ?? 0)} />
-        <SummaryLine label="Total alocado" value={formatCurrency(preview?.totalAllocated ?? 0)} />
-        <SummaryLine label="Sobra nao alocada" value={formatCurrency(preview?.unallocatedAmount ?? 0)} />
-      </div>
-
-      <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
-        <h4 className="text-sm font-bold uppercase text-slate-500">
-          Alocacoes previstas
-        </h4>
-        <div className="mt-3 grid gap-2">
-          {previewItems.length > 0 ? (
-            previewItems.map((item) => (
-              <div
-                key={item.chargeId}
-                className="flex flex-wrap items-start justify-between gap-3 rounded-md bg-slate-50 px-3 py-3 text-sm"
-              >
-                <div className="min-w-0">
-                  <strong className="break-words text-slate-950">
-                    {item.label}
-                  </strong>
-                  <p className="mt-1 text-xs font-semibold text-slate-500">
-                    {item.kind === "penalty" ? "Multa" : "Base"} / saldo apos {formatCurrency(item.balanceAfter)}
-                  </p>
-                </div>
-                <span className="font-bold text-slate-800">
-                  {formatCurrency(item.amount)}
-                </span>
-              </div>
-            ))
-          ) : (
-            <p className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-500">
-              Nenhuma rubrica aberta para este pagamento.
-            </p>
-          )}
-        </div>
-      </div>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <PrimaryButton
-          type="submit"
-          disabled={
-            !draft.studentId ||
-            !draft.paidOn ||
-            receivedAmount <= 0 ||
-            effectiveDateFuture
-          }
-        >
-          Confirmar pagamento
-        </PrimaryButton>
-      </div>
-    </form>
-  );
-}
-
-export function PaymentReceiptDialog({
-  onClose,
-  onPrint,
-  receipt,
-}: {
-  onClose: () => void;
-  onPrint: () => void;
-  receipt: PaymentReceipt | null;
-}) {
-  if (!receipt) {
-    return null;
-  }
-
-  return (
-    <AppDialog
-      actions={
-        <>
-          <SecondaryButton onClick={onPrint}>Imprimir</SecondaryButton>
-          <PrimaryButton onClick={onClose}>Fechar</PrimaryButton>
-        </>
-      }
-      onClose={onClose}
-      open={Boolean(receipt)}
-      subtitle={receipt.studentName}
-      title={`Recibo ${receipt.id}`}
-    >
-      <div className="grid min-w-0 gap-5">
-        <section className="min-w-0 rounded-lg border border-slate-200 px-4">
-          <DetailLine label="Aluno" value={receipt.studentName} />
-          <DetailLine label="Matricula" value={receipt.registrationNumber} />
-          <DetailLine label="Pagamento" value={receipt.paymentId} />
-          <DetailLine label="Valor recebido" value={formatCurrency(receipt.amount)} />
-          <DetailLine label="Forma" value={receipt.method} />
-          <DetailLine label="Data efectiva" value={formatDate(receipt.effectivePaymentDate)} />
-          <DetailLine label="Data de registo" value={formatDateTime(receipt.recordedAt)} />
-          <DetailLine label="Operador" value={receipt.recordedBy} />
-        </section>
-
-        <section className="min-w-0">
-          <h4 className="text-sm font-bold uppercase text-slate-500">Rubricas</h4>
-          <div className="mt-2 grid gap-2">
-            {receipt.items.length > 0 ? (
-              receipt.items.map((item) => (
-                <div
-                  key={`${receipt.paymentId}-${item.chargeId}`}
-                  className="flex flex-wrap items-start justify-between gap-3 rounded-md bg-slate-50 px-3 py-3 text-sm"
-                >
-                  <div className="min-w-0">
-                    <strong className="break-words text-slate-950">{item.label}</strong>
-                    <p className="mt-1 text-xs font-semibold text-slate-500">
-                      {item.kind === "penalty" ? "Multa" : "Base"}
-                    </p>
-                  </div>
-                  <span className="font-bold text-slate-800">
-                    {formatCurrency(item.amount)}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <p className="rounded-md bg-slate-50 px-3 py-3 text-sm text-slate-500">
-                Pagamento sem alocacao aplicada.
-              </p>
-            )}
-          </div>
-        </section>
-
-        <section className="min-w-0 rounded-lg border border-slate-200 px-4">
-          <DetailLine label="Multa liquidada" value={formatCurrency(receipt.penaltyTotal)} />
-          <DetailLine label="Sobra nao alocada" value={formatCurrency(receipt.unallocatedAmount)} />
-        </section>
-      </div>
-    </AppDialog>
-  );
-}
-
-export function PaymentCorrectionDialog({
-  draft,
-  maxAmount,
-  onChange,
-  onClose,
-  onSubmit,
-  payment,
-  recordedAtPreview,
-  studentName,
-}: {
-  draft: PaymentCorrectionDraft;
-  maxAmount: number;
-  onChange: (draft: PaymentCorrectionDraft) => void;
-  onClose: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  payment?: Payment;
-  recordedAtPreview: string;
-  studentName: string;
-}) {
-  const formId = useId();
-  const amount = parseMoney(draft.amount);
-
-  if (!payment) {
-    return null;
-  }
-
-  return (
-    <AppDialog
-      actions={
-        <>
-          <SecondaryButton onClick={onClose}>Cancelar</SecondaryButton>
-          <PrimaryButton
-            type="submit"
-            form={formId}
-            disabled={!draft.reason.trim() || amount <= 0 || amount > maxAmount}
-          >
-            Confirmar correcao
-          </PrimaryButton>
-        </>
-      }
-      onClose={onClose}
-      open={Boolean(payment)}
-      subtitle={studentName}
-      title="Corrigir pagamento"
-    >
-      <form id={formId} onSubmit={onSubmit} className="grid min-w-0 gap-4">
-        <div className="rounded-lg border border-slate-200 px-4">
-          <DetailLine label="Pagamento original" value={payment.id} />
-          <DetailLine label="Valor original" value={formatCurrency(payment.amount)} />
-          <DetailLine label="Data efectiva" value={formatDate(payment.effectivePaymentDate ?? payment.paidOn)} />
-          <DetailLine label="Registado em" value={formatDateTime(payment.recordedAt)} />
-          <DetailLine label="Operador" value={payment.recordedBy ?? "Secretaria"} />
-          <DetailLine label="Maximo corrigivel" value={formatCurrency(maxAmount)} />
-        </div>
-
-        <FieldLabel label="Valor do ajuste">
-          <input
-            value={draft.amount}
-            onChange={(event) => onChange({ ...draft, amount: event.target.value })}
-            className={inputClasses()}
-            max={String(maxAmount)}
-            min="0"
-            type="number"
-          />
-        </FieldLabel>
-
-        <FieldLabel label="Motivo da correcao">
-          <textarea
-            value={draft.reason}
-            onChange={(event) => onChange({ ...draft, reason: event.target.value })}
-            className={cx(inputClasses(), "min-h-24 resize-y")}
-            placeholder="Ex.: comprovativo associado ao aluno incorrecto"
-          />
-        </FieldLabel>
-
-        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4">
-          <DetailLine label="Data de registo" value={formatDateTime(recordedAtPreview)} />
-        </div>
-      </form>
-    </AppDialog>
-  );
-}
 function DetailLine({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="grid min-w-0 gap-1 border-b border-slate-100 py-3 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
@@ -2541,8 +1987,8 @@ function HistoryList({
             Registado por {item.recordedBy} em {formatDateTime(item.recordedAt)}
           </p>
           <div className="mt-2 flex flex-wrap gap-2">
-            <TextButton onClick={() => onShowReceipt(item.id)}>Recibo</TextButton>
-            {canCorrect && (
+            {item.kind === "credit-application" ? <span className="break-words text-xs text-slate-500">Crédito de {item.origin?.paymentId} · sem novo recebimento</span> : <TextButton onClick={() => onShowReceipt(item.id)}>Recibo</TextButton>}
+            {canCorrect && item.kind !== "credit-application" && (
               <TextButton onClick={() => onCorrectPayment(item.id)}>
                 Corrigir
               </TextButton>
@@ -2676,6 +2122,12 @@ export function FinanceCellDialog({
       settings,
     );
 
+    const charge = row.record.charges.find((item) => item.category === "tuition" && item.monthKey === selection.monthKey);
+    const policy = charge?.snapshot?.penaltyPolicy;
+    const currentAlgorithm = charge?.snapshot?.calculationVersion === "v3";
+    const firstPenalty = currentAlgorithm ? policy && policy.firstPercent > 0 && month?.dueOn ? formatDate(addDays(month.dueOn, policy.firstAfterDays)) : "Sem multa configurada" : month?.state === "forecast" ? "Após emissão, conforme a regra" : formatDate(firstPenaltyDateForMonth(selection.monthKey, settings));
+    const secondPenalty = currentAlgorithm ? policy?.secondEnabled && month?.dueOn ? formatDate(addDays(month.dueOn, policy.secondAfterDays)) : "Desactivada" : month?.state === "forecast" ? "Após emissão, conforme a regra" : formatDate(secondPenaltyDateForMonth(selection.monthKey, settings));
+
     title = "Detalhes da mensalidade";
     subtitle = `${student.fullName} / ${month?.month.label ?? monthLabel(selection.monthKey)}`;
     rubricLabel = `${month?.month.label ?? monthLabel(selection.monthKey)}${
@@ -2697,9 +2149,9 @@ export function FinanceCellDialog({
           <DetailLine label="Multa" value={formatCurrency(month.fineTotal)} />
           <DetailLine label="Saldo" value={formatCurrency(month.balance + month.fineBalance)} />
           <DetailLine label="Regra" value={month.ruleLabel} />
-          <DetailLine label="Vencimento" value={formatDate(dueDateForMonth(month.month.key, settings))} />
-          <DetailLine label="1ª multa" value={formatDate(firstPenaltyDateForMonth(month.month.key, settings))} />
-          <DetailLine label="2ª multa" value={formatDate(secondPenaltyDateForMonth(month.month.key, settings))} />
+          <DetailLine label="Vencimento" value={formatDate(month.dueOn ?? dueDateForMonth(month.month.key, settings))} />
+          <DetailLine label="1ª multa" value={firstPenalty} />
+          <DetailLine label="2ª multa" value={secondPenalty} />
         </>
       ) : (
         <p className="rounded-md bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-600">

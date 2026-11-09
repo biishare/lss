@@ -1,5 +1,6 @@
 import { validateAcademicState } from "../academics/validation";
 import { validateBillingExtensions } from "../finance/domain/billing-validation";
+import { validateServiceExtensions } from "../finance/service-validation";
 
 type JsonObject = Record<string, unknown>;
 
@@ -180,6 +181,7 @@ export function validateDemoState(value: unknown): asserts value is JsonObject {
     }
   }
   if (value.schemaVersion === 3) {
+    validateServiceExtensions(value);
     if (typeof value.revision !== "number") fail("falta a revisão do cenário.");
     if (!isObject(value.scenario) || !["example", "empty", "legacy"].includes(String(value.scenario.kind)) ||
         value.scenario.version !== 1 || typeof value.scenario.baseDate !== "string") fail("o cenário está incompleto.");

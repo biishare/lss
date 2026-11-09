@@ -111,4 +111,10 @@ A [fase 4](docs/phase-4-2026-11-08.md) acrescenta regras por vigência/nível,
 calendário e emissão automática, benefícios com prévia e ajustamentos,
 dinheiro exacto e multas simples com segunda etapa opcional. As cobranças e
 os recibos anteriores conservam os originais. A revisão visual completa,
-o atendimento da fase 5 e os requisitos centrais da API continuam separados.
+e os requisitos centrais da API continuam separados.
+
+A [fase 5](docs/phase-5-2026-11-09.md) acrescenta atendimento no Dialog,
+Mês/Trimestre/Ano, conferência de comprovativos, aplicação de crédito entre
+anos, correcção ligada ao original, devoluções e recibos com série e snapshot.
+Uma aplicação de crédito não é contada como novo recebimento. Relatórios,
+caixa e fechos completos continuam para a fase 6.

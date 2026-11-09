@@ -36,14 +36,14 @@ function placement() {
 test("Guardar e pagar confirma matrícula e abre a inscrição do aluno correcto no modal", async () => {
   open(); await identify(); placement();
   fireEvent.click(screen.getByRole("button", { name: /^Guardar e pagar$/ }));
-  const payment = await screen.findByRole("dialog", { name: /Pagar inscrição · Aluno da matrícula guiada/ });
+  const payment = await screen.findByRole("dialog", { name: /Registar pagamento/ });
   assert.equal(saved().students.length, 13); assert.equal(saved().receipts.length, 0);
-  assert.ok(Number((within(payment).getByLabelText(/Valor recebido na inscrição/) as HTMLInputElement).value) > 0);
+  assert.ok(Number((within(payment).getByLabelText(/^Valor recebido/) as HTMLInputElement).value) > 0);
   // Happy DOM incorrectly rejects valid step="0.01" values via floating remainder.
   // Submit the form to exercise the application's money/date validation.
-  fireEvent.submit(document.getElementById("registration-payment-form")!);
+  fireEvent.submit(document.getElementById("payment-service-form")!);
   await waitFor(() => assert.equal(saved().receipts.length, 1, screen.queryAllByRole("alert").map((alert) => alert.textContent).join(" ")));
-  const receipt = await screen.findByRole("dialog", { name: /Recibo REC-/ });
+  const receipt = await screen.findByRole("dialog", { name: /Recibo LSS-/ });
   assert.match(receipt.textContent ?? "", /Aluno da matrícula guiada/);
   assert.equal(saved().receipts.length, 1); assert.equal(writes, 2);
   fireEvent.click(within(receipt).getByRole("button", { name: /^Fechar$/ }));
@@ -140,19 +140,19 @@ test("fechar matrícula conserva o preenchimento e respeita cancelamento do avis
 test("rascunho de inscrição é retomado depois de fechar e recarregar sem duplicar matrícula", async () => {
   const page = open(); await identify("Aluno com pagamento por concluir"); placement();
   fireEvent.click(screen.getByRole("button", { name: /^Guardar e pagar$/ }));
-  const dialog = await screen.findByRole("dialog", { name: /Pagar inscrição/ });
-  fireEvent.change(within(dialog).getByLabelText(/Valor recebido na inscrição/), { target: { value: "1234.56" } });
-  fireEvent.click(within(dialog).getByRole("button", { name: /^Fechar$/ }));
+  const dialog = await screen.findByRole("dialog", { name: /Registar pagamento/ });
+  fireEvent.change(within(dialog).getByLabelText(/^Valor recebido/), { target: { value: "1234.56" } });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Fechar e conservar preenchimento" }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null)); page.unmount(); open();
   fireEvent.click(await screen.findByRole("button", { name: /^Pagar inscrição$/ }));
-  const resumed = await screen.findByRole("dialog", { name: /Pagar inscrição/ });
-  assert.equal((within(resumed).getByLabelText(/Valor recebido na inscrição/) as HTMLInputElement).value, "1234.56"); assert.equal(saved().students.length, 13); assert.equal(saved().receipts.length, 0);
+  const resumed = await screen.findByRole("dialog", { name: /Registar pagamento/ });
+  assert.equal((within(resumed).getByLabelText(/^Valor recebido/) as HTMLInputElement).value, "1234.56"); assert.equal(saved().students.length, 13); assert.equal(saved().receipts.length, 0);
 });
 
 test("paginação de alunos conserva a página ao regressar da ficha e ao recarregar", async () => {
   const state = saved(), source = state.students[0];
   state.students = Array.from({ length: 55 }, (_, index) => ({ ...source, id: `page-${index}`, enrollmentId: `ENR-page-${index}`, fullName: `Aluno de paginação ${index + 1}`, stableNumber: String(index + 1).padStart(3, "0"), registrationNumber: `LSS-P-${index + 1}` }));
-  state.academic = undefined; state.paymentRecords = []; state.receipts = []; state.groups[0].capacity = 100; state.rooms[0].capacity = 100;
+  state.academic = undefined; state.paymentRecords = []; state.receipts = []; state.paymentProofs = []; state.groups[0].capacity = 100; state.rooms[0].capacity = 100;
   values.set(demoStorageKey, JSON.stringify(state));
   const page = open();
   fireEvent.click(await screen.findByRole("button", { name: "Página seguinte de alunos" }));

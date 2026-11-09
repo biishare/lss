@@ -18,7 +18,7 @@ export function addDays(value: string, days: number) {
 export const effectiveAmount = (charge: Charge | PenaltyCharge) => "baseChargeId" in charge ? charge.adjustedAmount ?? charge.amount : charge.adjustedDueAmount ?? charge.dueAmount ?? charge.amount;
 export const effectiveBenefitLabel = (charge: Charge) => charge.adjustedBenefit?.label ?? charge.snapshot?.ruleLabel;
 export function allocatedCents(record: StudentPaymentRecord, chargeId: string, before?: string) {
-  return record.allocations.filter((item) => item.chargeId === chargeId && (!before || record.payments.some((payment) => payment.id === item.paymentId && (payment.effectivePaymentDate ?? payment.paidOn) < before))).reduce((total, item) => total + cents(item.amount), 0);
+  return record.allocations.filter((item) => item.chargeId === chargeId && (!before || record.payments.some((payment) => payment.id === item.paymentId && (item.effectiveOn ?? payment.effectivePaymentDate ?? payment.paidOn) < before))).reduce((total, item) => total + cents(item.amount), 0);
 }
 export const balanceCents = (record: StudentPaymentRecord, charge: Charge | PenaltyCharge) => Math.max(0, cents(effectiveAmount(charge)) - allocatedCents(record, charge.id));
 export function dueDate(competence: string, day: number) {

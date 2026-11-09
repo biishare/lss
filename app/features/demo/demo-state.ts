@@ -20,7 +20,7 @@ export type DemoData = Required<Pick<StoredDemoState,
   "academicStages" | "classDefinitions" | "roomDefinitions" | "classes" |
   "rooms" | "groups" | "students" | "paymentSettings" | "paymentRuleVersions" |
   "paymentRecords" | "billingRuns"
->> & { receipts: PaymentReceipt[]; academic?: AcademicState };
+>> & { receipts: PaymentReceipt[]; academic?: AcademicState; paymentProofs?: import("../finance/service-model").PaymentProof[] };
 
 export type DemoOperation = {
   id: string;
@@ -101,6 +101,7 @@ export function createDemoState(kind: "example" | "empty", { now, datasetId }: {
       roomDefinitions: cloneJson(initialRoomDefinitions), classes, rooms: cloneJson(initialRooms),
       groups: cloneJson(initialGroups), students, paymentSettings: cloneJson(initialPaymentSettings),
       paymentRecords: records, paymentRuleVersions: rules, billingRuns: [], receipts: [],
+      paymentProofs: [{ id: "PROOF-DEP-2026-008", studentId: "student-009", reference: "DEP-2026-008", note: "Comprovativo entregue pelo encarregado; aguarda conferência do depósito.", status: "pending", recordedAt: "2026-09-02T08:00:00.000Z", recordedBy: "Marta — Secretaria", draft: { studentId: "student-009", category: "tuition", monthKey: "aug", targetChargeId: "CHG-student-009-TUI-AUG", amount: 1500, paidOn: "2026-08-05", method: "Depósito bancário", reference: "DEP-2026-008", evidenceReference: "DEP-2026-008", lateReason: "Comprovativo apresentado após a data do depósito", description: "Mensalidade de Agosto", allowFutureAllocation: false, selectedChargeIds: [] } }],
     };
   }
   const state = withFinanceMirror({
