@@ -49,7 +49,9 @@ export function useWorkspaceContext(datasetId: string | undefined, year: string,
     try { window.sessionStorage.setItem(workspaceContextKey, JSON.stringify({ datasetId: current.datasetId, context: next })); } catch { /* Os filtros ficam em memória. */ }
     const href = workspaceUrl(next, current.year);
     if (`${window.location.pathname}${window.location.search}` !== href) {
-      window.history[push ? "pushState" : "replaceState"](null, "", href);
+      // A completed task replaces its temporary history entry, so Back goes
+      // to the original context rather than an empty duplicate of the task.
+      window.history[push && !window.history.state?.lssTask ? "pushState" : "replaceState"](null, "", href);
     }
   }, []);
 

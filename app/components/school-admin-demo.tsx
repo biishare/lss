@@ -1,4 +1,5 @@
 "use client";
+import { useConfirmation } from "./use-confirmation";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { PaymentDialog } from "../features/finance/payment-dialog";
@@ -201,6 +202,7 @@ export function SchoolAdminWorkspace({
   onSignOut(): void;
   sessionNotice?: string;
 }) {
+  const { requestConfirmation, confirmation } = useConfirmation();
   const firstClassId = initialClasses[0]?.id ?? "";
   const firstGroupId = initialGroups[0]?.id ?? "";
   const firstStudentId = initialStudents[0]?.id ?? "";
@@ -861,10 +863,10 @@ export function SchoolAdminWorkspace({
     try {
       const raw = await file.text();
       const incoming = hydrateDemoState(parseDemoSnapshot(raw), raw, nowIso(), crypto.randomUUID());
-      const confirmed = window.confirm(
+      const confirmed = await requestConfirmation({ title: "Substituir dados locais?", confirmLabel: "Importar e substituir", message:
         `O ficheiro contém ${incoming.students.length} alunos, ${incoming.groups.length} turmas e ${incoming.paymentRecords.length} registos financeiros. ` +
-        "Vai substituir o cenário local. O original ilegível, se existir, será conservado. Deseja continuar?",
-      );
+        "Vai substituir o cenário local. O original ilegível, se existir, será conservado.",
+      });
       if (!confirmed) {
         setStorageToolsNotice("Importação cancelada; os dados actuais foram preservados.");
         return;
@@ -888,9 +890,9 @@ export function SchoolAdminWorkspace({
     } catch (error) { showStorageError(error); }
   }
 
-  function resetDemoData() {
+  async function resetDemoData() {
     if (!developerToolsEnabled || !demoState || activeProfile !== "secretaria" || !repositoryRef.current) return;
-    if (!window.confirm("Repor a demo vai substituir o cenário local. Exporte primeiro para conservar uma cópia. Deseja continuar?")) {
+    if (!await requestConfirmation({ title: "Repor dados iniciais?", confirmLabel: "Repor e substituir", message: "Repor a demo vai substituir o cenário local. Exporte primeiro para conservar uma cópia." })) {
       setStorageToolsNotice("Reposição cancelada; os dados actuais foram preservados.");
       return;
     }
@@ -1983,7 +1985,7 @@ export function SchoolAdminWorkspace({
       year="" collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed}
       onNavigate={navigateTo} onSignOut={signOut} expanded={false} onExpandedChange={setExpandedTable}>
       <WorkspacePlaceholder view={activeView} />
-    </WorkspaceShell>;
+    {confirmation}</WorkspaceShell>;
   }
 
   if (storageLoadError || !demoState) {
@@ -2023,7 +2025,7 @@ export function SchoolAdminWorkspace({
             <SecondaryButton onClick={signOut}>Sair</SecondaryButton>
           </div>
         </section>
-      </WorkspaceShell>
+      {confirmation}</WorkspaceShell>
     );
   }
 
@@ -2060,7 +2062,7 @@ export function SchoolAdminWorkspace({
         {developerToolsEnabled && !demoState?.academic && activeView === "enrollments" && renderEnrollments()}
         {activeView === "payments" && renderPayments()}
         {activeView === "reports" && renderReports()}
-      </WorkspaceShell>
+      {confirmation}</WorkspaceShell>
     );
   }
 

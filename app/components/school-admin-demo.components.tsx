@@ -1,13 +1,9 @@
+import { TaskSurface, type MobileSurface } from "./task-surface";
 import { addDays } from "../features/finance/domain/billing";
 
 import { useId, type FormEvent, type ReactNode } from "react";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
-import IconButton from "@mui/material/IconButton";
 import {
   monthOptions,
   type AcademicStageDefinition,
@@ -155,66 +151,11 @@ export function StateLabel({
   );
 }
 
-export function AppDialog({
-  actions,
-  children,
-  onClose,
-  open,
-  subtitle,
-  title,
-}: {
-  actions?: ReactNode;
-  children: ReactNode;
-  onClose: () => void;
-  open: boolean;
-  subtitle?: string;
-  title: string;
+export function AppDialog({ actions, children, onClose, open, subtitle, title, mobile = "full-screen" }: {
+  actions?: ReactNode; children: ReactNode; onClose(): void; open: boolean;
+  subtitle?: string; title: string; mobile?: MobileSurface;
 }) {
-  const titleId = useId();
-  const subtitleId = useId();
-
-  return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      aria-labelledby={titleId}
-      aria-describedby={subtitle ? subtitleId : undefined}
-      scroll="paper"
-      slotProps={{
-        paper: {
-          className: "lss-dialog-shell",
-        },
-      }}
-    >
-      <DialogTitle className="lss-dialog-header" component="div">
-        <div className="flex min-w-0 items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h3 id={titleId} className="break-words text-lg font-bold text-slate-950">
-              {title}
-            </h3>
-            {subtitle && (
-              <p id={subtitleId} className="mt-1 break-words text-sm leading-6 text-slate-500">
-                {subtitle}
-              </p>
-            )}
-          </div>
-          <IconButton onClick={onClose} aria-label="Fechar diálogo" size="large">
-            <span aria-hidden="true" className="text-2xl leading-none">
-              ×
-            </span>
-          </IconButton>
-        </div>
-      </DialogTitle>
-      <DialogContent dividers className="lss-dialog-body">
-        {children}
-      </DialogContent>
-      {actions && (
-        <DialogActions className="lss-dialog-footer lss-actions">
-          {actions}
-        </DialogActions>
-      )}
-    </Dialog>
-  );
+  return <TaskSurface open={open} title={title} subtitle={subtitle} onClose={onClose} actions={actions} mobile={mobile}>{children}</TaskSurface>;
 }
 
 export function ProfileCard({
@@ -2355,6 +2296,7 @@ export function FinanceCellDialog({
 
   return (
     <AppDialog
+      mobile="sheet"
       actions={footerActions}
       onClose={onClose}
       open={Boolean(selection && row)}

@@ -1,13 +1,10 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { TaskSurface } from "../../components/task-surface";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Step from "@mui/material/Step";
 import StepLabel from "@mui/material/StepLabel";
@@ -24,8 +21,8 @@ export type EnrollmentSession = { input: EnrollmentInput; id: string; step: numb
 export type AcademicExecute = (command: AcademicCommand, id: string) => { state: DemoState; result: Record<string, unknown> };
 export const enrollmentFormKey = "lss-academic-enrollment-form-v1";
 
-export function EnrollmentDialog({ state, session, onChange, execute, onClose, onSaved }: {
-  state: DemoState; session: EnrollmentSession;
+export function EnrollmentDialog({ state, session, onChange, execute, onClose, onSaved, draftNotice }: {
+  draftNotice?: string; state: DemoState; session: EnrollmentSession;
   onChange: (session: EnrollmentSession) => void; execute: AcademicExecute;
   onClose: () => void; onSaved: (result: { state: DemoState; result: Record<string, unknown> }, pay: boolean) => void;
 }) {
@@ -33,8 +30,6 @@ export function EnrollmentDialog({ state, session, onChange, execute, onClose, o
   const [error, setError] = useState<AcademicError | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const inFlight = useRef(false);
-  const initialInput = useRef(JSON.stringify(session.input));
-  function close() { if (JSON.stringify(input) === initialInput.current || window.confirm("Conservar o preenchimento e fechar esta matrícula?")) onClose(); }
   const year = academic.years.find((item) => item.id === input.yearId);
   const group = state.groups.find((item) => item.id === input.groupId);
   const schoolClass = state.classes.find((item) => item.id === group?.classId);
@@ -68,10 +63,16 @@ export function EnrollmentDialog({ state, session, onChange, execute, onClose, o
     if (name === "enrolledOn") change({ enrolledOn: value, tuitionStartMonth: year?.billingMonths.find((key) => monthIndex(key) >= Number(value.slice(5, 7)) - 1) ?? "" });
     else change({ [name]: name === "discountPercent" ? Number(value) : value });
   }} error={error?.field === name} helperText={error?.field === name ? error.message : undefined} slotProps={options.type === "date" ? { inputLabel: { shrink: true } } : undefined} fullWidth />;
-  return <Dialog open fullWidth maxWidth="sm" onClose={close} aria-labelledby="enrollment-title">
-    <DialogTitle id="enrollment-title">{input.personId ? "Renovar matrícula" : "Nova matrícula"}</DialogTitle>
-    <DialogContent dividers>
-      <Stepper activeStep={session.step} alternativeLabel sx={{ mb: 3 }}>{["Identificação", "Colocação", "Condições e revisão"].map((label) => <Step key={label}><StepLabel>{label}</StepLabel></Step>)}</Stepper>
+  return <TaskSurface title={input.personId ? "Renovar matrícula" : "Nova matrícula"} mobile="full-screen"
+    onClose={onClose} busy={submitting} closeNotice={draftNotice || "O preenchimento está conservado neste separador."}
+    actions={(close) => <>
+      <Button onClick={close}>Fechar</Button>
+      <Button onClick={() => save("draft")} disabled={submitting}>Guardar rascunho</Button>
+      {session.step > 0 && <Button onClick={() => { onChange({ ...session, step: session.step - 1 }); setError(null); }}>Anterior</Button>}
+      {session.step < 2 ? <Button variant="contained" onClick={advance}>Continuar</Button> : <><Button variant="outlined" disabled={submitting} onClick={() => save("enroll")}>Guardar matrícula</Button><Button variant="contained" disabled={submitting} onClick={() => save("enroll", true)}>Guardar e pagar</Button></>}
+    </>}>
+      <p className="lss-enrollment-step-label mb-4 text-sm font-semibold" role="status">Passo {session.step + 1} de 3 — {["Identificação", "Colocação", "Condições e revisão"][session.step]}</p>
+      <Stepper className="lss-enrollment-steps" activeStep={session.step} alternativeLabel sx={{ mb: 3 }}>{["Identificação", "Colocação", "Condições e revisão"].map((label) => <Step key={label}><StepLabel>{label}</StepLabel></Step>)}</Stepper>
       <div className="grid gap-5">
         {error && <Alert severity="error">{error.message}</Alert>}
         {session.step === 0 && <>
@@ -98,12 +99,5 @@ export function EnrollmentDialog({ state, session, onChange, execute, onClose, o
           <section className="rounded-lg bg-slate-50 p-4 text-sm leading-7"><h3 className="font-bold">Rever matrícula</h3><p>{input.fullName} · {year?.label}</p><p>{schoolClass?.name} · {group?.name} · {group?.shift}</p><p>Inscrição: <strong>{formatCurrency(registrationDue)}</strong></p><p>Primeiro mês integral: {monthOptions.find((month) => month.key === input.tuitionStartMonth)?.label ?? "Por escolher"}.</p><p>Pode guardar a matrícula e pagar a inscrição depois.</p></section>
         </>}
       </div>
-    </DialogContent>
-    <DialogActions sx={{ flexWrap: "wrap", gap: 1, p: 2 }}>
-      <Button onClick={close}>Fechar</Button>
-      <Button onClick={() => save("draft")} disabled={submitting}>Guardar rascunho</Button>
-      {session.step > 0 && <Button onClick={() => { onChange({ ...session, step: session.step - 1 }); setError(null); }}>Anterior</Button>}
-      {session.step < 2 ? <Button variant="contained" onClick={advance}>Continuar</Button> : <><Button variant="outlined" disabled={submitting} onClick={() => save("enroll")}>Guardar matrícula</Button><Button variant="contained" disabled={submitting} onClick={() => save("enroll", true)}>Guardar e pagar</Button></>}
-    </DialogActions>
-  </Dialog>;
+  </TaskSurface>;
 }
