@@ -38,21 +38,23 @@ Git. O workflow `Validar LSS` guarda o arquivo `lss-browser-acceptance` por
 
 ## Resultado e limites
 
+O [workflow 42591882535](https://github.com/biishare/lss/actions/runs/42591882535)
+passou os 195 testes de domínio/DOM e os 15 ensaios de Chromium sobre o commit
+`ed03e93`, além de lint, TypeScript e build. Foram produzidas 40 capturas das
+cinco áreas, capturas dos diálogos e quatro PDFs A4. A revisão visual confirmou
+a planilha a toda a largura, os filtros legíveis, matrícula e recibo. Os quatro
+PDFs conservaram aluno, valor, número e total, numa página nos casos ensaiados,
+sem navegação ou botões.
+
+A revisão encontrou e corrigiu a coluna vazia que ainda reservava o formulário
+retirado e os rótulos nativos sobrepostos a Todas/Todos nos relatórios. Foram
+também ajustados o fundo branco de impressão e o espaço útil das colunas do
+PDF. As capturas aguardam o fim das animações e usam a janela visível quando
+há um diálogo aberto. A execução final destas verificações e da recuperação
+de mês/período com Voltar/Avançar é acompanhada na [PR #11](https://github.com/biishare/lss/pull/11).
+
 A execução de Chromium neste executor foi bloqueada pela restrição de sockets
-do ambiente. O ensaio corre no runner do GitHub Actions. A primeira execução,
-`42590865367`, confirmou as cinco áreas nas oito larguras, a sidebar, o Drawer
-e a matrícula: 11 casos aprovados. Os quatro casos restantes pararam em
-selectores do próprio ensaio: o diálogo deixa a árvore acessível na impressão
-e o Next.js acrescenta um segundo `alert` para anunciar a navegação. Os
-selectores foram corrigidos sem reduzir as verificações.
-
-A revisão das capturas revelou duas correcções de interface: a planilha
-reservava uma coluna vazia para o formulário já retirado e os rótulos de
-filtros nativos vazios sobrepunham Todas/Todos nos relatórios. A planilha passa
-a uma coluna em toda a largura; os filtros mantêm o rótulo elevado. Os testes
-de navegador passam a verificar também estes dois comportamentos.
-
-A reexecução após estas correcções fica registada na PR #11.
+do ambiente; as verificações e os artefactos vêm do runner do GitHub Actions.
 
 Capturas de Chromium e PDFs gerados não demonstram teclado virtual, zoom de
 um dispositivo físico, impressão numa impressora, autenticação de servidor,

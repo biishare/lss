@@ -428,6 +428,7 @@ textarea:focus-visible,
 .lss-workspace[data-expanded="true"] [data-workspace-secondary] { display: none; }
 
 @media print {
+  html, body { background: white !important; }
   body:has(.lss-receipt-print) * { visibility: hidden !important; }
   body .lss-receipt-print, body .lss-receipt-print * { visibility: visible !important; }
   body:has(.lss-receipt-print) .MuiDialog-root,
@@ -467,7 +468,7 @@ textarea:focus-visible,
   .lss-report-print tr { break-inside: avoid; }
   .lss-report-print .overflow-x-auto { overflow: visible !important; }
   .lss-report-print table { font-size: 8pt; table-layout: fixed; }
-  .lss-report-print th, .lss-report-print td { overflow-wrap: anywhere; }
+  .lss-report-print th, .lss-report-print td { overflow-wrap: anywhere; padding: 2mm 1mm; }
 }
 
 .report-cards { display: block; }

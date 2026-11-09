@@ -23,7 +23,8 @@ async function snapshot(page: Page): Promise<DemoState> {
 }
 
 async function screenshot(page: Page, info: TestInfo, name: string) {
-  await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: true });
+  const modalOpen = await page.getByRole("dialog").count() > 0;
+  await page.screenshot({ path: info.outputPath(`${name}.png`), fullPage: !modalOpen, animations: "disabled" });
 }
 
 async function noPageOverflow(page: Page) {
@@ -124,6 +125,7 @@ for (const width of [390, 1440]) {
     await page.goto("/payments");
     await page.getByRole("searchbox").fill("Ana");
     await page.getByLabel("Mês de mensalidade", { exact: true }).selectOption("may");
+    await page.getByLabel("Período da planilha", { exact: true }).selectOption("month");
     const cell = page.getByRole("button", { name: /^Maio.*Ana Júlia Mucavele/ });
     await cell.click();
     await page.getByRole("dialog").getByRole("button", { name: "Registar pagamento", exact: true }).click();
@@ -142,6 +144,7 @@ for (const width of [390, 1440]) {
     expect(saved.receipts[0].amount).toBe(600);
     await page.emulateMedia({ media: "print" });
     await expect(receipt).toBeVisible();
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(255, 255, 255)");
     await expect(page.locator(".lss-workspace")).toBeHidden();
     await expect(page.locator(".MuiDialogActions-root")).toBeHidden();
     const pdf = await page.pdf({ path: info.outputPath(`recibo-${width}.pdf`), format: "A4", printBackground: true });
@@ -154,8 +157,16 @@ for (const width of [390, 1440]) {
     await expect(cell).toContainText("Parcial");
     await page.reload();
     await expect(page.getByRole("searchbox")).toHaveValue("Ana");
+    await expect(page.getByLabel("Período da planilha", { exact: true })).toHaveValue("month");
+    await expect(page.getByLabel("Mês de mensalidade", { exact: true })).toHaveValue("may");
     expect((await snapshot(page)).receipts).toHaveLength(1);
     await navigate(page, "Relatórios");
+    await page.goBack();
+    await expect(page.getByRole("heading", { level: 1, name: "Pagamentos", exact: true })).toBeVisible();
+    await expect(page.getByRole("searchbox")).toHaveValue("Ana");
+    await expect(page.getByLabel("Período da planilha", { exact: true })).toHaveValue("month");
+    await page.goForward();
+    await expect(page.getByRole("heading", { level: 1, name: "Relatórios", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Recibo", exact: true }).click();
     await expect(page.locator(".lss-receipt-print")).toContainText("LSS-2026-000001");
     await page.getByRole("dialog").getByRole("button", { name: "Fechar", exact: true }).click();
