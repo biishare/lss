@@ -193,3 +193,12 @@ workflow da PR, sem tratar os testes de DOM como revisão visual. Os primeiros
 ensaios locais corrigiram tipos/selectores dos novos testes e passaram a
 simular a falha de sessionStorage com um adaptador que efectivamente lança
 a excepção, em vez de atribuir um método ao objecto Storage.
+
+O primeiro workflow UI-2 (`42632119031`, commit `76cd57e`) aprovou testes,
+lint, TypeScript e build. No Chromium, 21/28 casos passaram, incluindo falha /
+retry com ID conservado e Voltar. Sete casos revelaram um identificador ARIA
+duplicado: DialogTitle adoptava o aria-labelledby do Dialog, que já estava
+no h2. Chromium anunciava, por exemplo, «Nova matrícula Fechar tarefa» em vez
+do título exacto. O cabeçalho recebeu um ID próprio, distinto do h2; um teste
+verifica o nome e a unicidade da referência. Os selectores de navegador
+mantêm os nomes exactos para comprovar a correcção, em vez de a contornar.

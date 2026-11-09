@@ -21,6 +21,9 @@ test("fecho sem alterações não pergunta; alterações pedem decisão na mesma
     </TaskSurface>;
   }
   render(<Harness />);
+  const labelledDialog = screen.getByRole("dialog", { name: "Corrigir contacto" });
+  const labelId = labelledDialog.getAttribute("aria-labelledby");
+  assert.equal([...document.querySelectorAll("[id]")].filter((element) => element.id === labelId).length, 1);
   fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
   assert.equal(closed, 1);
   const dialog = screen.getByRole("dialog"), input = screen.getByLabelText("Contacto");

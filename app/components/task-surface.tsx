@@ -57,7 +57,7 @@ export function TaskSurface({ open = true, title, subtitle, children, actions, o
     className="lss-task-root" data-mobile={mobile} data-tall={tall || undefined}
     aria-labelledby={`${id}-title`} aria-describedby={subtitle ? `${id}-context` : undefined}
     scroll="paper" slotProps={{ paper: { className: "lss-task-paper" } }}>
-    <DialogTitle component="div" className="lss-task-header">
+    <DialogTitle id={`${id}-header`} component="div" className="lss-task-header">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0"><h2 id={`${id}-title`} className="break-words text-lg font-bold">{title}</h2>
           {subtitle && <div id={`${id}-context`} className="mt-1 break-words text-sm font-normal text-slate-500">{subtitle}</div>}
