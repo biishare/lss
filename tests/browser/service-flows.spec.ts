@@ -78,7 +78,10 @@ for (const width of [360, 1440]) {
     expect(result.receipts).toHaveLength(0); expect(result.paymentProofs).toHaveLength(1);
     expect(result.paymentProofs![0].status).toBe("pending");
     await page.getByRole("dialog").getByRole("button", { name: "Fechar", exact: true }).click();
-    await page.getByRole("button", { name: "Conferir comprovativos", exact: true }).click();
+    await openCell(page);
+    await expect(page.getByRole("dialog").getByRole("alert")).toContainText(`MPESA-UI3-${width}`);
+    await page.getByRole("dialog").getByRole("button", { name: "Conferir comprovativo", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.getByRole("button", { name: `Conferir comprovativo MPESA-UI3-${width}`, exact: true }).click();
     const review = page.getByRole("dialog", { name: "Conferir comprovativo", exact: true });
     await expect(review).toContainText("600 MT");
@@ -137,13 +140,16 @@ test("detalhe e recibo anterior ocupam a mesma tarefa e conservam o pagamento po
   const cell = await openCell(page);
   const payment = page.getByRole("dialog", { name: "Registar pagamento", exact: true });
   await payment.getByLabel("Valor recebido", { exact: false }).fill("300");
+  const beforeConsultation = await snapshot(page);
   const id = await page.evaluate(() => JSON.parse(sessionStorage.getItem("lss-demo-drafts-v1")!).paymentCommandId);
   await payment.getByRole("button", { name: "Consultar detalhe da cobrança", exact: true }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Recibo", exact: true }).click();
   await expect(page.locator(".lss-receipt-print")).toContainText("400 MT");
   expect(await page.getByRole("dialog").count()).toBe(1);
   await page.getByRole("dialog").getByRole("button", { name: "Voltar à cobrança", exact: true }).click();
+  expect(await snapshot(page)).toEqual(beforeConsultation);
   await page.getByRole("dialog").getByRole("button", { name: "Voltar ao pagamento", exact: true }).click();
+  expect(await snapshot(page)).toEqual(beforeConsultation);
   await expect(payment.getByLabel("Valor recebido", { exact: false })).toHaveValue("300");
   expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem("lss-demo-drafts-v1")!).paymentCommandId)).toBe(id);
   await payment.getByRole("button", { name: "Fechar", exact: true }).click();

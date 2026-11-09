@@ -314,3 +314,13 @@ de validação dos rascunhos, repetidos os quatro testes desse módulo e os 15 d
 regras/atendimento, todos aprovados. Os oito ensaios novos de Chromium seguem
 para o workflow, juntamente com os 28 anteriores. O executável não está instalado
 no executor; a evidência de navegador e da prévia será registada na PR.
+
+O primeiro workflow UI-3 (`42642170376`, commit `62ebc1a`) aprovou os 221 testes,
+lint, TypeScript e build; Chromium passou 35/36 casos. O ensaio de recibo anterior
+detectou uma submissão indevida ao regressar ao formulário: React reutilizava
+o nó do botão Voltar como botão submit antes da acção nativa do clique. Os
+controlos receberam identidades distintas por função, tipo explícito e a
+navegação cancela a acção nativa. O ensaio compara o estado financeiro antes e
+depois de cada regresso, além de conservar campo e ID. O percurso de comprovativo
+passa também pelo aviso da célula e atalho para a conferência. Esta correcção
+segue para novo ensaio completo, sem integrar a versão em revisão na main.

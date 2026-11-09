@@ -94,7 +94,9 @@ test("consulta opcional e retoma conservam preenchimento e ID antes de confirmar
   assert.equal(screen.getByRole("dialog"), dialog);
   assert.ok(screen.getByRole("heading", { name: "Detalhes da mensalidade" }));
   assert.equal(screen.getAllByRole("dialog").length, 1);
-  fireEvent.click(screen.getByRole("button", { name: "Voltar ao pagamento" }));
+  const back = screen.getByRole("button", { name: "Voltar ao pagamento" });
+  fireEvent.click(back);
+  assert.notEqual(screen.getByRole("button", { name: "Confirmar pagamento" }), back);
   assert.equal((screen.getByLabelText(/^Valor recebido/) as HTMLInputElement).value, "625");
   fireEvent.click(within(dialog).getByRole("button", { name: "Fechar" }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));

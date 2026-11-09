@@ -92,15 +92,15 @@ export function PaymentDialog({ onOpenCash, state, draft, onChange, onClose, con
   const saveForReview = !correction && draft.method !== "Numerário" && !proofChecked;
   const title = receipt ? `Recibo ${receipt.id}` : outcome ? "Comprovativo guardado" : stage === "student" ? "Escolher aluno" : stage === "charge" ? "Escolher cobrança" : stage === "detail" ? "Consultar cobrança" : correction ? "Corrigir recebimento" : "Registar pagamento";
   const extended = Boolean(correction || ((stage === "payment" || stage === "detail") && (distributing || draft.additionalTargets?.length || draft.selectedChargeIds?.length)));
-  const returnToForm = () => setStage("payment");
+  const returnToForm = (event?: { preventDefault(): void }) => { event?.preventDefault(); setStage("payment"); };
   return <TaskSurface title={title} onClose={onClose} busy={busy}
     mobile={receipt || extended ? "full-screen" : "sheet"} tall={!receipt && !outcome}
     dirty={(!receipt || historicalReceipt) && !outcome && (hasUnpreservedChanges ?? Boolean(correction && reason))}
     closeNotice={!receipt && !outcome && stage === "payment" ? draftNotice || "O preenchimento mantém-se neste separador." : undefined}
     subtitle={stage !== "student" && student ? <>{student.fullName} · {student.registrationNumber} · {student.academicYearId ?? state.paymentSettings.academicYear}{stage === "payment" || stage === "detail" ? ` · ${itemLabel}` : ""}</> : "Pesquise e escolha o aluno para iniciar o atendimento."}
     actions={(close) => <>
-      <Button onClick={close} disabled={busy}>Fechar</Button>
-      {receipt ? <>{historicalReceipt && <Button onClick={() => { setReceipt(null); setHistoricalReceipt(false); setStage("detail"); }}>Voltar à cobrança</Button>}<Button variant="contained" onClick={() => { try { window.print(); } catch { setError("O recibo está guardado. Tente imprimir novamente."); } }}>Imprimir / Guardar PDF</Button></> : !outcome && stage === "payment" ? <Button type="submit" form="payment-service-form" variant="contained" disabled={busy}>{busy ? "A guardar…" : correction ? "Confirmar correcção" : saveForReview ? "Guardar para conferência" : draft.method === "Numerário" ? "Confirmar pagamento" : "Confirmar após conferência"}</Button> : stage === "detail" ? <Button variant="contained" onClick={returnToForm}>Voltar ao pagamento</Button> : null}
+      <Button key="close" type="button" onClick={close} disabled={busy}>Fechar</Button>
+      {receipt ? <>{historicalReceipt && <Button key="back-to-detail" type="button" onClick={(event) => { event.preventDefault(); setReceipt(null); setHistoricalReceipt(false); setStage("detail"); }}>Voltar à cobrança</Button>}<Button key="print" type="button" variant="contained" onClick={() => { try { window.print(); } catch { setError("O recibo está guardado. Tente imprimir novamente."); } }}>Imprimir / Guardar PDF</Button></> : !outcome && stage === "payment" ? <Button key="submit-payment" type="submit" form="payment-service-form" variant="contained" disabled={busy}>{busy ? "A guardar…" : correction ? "Confirmar correcção" : saveForReview ? "Guardar para conferência" : draft.method === "Numerário" ? "Confirmar pagamento" : "Confirmar após conferência"}</Button> : stage === "detail" ? <Button key="back-to-payment" type="button" variant="contained" onClick={returnToForm}>Voltar ao pagamento</Button> : null}
     </>}>
     {error && <Alert ref={errorRef} tabIndex={-1} severity="error" sx={{ mb: 2 }}>{error}</Alert>}
     {receipt ? <ReceiptContent receipt={receipt} status={receiptStatus(state, receipt)}/> : outcome ? <Alert severity="success">{outcome} Não foi emitido recibo.</Alert> : <>
