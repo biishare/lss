@@ -456,3 +456,33 @@ largura segura a 320 px. Na caixa, CSV/PDF usam rótulos visuais curtos com nome
 acessíveis completos, para ficarem junto do filtro sem deslocar os movimentos.
 As etiquetas de turma passam a identificar classe e turma sem repetir a palavra.
 Estes ajustes de composição seguem para nova verificação de navegador.
+
+## UI-4 integrada e UI-5 — verificação final
+
+A PR #15 foi integrada na main `7a7ffde`. O workflow da main `42680615838`
+aprovou 147 testes de domínio e 81 de interface, lint, TypeScript, build e
+43 casos Chromium. A Vercel publicou esse SHA em estado READY e o formulário
+foi observado na URL de produção. A revisão dos artefactos UI-4 conferiu oito
+PDFs de uma página e as capturas das larguras previstas.
+
+A UI-5 acrescenta um percurso composto, sem sessão nem dados injectados, a
+390/1440 px: entrada Secretaria → matrícula → Guardar e pagar → recibo →
+recarga → saída → entrada Director → pesquisa/recibo/CSV/PDF → recarga sem
+alteração financeira. Acrescenta também uma comparação reproduzível do HTML
+e scripts iniciais entre a versão anterior à UI-1 e a UI-4 integrada.
+
+O estado de cada critério UX-01 a UX-17, os números medidos, comandos e limites
+estão em [ui5-verification.md](ui5-verification.md). O percurso publicado foi
+executado como Secretaria com uma pessoa fictícia: matrícula, inscrição de
+3 500 MT, mesmo recibo no relatório e recargas da ficha/relatório com contexto.
+Android físico, teclado real e tempos em rede móvel mantêm-se identificados
+separadamente. A branch UI-5 ainda não foi integrada na main.
+
+O workflow UI-5 `42686319412` (`473d592`) aprovou 147 testes de domínio,
+81 de interface, lint, TypeScript, build e 45 casos Chromium. A primeira
+execução revelou uma leitura antecipada no novo teste; a espera passou a
+acompanhar a preparação dos dados, sem alterar a aplicação. O artefacto contém
+88 capturas e 10 PDFs de uma página; as quatro novas capturas e os dois novos
+PDFs foram revistos. O relatório identifica a evidência de cada UX e mantém
+em aberto apenas as verificações que exigem aparelho/rede reais e a entrega
+da própria UI-5 após integração.
