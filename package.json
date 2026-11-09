@@ -11,7 +11,8 @@
     "test:domain": "node --test --experimental-strip-types --loader ./tests/ts-extension-loader.mjs tests/*.test.ts",
     "test:ui": "node --import tsx --test tests/*.test.tsx",
     "test:rehearsal": "node --test --experimental-strip-types --loader ./tests/ts-extension-loader.mjs tests/pilot-rehearsal.test.ts tests/synthetic-readiness.test.ts",
-    "benchmark": "node --import tsx scripts/benchmark-readiness.ts"
+    "benchmark": "node --import tsx scripts/benchmark-readiness.ts",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
@@ -24,6 +25,7 @@
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@playwright/test": "1.62.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16.3.3",
     "@types/node": "^20",

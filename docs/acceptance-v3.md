@@ -1,11 +1,15 @@
 # Matriz de aceitação v3 — fase 7
 
-Base: fase 6 integrada na `main` em `9fb85c3`. Decisões posteriores do
+Base: fase 7 integrada na `main` em `f572555` (PR #10), com a continuação de
+navegador na PR #11. Decisões posteriores do
 responsável: apresentação normal ao cliente e API/base central adiadas.
 
 **Automatizado local** significa domínio, repositório e/ou Happy DOM. Não
 significa navegador real, autorização de servidor, vários postos ou piloto.
-A evidência de publicação e de observação fica no [registo da fase 7](phase-7-2026-11-09.md).
+A evidência de publicação e de observação fica no [registo da fase 7](phase-7-2026-11-09.md)
+e no [ensaio de navegador](browser-acceptance.md). **Chromium** refere-se ao
+build de produção isolado no GitHub Actions, não a um dispositivo físico ou
+a navegação autenticada na prévia protegida da Vercel.
 
 ## Cálculos e movimentos
 
@@ -31,15 +35,15 @@ benefícios temporários, extras e compatibilidade histórica têm cobertura em
 
 | Critério | Evidência existente | Observação que não pode ser inferida desses testes |
 | --- | --- | --- |
-| U01 | `demo-ui`: menu, contexto e preferência | Medir 256/64 e ganho de largura em navegador. |
-| U02 | CSS e componentes responsivos; listas paginadas | Rever 320/360/390/768/1024/1280/1440/1920 e overflow real. |
-| U03 | `demo-ui`: Drawer, Escape/destino/fora e foco | Confirmar no dispositivo/navegador de utilização. |
-| U04 | `demo-ui`: célula → pagamento → recibo → célula, filtros/scroll/foco | Ensaio acompanhado no browser. |
+| U01 | `demo-ui` e Chromium: menu, contexto e preferência | Chromium mediu 256/64 e ganho de 192 px, conservando a pesquisa. |
+| U02 | Chromium: cinco áreas nas oito larguras, capturas e medição | Sem overflow da página nos casos ensaiados; planilha a toda a largura e filtros de relatório corrigidos. |
+| U03 | DOM e Chromium: Drawer, Escape/destino/fora e foco | Confirmado em Chromium a 390 px; dispositivo físico ainda por ensaiar. |
+| U04 | DOM e Chromium: célula → parcial → recibo → célula | Pesquisa e foco confirmados em 390/1440 px. Selecção/scroll também cobertos pelo DOM. |
 | U05 | `demo-ui`, `academics-ui`, `workspace-context`: períodos, ficha, história e recarga | Confirmar contexto na versão publicada. |
 | U06 | `demo-ui`: vista expandida e Escape | Teclado virtual, zoom e alcance dos botões exigem dispositivo/navegador. |
 | U07 | `billing-v3`, `finance-spreadsheet`, `pilot-rehearsal`: bolsa e multa pendente | Conferir apresentação dos mesmos estados na ficha/planilha. |
-| U08 | `finance-service`, `finance-service-ui`: série, snapshot e erro de impressão sem escrita | PDF/folha real e paginação não são comprovados pelo DOM. |
-| U09 | `academics-ui`: erro, dados mantidos e inscrição correcta | Confirmar o percurso com o operador no posto. |
+| U08 | Domínio/DOM e quatro PDFs A4 gerados em Chromium | Recibo/relatório a partir de 390/1440 px, sem menu e com os valores preservados; impressora e documentos longos ainda por ensaiar. |
+| U09 | DOM e Chromium: erro, dados mantidos e inscrição correcta | Matrícula e Guardar e pagar confirmados a 390 px; ensaio com operador no posto ainda pendente. |
 | A01/A02 | Serviços locais recusam Director; `demo-ui` cobre contas/saída | Não é autorização ou autenticação de servidor. |
 | I01 | `demo-repository`, `finance-service`, `cash-continuity`: ID/conteúdo e repetição | Não prova resposta perdida/conflito simultâneo numa API. |
 | I02 | `demo-ui`, `demo-repository`, `academics`: revisão obsoleta | Detecta alteração já ocorrida noutra aba; uma aba de escrita suportada. |

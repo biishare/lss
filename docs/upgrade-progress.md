@@ -12,12 +12,12 @@ previam PostgreSQL e servidor nesta etapa.
 | --- | --- | --- |
 | 0 - Confirmar base e rever o plano | Diagnóstico realizado | Base, código, testes e diferenças inventariados. |
 | 1 - Dados e serviços fiáveis | Parcial face à v3 integral; âmbito local entregue na main | Snapshot v3, validação, revisão, comandos, recuperação, recibo persistido e rascunhos. Base central, transacções e backups adiados para a API. |
-| 2 - Login, MUI e navegação | Parte local implementada; fase integral parcial | Login e navegação de apresentação com cinco áreas. Autenticação/recuperação/autorização reais adiadas. Revisão visual pendente. |
-| 3 - Alunos e estrutura | Implementada e validada no âmbito local; revisão visual pendente | Ficha permanente, matrículas anuais, configuração guiada, vagas, pautas, rascunhos, renovação, transferência e saída. Validação de servidor aguarda a API. |
-| 4 - Regras e cobranças | Implementada no âmbito local; revisão visual pendente | Vigências por nível, calendário/emissão automática, benefícios com prévia, dinheiro exacto e multas v3; legado preservado. Integrada na main pela PR #7 (`88e1fea`). |
+| 2 - Login, MUI e navegação | Âmbito local implementado e revisto em Chromium; fase integral parcial | Cinco áreas nas oito larguras, sidebar/Drawer e contas fictícias ensaiados. Autenticação/recuperação/autorização reais adiadas. |
+| 3 - Alunos e estrutura | Implementada e validada no âmbito local; matrícula revista em Chromium | Ficha permanente, matrículas anuais, configuração guiada, vagas, pautas, rascunhos, renovação, transferência e saída. Validação de servidor aguarda a API. |
+| 4 - Regras e cobranças | Implementada no âmbito local; planilha revista em Chromium | Vigências por nível, calendário/emissão automática, benefícios com prévia, dinheiro exacto e multas v3; legado preservado. Integrada na main pela PR #7 (`88e1fea`). |
 | 5 - Atendimento, crédito e recibos | Integrada na main e publicada | PR #8, `17cf3d6`. Pagamento/recibo, Mês/Trimestre/Ano, conferência, crédito, correcções e devoluções. |
 | 6 - Relatórios, caixa e continuidade | Integrada na main e publicada (PR #9, `9fb85c3`) | Painéis por papel, totais detalháveis, CSV/impressão/PDF, mensagens para copiar, caixa e fechos imutáveis, cópias locais e ensaio de restauro. Backups centrais aguardam a API. |
-| 7 - Validar, apresentar e preparar piloto | Validação local e guias preparados para revisão | Ensaios integrados, escala 100/300, guias, matriz e checks de CI. Piloto real condicionado à API. |
+| 7 - Validar, apresentar e preparar piloto | Âmbito local integrado na main (PR #10, `f572555`); revisão de navegador na PR #11 | 195 testes de domínio/DOM e 15 de Chromium aprovados, 40 capturas nas oito larguras e quatro PDFs. Piloto real condicionado à API. |
 
 ## Fase 1: alterações
 
