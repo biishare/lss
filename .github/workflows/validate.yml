@@ -32,3 +32,15 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:browser
+      - name: Guardar capturas, PDFs e traces do ensaio
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: lss-browser-acceptance
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
