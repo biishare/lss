@@ -50,7 +50,6 @@ import {
   firstAvailableRoomDefinitionId,
   formatCurrency,
   formatDate,
-  formatDateTime,
   getMiscellaneousCellState,
   getMiscellaneousSummary,
   getMonthCellState,
@@ -72,7 +71,6 @@ import {
   normalizePaymentRecord,
   normalizeText,
   nowIso,
-  paidOnToIso,
   parseMoney,
   paymentMethods,
   paymentSections,
@@ -85,7 +83,6 @@ import {
   sortStudents,
   stageLabel,
   statusOptions,
-  summarizePaymentRows,
   today,
   type AcademicStageDraft,
   type BillingRun,
@@ -149,6 +146,10 @@ import { WorkspaceShell } from "./workspace-shell";
 import { demoSessionFor, demoSessionKey, readDemoSession, saveDemoSession } from "../features/demo/demo-session";
 import { useWorkspaceContext } from "../features/demo/use-workspace-context";
 import { useWorkspaceScroll } from "../features/demo/use-workspace-scroll";
+import { DashboardWorkspace } from "../features/reports/dashboard";
+import { ReportsWorkspace } from "../features/reports/workspace";
+import { executeCash, type CashCommand } from "../features/cash/commands";
+import { ensureBackupConfiguration, automaticBackup } from "../features/continuity/backups";
 import { AcademicWorkspace } from "../features/academics/academic-workspace";
 import { academicStateFor, projectStudents, schoolDate } from "../features/academics/model";
 import { executeAcademic, type AcademicCommand } from "../features/academics/operations";
@@ -209,6 +210,8 @@ export function SchoolAdminDemo({
   const [accountName, setAccountName] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [storageToolsNotice, setStorageToolsNotice] = useState("");
+  const [backupNotice, setBackupNotice] = useState("");
+  const enrollmentRef = useRef<{ openEnrollment(): void } | null>(null);
   const [demoState, setDemoState] = useState<DemoState | null>(null);
   const [storageLoadError, setStorageLoadError] = useState("");
   const [originalStorageRaw, setOriginalStorageRaw] = useState<string | undefined>();
@@ -389,7 +392,7 @@ export function SchoolAdminDemo({
       const repository = createLocalDemoRepository({
         getItem: (key) => window.localStorage.getItem(key),
         setItem: (key, value) => window.localStorage.setItem(key, value),
-      });
+      }, { onBackupIssue: setBackupNotice });
       repositoryRef.current = repository;
       let loaded = repository.load();
       if (loaded.status === "empty" && !developerToolsEnabled) {
@@ -698,60 +701,7 @@ export function SchoolAdminDemo({
     ? studentContextLabel(selectedFinanceRow.student)
     : "Sem contexto";
 
-  const schoolPaymentSummary = useMemo(
-    () => summarizePaymentRows(allPaymentRows),
-    [allPaymentRows],
-  );
-  const miscellaneousPaymentRows = useMemo(
-    () =>
-      allPaymentRows
-        .flatMap((row) => {
-          return row.record.allocations.flatMap((allocation) => {
-            const charge = row.record.charges.find(
-              (item) => item.id === allocation.chargeId,
-            );
-
-            if (charge?.category !== "miscellaneous") {
-              return [];
-            }
-
-            const payment = row.record.payments.find(
-              (item) => item.id === allocation.paymentId,
-            );
-
-            return [
-              {
-                student: row.student,
-                payment: {
-                  amount: allocation.amount,
-                  paidAt: payment
-                    ? paidOnToIso(payment.effectivePaymentDate ?? payment.paidOn)
-                    : charge.createdAt,
-                  paidDay: payment
-                    ? Number((payment.effectivePaymentDate ?? payment.paidOn).slice(8, 10))
-                    : 0,
-                  method: payment?.method,
-                  recordedAt: payment?.recordedAt,
-                  description: charge.description,
-                },
-              },
-            ];
-          });
-        })
-        .sort(
-          (a, b) =>
-            new Date(b.payment.paidAt ?? "").getTime() -
-            new Date(a.payment.paidAt ?? "").getTime(),
-        ),
-    [allPaymentRows],
-  );
-
   const selectedMonth = monthByKey(billingMonthKey) ?? paymentMonths[0];
-  const activeClassesTotal = classes.filter(
-    (schoolClass) => schoolClass.status === "active",
-  ).length;
-  const activeGroupsTotal = groups.filter((group) => group.status === "active")
-    .length;
   const billingRunsForGroup = billingRuns.filter(
     (run) => run.groupId === currentGroupId,
   );
@@ -787,176 +737,17 @@ export function SchoolAdminDemo({
     return total + (month?.balance ?? 0) + (month?.fineBalance ?? 0);
   }, 0);
   const selectedMonthCarryOut = paymentRows.reduce((total, row) => total + (demoState ? personCreditSources(demoState, row.student.id).reduce((sum, source) => sum + source.available, 0) : row.ledger.totals.carry), 0);
-  const dashboardSummary = useMemo(() => {
-    const monthRevenue = allPaymentRows.reduce((total, row) => {
-      const month = row.ledger.monthly.find(
-        (item) => item.month.key === billingMonthKey,
-      );
-
-      return total + (month?.paid ?? 0) + (month?.finePaid ?? 0);
-    }, 0);
-    const totalDebt = allPaymentRows.reduce(
-      (total, row) => total + getStudentDebt(row.ledger, row.record),
-      0,
-    );
-    const overdueRows = allPaymentRows.filter((row) =>
-      rowMatchesPaymentAlertFilter(
-        row,
-        "overdue",
-        paymentMonths,
-        paymentSettings,
-      ),
-    );
-    const firstFineRows = allPaymentRows.filter((row) =>
-      rowMatchesPaymentAlertFilter(
-        row,
-        "first-fine",
-        paymentMonths,
-        paymentSettings,
-      ),
-    );
-    const secondFineRows = allPaymentRows.filter((row) =>
-      rowMatchesPaymentAlertFilter(
-        row,
-        "second-fine",
-        paymentMonths,
-        paymentSettings,
-      ),
-    );
-    const supportedStudents = students.filter(
-      (student) => student.financialProfile.status !== "regular",
-    );
-
-    return {
-      monthRevenue,
-      totalDebt,
-      overdueStudents: overdueRows.length,
-      firstFineStudents: firstFineRows.length,
-      secondFineStudents: secondFineRows.length,
-      supportedStudents: supportedStudents.length,
-    };
-  }, [allPaymentRows, billingMonthKey, paymentMonths, paymentSettings, students]);
-  const paymentAlertCounts = useMemo(
-    () => ({
-      registration: paymentRows.filter((row) =>
-        rowMatchesPaymentAlertFilter(
-          row,
-          "registration",
-          paymentMonths,
-          paymentSettings,
-        ),
-      ).length,
-      overdue: paymentRows.filter((row) =>
-        rowMatchesPaymentAlertFilter(
-          row,
-          "overdue",
-          paymentMonths,
-          paymentSettings,
-        ),
-      ).length,
-      firstFine: paymentRows.filter((row) =>
-        rowMatchesPaymentAlertFilter(
-          row,
-          "first-fine",
-          paymentMonths,
-          paymentSettings,
-        ),
-      ).length,
-      secondFine: paymentRows.filter((row) =>
-        rowMatchesPaymentAlertFilter(
-          row,
-          "second-fine",
-          paymentMonths,
-          paymentSettings,
-        ),
-      ).length,
-      debt: paymentRows.filter((row) =>
-        rowMatchesPaymentAlertFilter(row, "debt", paymentMonths, paymentSettings),
-      ).length,
-      rulesEnding: paymentRows.filter((row) =>
-        rowMatchesPaymentAlertFilter(
-          row,
-          "rules-ending",
-          paymentMonths,
-          paymentSettings,
-        ),
-      ).length,
-    }),
-    [paymentMonths, paymentRows, paymentSettings],
-  );
-  const nearCapacityGroups = groupsWithStats.filter(
-    (group) => group.capacity > 0 && group.studentsTotal >= group.capacity * 0.9,
-  );
-  type PaymentAlertItem = {
-    id: string;
-    title: string;
-    detail: string;
-    count: number;
-    tone: "danger" | "warning" | "info";
-    filter?: PaymentAlertFilter;
-    view?: WorkspaceView;
-  };
-  const paymentAlertItems: PaymentAlertItem[] = [
-    {
-      id: "registration",
-      title: "Inscricoes pendentes",
-      detail: "Alunos com inscrição por liquidar nesta turma.",
-      count: paymentAlertCounts.registration,
-      tone: "warning",
-      filter: "registration",
-    },
-    {
-      id: "overdue",
-      title: "Mensalidades vencidas",
-      detail: "Alunos com mensalidades fora do prazo.",
-      count: paymentAlertCounts.overdue,
-      tone: "danger",
-      filter: "overdue",
-    },
-    {
-      id: "first-fine",
-      title: "1ª multa",
-      detail: "Alunos actualmente em primeira multa.",
-      count: paymentAlertCounts.firstFine,
-      tone: "warning",
-      filter: "first-fine",
-    },
-    {
-      id: "second-fine",
-      title: "2ª multa",
-      detail: "Alunos actualmente em segunda multa.",
-      count: paymentAlertCounts.secondFine,
-      tone: "danger",
-      filter: "second-fine",
-    },
-    {
-      id: "debt",
-      title: "Dívidas acumuladas",
-      detail: "Alunos com valor em falta nesta turma.",
-      count: paymentAlertCounts.debt,
-      tone: "danger",
-      filter: "debt",
-    },
-    {
-      id: "rules-ending",
-      title: "Regras a terminar",
-      detail: "Bolsas, isencoes ou ponderacoes no mes final.",
-      count: paymentAlertCounts.rulesEnding,
-      tone: "info",
-      filter: "rules-ending",
-    },
-    {
-      id: "capacity",
-      title: "Turmas quase cheias",
-      detail: "Turmas da classe actual perto da lotacao.",
-      count: nearCapacityGroups.length,
-      tone: "warning",
-      view: "groups",
-    },
-  ];
-  const paymentAlerts = paymentAlertItems.filter((alert) => alert.count > 0);
   const selectedProfile =
     profiles.find((profile) => profile.id === activeProfile) ?? profiles[1];
+  useEffect(() => {
+    if (activeProfile !== "secretaria" || !demoState) return;
+    const timer = window.setTimeout(() => {
+      try { ensureBackupConfiguration(window.localStorage); automaticBackup(window.localStorage, demoState, nowIso(), setBackupNotice); }
+      catch (error) { setBackupNotice(error instanceof Error ? error.message : "Não foi possível preparar as cópias locais."); }
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [activeProfile, demoState]);
+
   function guardMutation(
     action: FinanceAction,
     onDenied: (message: string) => void = setFinanceNotice,
@@ -1160,16 +951,6 @@ export function SchoolAdminDemo({
       classId: group.classId,
       groupId: group.id,
     }));
-  }
-
-  function openPaymentAlert(filter: PaymentAlertFilter) {
-    setStudentSearch("");
-    setPaymentAlertFilter(filter);
-    workspace.update({ view: "payments", paymentSection: "entry" }, true);
-  }
-
-  function openCapacityAlert() {
-    setActiveView("groups");
   }
 
   function resetAcademicStageDraft() {
@@ -2190,6 +1971,16 @@ export function SchoolAdminDemo({
     setPaymentCorrectionTarget({ studentId, paymentId });
   }
 
+  function executeCashCommand(command: CashCommand, id: string) {
+    if (!repositoryRef.current || !demoState || !activeProfile) throw new Error("Aguarde os dados da escola.");
+    const result = executeCash(repositoryRef.current, demoState, command, { id, role: activeProfile, recordedAt: nowIso() });
+    setDemoState(result.state); return String(result.result.message);
+  }
+  function openCashWorkspace() {
+    setPaymentDialogOpen(false);
+    workspace.update({ view: "reports", reportSection: "cash" }, true);
+  }
+
   function executeServiceCommand(command: ServiceCommand, id: string) {
     if (!repositoryRef.current || !demoState || !activeProfile) throw new Error("Aguarde os dados da escola.");
     const result = executeService(repositoryRef.current, demoState, command, { id, role: activeProfile, recordedAt: nowIso() });
@@ -2269,11 +2060,12 @@ export function SchoolAdminDemo({
           ))}
         </nav>}
         {storageToolsError && <p role="alert" className="mb-5 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900">{storageToolsNotice}</p>}
+        {backupNotice && <p role="alert" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{backupNotice}</p>}
         {draftStorageNotice && <p role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{draftStorageNotice}</p>}
         {financeSettingsNotice && <p role="status" className="mb-4 rounded-md bg-slate-50 p-3 text-sm">{financeSettingsNotice}</p>}
         {developerToolsEnabled && demoState?.migrationWarnings?.map((warning) => <p key={warning} role="status" className="mb-4 rounded-md bg-amber-50 p-3 text-sm text-amber-900">{warning}</p>)}
         {activeView === "overview" && renderOverview()}
-        {demoState && activeProfile && <AcademicWorkspace state={demoState} role={activeProfile} context={workspace.context} onContext={workspace.update} execute={executeAcademicCommand} confirmPayment={confirmAcademicPayment} serviceExecute={executeServiceCommand}/>}
+        {demoState && activeProfile && <AcademicWorkspace enrollmentRef={enrollmentRef} state={demoState} role={activeProfile} context={workspace.context} onContext={workspace.update} execute={executeAcademicCommand} confirmPayment={confirmAcademicPayment} serviceExecute={executeServiceCommand}/>}
         {developerToolsEnabled && activeView === "catalog" && (demoState?.academic ? renderDeveloperTools() : renderCatalog())}
         {developerToolsEnabled && !demoState?.academic && activeView === "classes" && renderClasses()}
         {developerToolsEnabled && !demoState?.academic && activeView === "rooms" && renderRooms()}
@@ -2286,246 +2078,8 @@ export function SchoolAdminDemo({
   }
 
   function renderOverview() {
-    const canManageAcademics = selectedProfile.id === "secretaria";
-    const canManagePayments = selectedProfile.id === "secretaria";
-
-    return (
-      <div className="grid gap-6">
-        {selectedProfile.id === "director" ? (
-          <div className="lss-card-grid">
-            <MetricCard
-              label="Alunos matriculados"
-              value={yearStudents.length}
-              supporting="Total registado"
-              accent="border-l-[#2867d8]"
-            />
-            <MetricCard
-              label="Turmas activas"
-              value={activeGroupsTotal}
-              supporting={`${groups.length} turmas no total`}
-              accent="border-l-[#25965a]"
-            />
-            <MetricCard
-              label="Aplicado no mês"
-              value={formatCurrency(dashboardSummary.monthRevenue)}
-              supporting={monthLabel(billingMonthKey)}
-              accent="border-l-[#185c54]"
-            />
-            <MetricCard
-              label="Divida total"
-              value={formatCurrency(dashboardSummary.totalDebt)}
-              supporting="Inclui multas"
-              accent="border-l-[#d08a19]"
-            />
-            <MetricCard
-              label="Mensalidades atrasadas"
-              value={dashboardSummary.overdueStudents}
-              supporting="Alunos com atraso"
-              accent="border-l-[#d08a19]"
-            />
-            <MetricCard
-              label="1ª multa"
-              value={dashboardSummary.firstFineStudents}
-              supporting="Alunos neste prazo"
-              accent="border-l-[#f59e0b]"
-            />
-            <MetricCard
-              label="2ª multa"
-              value={dashboardSummary.secondFineStudents}
-              supporting="Alunos neste prazo"
-              accent="border-l-[#dc2626]"
-            />
-            <MetricCard
-              label="Bolsas e isencoes"
-              value={dashboardSummary.supportedStudents}
-              supporting="Regras especiais"
-              accent="border-l-[#8b5cf6]"
-            />
-          </div>
-        ) : (
-          <div className="lss-card-grid">
-            <MetricCard
-              label="Classes"
-              value={classes.length}
-              supporting={`${activeClassesTotal} activas`}
-              accent="border-l-[#178f7f]"
-            />
-            <MetricCard
-              label="Turmas"
-              value={groups.length}
-              supporting={`${activeGroupsTotal} activas`}
-              accent="border-l-[#25965a]"
-            />
-            <MetricCard
-              label="Matriculas"
-              value={yearStudents.length}
-              supporting={`${visibleStudents.length} na turma actual`}
-              accent="border-l-[#2867d8]"
-            />
-            <MetricCard
-              label="Salas"
-              value={rooms.length}
-              supporting={`${activeRooms(rooms).length} activas`}
-              accent="border-l-[#d08a19]"
-            />
-          </div>
-        )}
-
-        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 px-5 py-4">
-            <h3 className="text-base font-semibold">Alertas internos</h3>
-            <p className="text-sm text-slate-500">
-              Clique num alerta para abrir a lista correspondente.
-            </p>
-          </div>
-          <div className="grid gap-3 p-5 md:grid-cols-2 xl:grid-cols-3">
-            {paymentAlerts.length > 0 ? (
-              paymentAlerts.map((alert) => (
-                <button
-                  key={alert.id}
-                  type="button"
-                  onClick={() =>
-                    alert.filter
-                      ? openPaymentAlert(alert.filter)
-                      : openCapacityAlert()
-                  }
-                  className={cx(
-                    "rounded-lg border p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md",
-                    alert.tone === "danger"
-                      ? "border-rose-200 bg-rose-50 text-rose-900"
-                      : alert.tone === "warning"
-                        ? "border-amber-200 bg-amber-50 text-amber-900"
-                        : "border-sky-200 bg-sky-50 text-sky-900",
-                  )}
-                >
-                  <span className="text-2xl font-bold">{alert.count}</span>
-                  <span className="mt-2 block text-sm font-semibold">
-                    {alert.title}
-                  </span>
-                  <span className="mt-1 block text-xs leading-5 opacity-80">
-                    {alert.detail}
-                  </span>
-                </button>
-              ))
-            ) : (
-              <p className="rounded-md bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
-                Sem alertas para a seleccao actual.
-              </p>
-            )}
-          </div>
-        </section>
-
-        <div className="lss-split-grid">
-          <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
-            <h2 className="text-base font-semibold">{canManageAcademics ? "Atendimento" : "Consultas"}</h2>
-            <p className="mt-1 text-sm text-slate-500">Escolha uma tarefa para continuar.</p>
-            <div className="lss-actions mt-5">
-              {canManageAcademics ? <PrimaryButton onClick={startNewEnrollment}>Nova matrícula</PrimaryButton>
-                : <PrimaryButton onClick={() => setActiveView("enrollments")}>Consultar alunos</PrimaryButton>}
-              {canManagePayments ? <SecondaryButton onClick={() => openPaymentEntry()}>Registar pagamento</SecondaryButton>
-                : <SecondaryButton onClick={() => setActiveView("reports")}>Consultar relatórios</SecondaryButton>}
-            </div>
-          </section>
-
-          <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-5 py-4">
-              <h3 className="text-base font-semibold">Salas</h3>
-            </div>
-            <div className="grid gap-3 p-5">
-              {rooms.length > 0 ? (
-                rooms.slice(0, 4).map((room) => (
-                  <SummaryLine
-                    key={room.id}
-                    label={room.name}
-                    value={`${room.block} / ${room.capacity} lugares`}
-                  />
-                ))
-              ) : (
-                <p className="rounded-md bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-500">
-                  Sem salas.
-                </p>
-              )}
-            </div>
-          </section>
-        </div>
-
-        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-            <div>
-              <h3 className="text-base font-semibold">Mapa escolar</h3>
-            </div>
-            {canManageAcademics && (
-              <SecondaryButton onClick={() => setActiveView("classes")}>
-                Ver classes
-              </SecondaryButton>
-            )}
-          </div>
-          <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
-            <table className="w-full min-w-[920px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-5 py-3 font-semibold">Ano lectivo</th>
-                  <th className="px-5 py-3 font-semibold">Classe</th>
-                  <th className="px-5 py-3 font-semibold">Ensino</th>
-                  <th className="px-5 py-3 font-semibold">Turmas</th>
-                  <th className="px-5 py-3 font-semibold">Alunos</th>
-                  <th className="px-5 py-3 font-semibold">Estado</th>
-                  <th className="px-5 py-3 font-semibold">Accao</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {classesWithStats.length > 0 ? (
-                  classesWithStats.map((schoolClass) => (
-                    <tr key={schoolClass.id} className="hover:bg-slate-50/80">
-                      <td className="px-5 py-4 font-mono text-sm font-semibold">
-                        {schoolClass.academicYear}
-                      </td>
-                      <td className="px-5 py-4 font-semibold">
-                        {schoolClass.name}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {schoolClass.stage}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {schoolClass.groupsTotal}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {schoolClass.studentsTotal}
-                      </td>
-                      <td className="px-5 py-4">
-                        <StatusBadge status={schoolClass.status} />
-                      </td>
-                      <td className="px-5 py-4">
-                        {canManageAcademics ? (
-                          <TextButton
-                            onClick={() => {
-                              selectClass(schoolClass.id);
-                              setActiveView("groups");
-                            }}
-                          >
-                            Ver turmas
-                          </TextButton>
-                        ) : (
-                          <span className="text-sm font-semibold text-slate-500">
-                            Consulta
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={7} className="px-5 py-10 text-center text-slate-500">
-                      Sem classes activadas no ano lectivo.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-    );
+    if (!demoState || !activeProfile) return null;
+    return <DashboardWorkspace state={demoState} role={activeProfile} context={workspace.context} onContext={workspace.update} onEnroll={() => { workspace.update({ view: "enrollments", personId: "" }, true); enrollmentRef.current?.openEnrollment(); }} onPay={openPaymentEntry}/>;
   }
 
   function renderDeveloperTools() {
@@ -4056,206 +3610,13 @@ export function SchoolAdminDemo({
           onPrint={() => window.print()}
         />
         {demoState && <FinanceServicePanel state={demoState} studentId={paymentDraft.studentId} yearId={selectedYearId} readOnly={selectedProfile.id !== "secretaria"} execute={executeServiceCommand} correctionTarget={paymentCorrectionTarget} onCloseCorrection={() => { setPaymentCorrectionTarget(null); window.requestAnimationFrame(() => financeTrigger.current?.focus({ preventScroll: true })); }}/>}
-        {paymentDialogOpen && demoState && selectedProfile.id === "secretaria" && <PaymentDialog state={demoState} draft={paymentDraft} onChange={changePaymentDraft} onClose={closePaymentDialog} commandId={paymentAttemptId} execute={executeServiceCommand} confirm={(draft, id) => { paymentCommandRef.current = id; setPaymentAttemptId(id); const receipt = confirmAcademicPayment(draft, id).receipt; paymentDraftEdited.current = false; setPaymentDraft((current) => ({ ...current, amount: "0" })); return receipt; }}/>}
+        {paymentDialogOpen && demoState && selectedProfile.id === "secretaria" && <PaymentDialog onOpenCash={openCashWorkspace} state={demoState} draft={paymentDraft} onChange={changePaymentDraft} onClose={closePaymentDialog} commandId={paymentAttemptId} execute={executeServiceCommand} confirm={(draft, id) => { paymentCommandRef.current = id; setPaymentAttemptId(id); const receipt = confirmAcademicPayment(draft, id).receipt; paymentDraftEdited.current = false; setPaymentDraft((current) => ({ ...current, amount: "0" })); return receipt; }}/>}
       </div>
     );
   }
 
   function renderReports() {
-    return (
-      <div className="grid gap-6">
-        <div className="lss-card-grid">
-          <MetricCard
-            label="Previsto"
-            value={formatCurrency(schoolPaymentSummary.expected)}
-            supporting="Depois das regras aplicadas"
-            accent="border-l-[#2867d8]"
-          />
-          <MetricCard
-            label="Recebido"
-            value={formatCurrency(schoolPaymentSummary.paid)}
-            supporting="Total registado"
-            accent="border-l-[#185c54]"
-          />
-          <MetricCard
-            label="Descontos"
-            value={formatCurrency(schoolPaymentSummary.discount)}
-            supporting="Bolsas e isencoes"
-            accent="border-l-[#8b5cf6]"
-          />
-          <MetricCard
-            label="Dívida vencida"
-            value={formatCurrency(schoolPaymentSummary.overdueDebt)}
-            supporting="Fora do prazo"
-            accent="border-l-[#dc2626]"
-          />
-          <MetricCard
-            label="A vencer"
-            value={formatCurrency(schoolPaymentSummary.futureDue)}
-            supporting="Valor futuro"
-            accent="border-l-[#d08a19]"
-          />
-          <MetricCard
-            label="Multas"
-            value={formatCurrency(schoolPaymentSummary.fine)}
-            supporting="Percentuais aplicadas"
-            accent="border-l-[#b45309]"
-          />
-          <MetricCard
-            label="Diversos"
-            value={formatCurrency(schoolPaymentSummary.miscellaneous)}
-            supporting="Pagamentos extras"
-            accent="border-l-[#0ea5c7]"
-          />
-        </div>
-
-        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-            <div>
-              <h3 className="text-base font-semibold">Mensalidades geradas</h3>
-              <p className="text-sm text-slate-500">
-                Histórico de gerações por turma e mês.
-              </p>
-            </div>
-            {selectedProfile.id === "secretaria" && (
-              <SecondaryButton onClick={() => setActiveView("payments")}>
-                Nova geracao
-              </SecondaryButton>
-            )}
-          </div>
-          <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
-            <table className="w-full min-w-[760px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-5 py-3 font-semibold">Codigo</th>
-                  <th className="px-5 py-3 font-semibold">Classe</th>
-                  <th className="px-5 py-3 font-semibold">Turma</th>
-                  <th className="px-5 py-3 font-semibold">Mes</th>
-                  <th className="px-5 py-3 font-semibold">Alunos</th>
-                  <th className="px-5 py-3 font-semibold">Isentos</th>
-                  <th className="px-5 py-3 font-semibold">Valor unitario</th>
-                  <th className="px-5 py-3 font-semibold">Previsto</th>
-                  <th className="px-5 py-3 font-semibold">Gerado em</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {billingRuns.length > 0 ? (
-                  billingRuns.map((run) => (
-                    <tr key={run.id} className="hover:bg-slate-50/80">
-                      <td className="px-5 py-4 font-mono text-xs text-slate-600">
-                        {run.id}
-                      </td>
-                      <td className="px-5 py-4 font-semibold">
-                        {classes.find(
-                          (schoolClass) => schoolClass.id === run.classId,
-                        )?.name ?? "Sem classe"}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {groups.find((group) => group.id === run.groupId)?.name ??
-                          "Sem turma"}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {monthByKey(run.monthKey)?.label ?? run.monthKey}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {run.studentIds.length}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {run.exemptedStudentIds.length}
-                      </td>
-                      <td className="px-5 py-4 font-semibold text-slate-700">
-                        {formatCurrency(run.amount)}
-                      </td>
-                      <td className="px-5 py-4 font-semibold text-slate-700">
-                        {formatCurrency(run.expectedTotal)}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {formatDateTime(run.createdAt)}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={9} className="px-5 py-10 text-center text-slate-500">
-                      Sem propinas geradas.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
-            <div>
-              <h3 className="text-base font-semibold">Pagamentos diversos</h3>
-              <p className="text-sm text-slate-500">
-                Pagamentos e crédito aplicados a cobranças extras.
-              </p>
-            </div>
-            {selectedProfile.id === "secretaria" && (
-              <SecondaryButton onClick={openMiscellaneousChargeForm}>
-                Nova cobranca
-              </SecondaryButton>
-            )}
-          </div>
-          <div className="table-scroll" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
-            <table className="w-full min-w-[820px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-5 py-3 font-semibold">Aluno</th>
-                  <th className="px-5 py-3 font-semibold">Descrição</th>
-                  <th className="px-5 py-3 font-semibold">Valor</th>
-                  <th className="px-5 py-3 font-semibold">Forma</th>
-                  <th className="px-5 py-3 font-semibold">Data efectiva</th>
-                  <th className="px-5 py-3 font-semibold">Registado em</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {miscellaneousPaymentRows.length > 0 ? (
-                  miscellaneousPaymentRows.map(({ student, payment }, index) => (
-                    <tr
-                      key={`${student.id}-${payment.paidAt ?? index}`}
-                      className="hover:bg-slate-50/80"
-                    >
-                      <td className="px-5 py-4">
-                        <span className="block font-semibold">
-                          {student.fullName}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {student.registrationNumber}
-                        </span>
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {payment.description ?? "Pagamento diverso"}
-                      </td>
-                      <td className="px-5 py-4 font-semibold text-slate-700">
-                        {formatCurrency(payment.amount)}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {payment.method ?? "Sem forma"}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {formatDateTime(payment.paidAt)}
-                      </td>
-                      <td className="px-5 py-4 text-slate-700">
-                        {payment.recordedAt ? formatDateTime(payment.recordedAt) : "Sem registo"}
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-slate-500">
-                      Sem pagamentos diversos registados.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      </div>
-    );
+    if (!demoState || !activeProfile || !repositoryRef.current) return null;
+    return <ReportsWorkspace state={demoState} role={activeProfile} context={workspace.context} onContext={workspace.update} executeCash={executeCashCommand} executeService={executeServiceCommand} repository={repositoryRef.current} onRestore={(restored) => { setDemoState(restored); setStorageToolsError(false); setStorageToolsNotice(""); setFinanceSettingsNotice("Cópia restaurada e conferida. O estado anterior foi conservado."); }}/ >;
   }
 }

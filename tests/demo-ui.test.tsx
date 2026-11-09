@@ -451,3 +451,13 @@ test("célula, pagamento e recibo conservam filtro, selecção, scroll e foco na
   assert.equal((screen.getByRole("checkbox", { name: "Seleccionar Ana Júlia Mucavele" }) as HTMLInputElement).checked, true);
   assert.equal(storage.financialWrites, 1);
 });
+
+test("atalho do painel inicia a matrícula no formulário académico sem alterar os dados", async () => {
+  open("overview");
+  await screen.findByRole("heading", { name: "Atendimento" });
+  const writes = storage.financialWrites;
+  fireEvent.click(screen.getByRole("button", { name: "Nova matrícula" }));
+  await screen.findByRole("dialog", { name: "Nova matrícula" });
+  assert.equal(storage.financialWrites, writes);
+  assert.equal(window.location.pathname, "/students");
+});

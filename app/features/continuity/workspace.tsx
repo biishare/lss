@@ -1,0 +1,51 @@
+"use client";
+import { useState, type ChangeEvent } from "react";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import TextField from "@mui/material/TextField";
+import type { DemoState } from "../demo/demo-state";
+import type { DemoRepository } from "../demo/local-repository";
+import { serializeDemoSnapshot } from "../demo/local-repository";
+import { formatCurrency, formatDateTime } from "../../components/school-admin-demo.model";
+import { downloadText } from "../reports/export";
+import { configureBackups, recordVerification, readBackups, recoverySummary, restoreBackup, verifyBackup, type BackupArchive } from "./backups";
+
+export function ContinuityWorkspace({ state, role, repository, onRestore }: { state: DemoState; role: "director" | "secretaria"; repository: DemoRepository; onRestore(state: DemoState): void }) {
+  const [initial] = useState(() => { try { return { archive: readBackups(window.localStorage), error: "" }; } catch (failure) { return { archive: { version: 1 as const, enabled: false, retention: 3, items: [] }, error: failure instanceof Error ? failure.message : "Não foi possível ler as cópias. O original foi preservado." }; } });
+  const [archive, setArchive] = useState<BackupArchive>(initial.archive);
+  const [error, setError] = useState(initial.error), [notice, setNotice] = useState("");
+  const [enabled, setEnabled] = useState(archive.enabled), [retention, setRetention] = useState(String(archive.retention));
+  const [preview, setPreview] = useState<{ raw: string; expected: DemoState; checked: ReturnType<typeof verifyBackup>; restore: boolean } | null>(null);
+  const canWrite = role === "secretaria";
+  function verify(raw: string, restore = false) {
+    setError("");
+    try {
+      const checked = verifyBackup(raw, new Date().toISOString());
+      setPreview({ raw, checked, expected: state, restore });
+      try { setArchive(recordVerification(window.localStorage, checked)); } catch { setError("O ensaio foi concluído, mas não foi possível guardar o seu registo. Os dados actuais foram conservados."); }
+      setNotice(`Ensaio de restauro isolado concluído em ${formatDateTime(checked.verifiedAt)}. Contagens, relações, saldos e recibos conferem.`);
+    } catch (failure) { setError(failure instanceof Error ? failure.message : "Não foi possível validar a cópia. Os dados actuais foram conservados."); }
+  }
+  async function importFile(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]; event.target.value = ""; if (!file || !canWrite) return;
+    try { if (file.size > 20 * 1024 * 1024) throw new Error("O ficheiro excede o limite de 20 MB."); verify(await file.text(), true); }
+    catch (failure) { setError(failure instanceof Error ? failure.message : "Não foi possível ler o ficheiro."); }
+  }
+  const summary = preview?.checked.summary, original = preview ? recoverySummary(preview.expected) : undefined;
+  return <div className="grid gap-5">
+    {error && <Alert severity="error">{error}</Alert>}{notice && <Alert severity="success">{notice}</Alert>}
+    <section className="lss-responsive-card"><h2 className="font-bold">Cópias de segurança e recuperação</h2><p className="mt-2 text-sm text-slate-600">As cópias automáticas ficam neste dispositivo. Descarregue uma cópia para a conservar fora dele. Incluem registos, recibos, fechos e metadados dos comprovativos.</p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-3"><p className="rounded bg-slate-50 p-3 text-sm"><strong>{archive.enabled ? "Activas" : "Desactivadas"}</strong><span className="block text-slate-500">Cópias automáticas locais</span></p><p className="rounded bg-slate-50 p-3 text-sm"><strong>{archive.items.length} / {archive.retention}</strong><span className="block text-slate-500">Cópias guardadas / limite</span></p><p className="rounded bg-slate-50 p-3 text-sm"><strong>{archive.items.at(-1) ? formatDateTime(archive.items.at(-1)!.createdAt) : "Ainda sem cópia"}</strong><span className="block text-slate-500">Última cópia</span></p></div>
+      {canWrite && <div className="mt-4 flex flex-wrap items-center gap-3"><Button variant="contained" onClick={() => { try { downloadText(`lss-copia-${new Date().toISOString().slice(0, 10)}.json`, serializeDemoSnapshot(state), "application/json"); setError(""); } catch (failure) { setError(failure instanceof Error ? failure.message : "Não foi possível descarregar."); } }}>Descarregar cópia actual</Button><Button component="label" variant="outlined">Restaurar ficheiro<input hidden type="file" accept="application/json,.json" aria-label="Ficheiro de recuperação" onChange={importFile}/></Button><Button onClick={() => { try { setArchive(readBackups(window.localStorage)); setError(""); } catch (failure) { setError(failure instanceof Error ? failure.message : "Não foi possível ler as cópias."); } }}>Actualizar lista</Button></div>}
+    </section>
+    {canWrite && <section className="lss-responsive-card"><h3 className="font-bold">Configuração das cópias locais</h3><div className="mt-3 flex flex-wrap items-center gap-3"><FormControlLabel label="Guardar cópia automaticamente após gravar" control={<Checkbox checked={enabled} onChange={(event) => setEnabled(event.target.checked)}/>}/><TextField type="number" label="Máximo de cópias locais" value={retention} slotProps={{ htmlInput: { min: 1, max: 10 } }} onChange={(event) => setRetention(event.target.value)}/><Button onClick={() => { try { const next = configureBackups(window.localStorage, enabled, Number(retention)); setArchive(next); setNotice("Configuração das cópias guardada."); setError(""); } catch (failure) { setError(failure instanceof Error ? failure.message : "Não foi possível guardar."); } }}>Guardar configuração</Button></div><p className="mt-2 text-xs text-slate-500">Ao atingir o limite, a cópia mais antiga é substituída. Uma falha de cópia mantém a operação guardada e apresenta um aviso. A cópia anterior ao último restauro é conservada à parte deste limite.</p></section>}
+    <section className="lss-responsive-card"><h3 className="font-bold">Histórico de cópias</h3>{archive.lastVerification && <p className="mt-2 text-sm text-slate-600">Último ensaio concluído: {formatDateTime(archive.lastVerification.verifiedAt)} · {archive.lastVerification.summary.receipts} recibos · {archive.lastVerification.summary.closedSessions} fechos conferidos.</p>}<div className="mt-4 grid gap-3">{[...(archive.beforeRestore ? [archive.beforeRestore] : []), ...archive.items.slice().reverse()].map((item) => <div key={item.id} className="flex flex-wrap justify-between gap-3 rounded border border-slate-200 p-3 text-sm"><div><strong>{formatDateTime(item.createdAt)}</strong><p>{item.reason} · Revisão {item.revision}</p></div>{canWrite && <div className="flex flex-wrap gap-2"><Button onClick={() => downloadText(`lss-copia-r${item.revision}.json`, item.raw, "application/json")}>Descarregar</Button><Button onClick={() => verify(item.raw)}>Verificar restauro</Button><Button color="warning" onClick={() => verify(item.raw, true)}>Repor esta cópia</Button></div>}</div>)}{!archive.items.length && <p className="text-sm text-slate-500">Sem cópias automáticas guardadas. A próxima gravação com cópias activas criará uma cópia.</p>}</div></section>
+    {preview && summary && original && <Dialog open fullWidth maxWidth="md" onClose={() => setPreview(null)} aria-labelledby="recovery-title"><DialogTitle id="recovery-title">{preview.restore ? "Rever substituição dos dados" : "Resultado do ensaio de restauro"}</DialogTitle><DialogContent dividers><Alert severity={preview.restore ? "warning" : "success"}>{preview.restore ? "A confirmação substitui os dados actuais. Será preservada uma cópia do estado anterior; não há fusão de registos." : "A cópia foi aberta e validada num armazenamento isolado, sem alterar os dados actuais."}</Alert><div className="table-scroll mt-4"><table className="w-full text-left text-sm"><thead><tr><th className="p-2">Verificação</th><th className="p-2">Actual</th><th className="p-2">Restaurado e conferido</th></tr></thead><tbody>{([ ["Pessoas", "people"], ["Matrículas", "enrollments"], ["Cobranças / Multas", "charges"], ["Recebimentos registados", "payments"], ["Aplicações", "allocations"], ["Recibos", "receipts"], ["Fechos de caixa", "closedSessions"] ] as const).map(([name, key]) => <tr key={key}><td className="border-t p-2">{name}</td><td className="border-t p-2">{original[key]}</td><td className="border-t p-2">{summary[key]}</td></tr>)}{([ ["Recebido físico", "received"], ["Aplicado", "applied"], ["Crédito disponível", "credit"], ["Em aberto", "open"], ["Devoluções", "refunds"] ] as const).map(([name, key]) => <tr key={key}><td className="border-t p-2">{name}</td><td className="border-t p-2">{formatCurrency(original[key])}</td><td className="border-t p-2">{formatCurrency(summary[key])}</td></tr>)}</tbody></table></div><p className="mt-4 text-sm">IDs, relações, valores dos recibos e retratos dos fechos foram comparados. Ensaio concluído em {formatDateTime(preview.checked.verifiedAt)}.</p></DialogContent><DialogActions sx={{ flexWrap: "wrap" }}><Button onClick={() => setPreview(null)}>Fechar</Button>{preview.restore && <><Button onClick={() => downloadText("lss-antes-do-restauro.json", serializeDemoSnapshot(preview.expected), "application/json")}>Descarregar estado anterior</Button><Button variant="contained" color="warning" onClick={() => { try { const restored = restoreBackup(repository, window.localStorage, preview.expected, preview.raw, role, new Date().toISOString()); onRestore(restored); setArchive(readBackups(window.localStorage)); setPreview(null); setNotice("Restauro concluído. O estado anterior foi preservado numa cópia."); } catch (failure) { setError(failure instanceof Error ? failure.message : "Não foi possível restaurar. Os dados actuais foram conservados."); } }}>Confirmar substituição</Button></>}</DialogActions></Dialog>}
+  </div>;
+}

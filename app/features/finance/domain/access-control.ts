@@ -10,6 +10,8 @@ export type FinanceAction =
   | "manage-financial-aid"
   | "publish-charges"
   | "record-payment"
+  | "manage-cash"
+  | "manage-backups"
   | "correct-payment";
 
 export type AuthorizationResult =
@@ -42,6 +44,8 @@ const secretaryActions = new Set<FinanceAction>([
   "manage-financial-aid",
   "publish-charges",
   "record-payment",
+  "manage-cash",
+  "manage-backups",
   "correct-payment",
 ]);
 

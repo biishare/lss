@@ -8,6 +8,7 @@ import { paymentCredit, samePerson, type CreditDebit, type PaymentProof } from "
 import { prepareBilling } from "./billing-commands";
 import { allocateCredit } from "./credit-allocation";
 import { assessPenalties, schoolToday } from "./domain/billing";
+import { captureCashMovement, emptyCashBook } from "../cash/model";
 
 export type ServiceCommand =
   | { kind: "save-proof"; draft: PaymentLaunchDraft; reference: string; note: string }
@@ -36,7 +37,7 @@ export function planService(state: DemoState, command: ServiceCommand, options: 
   if (command.kind === "save-proof") {
     if (command.draft.method === "Numerário") throw new Error("O numerário deve ser confirmado no atendimento.");
     if (!command.reference.trim()) throw new Error("Indique a referência do comprovativo.");
-    prepareConfirmedPayment(current, { commandId: id, recordedAt, draft: { ...command.draft, evidenceReference: command.reference, lateReason: command.draft.lateReason || command.note } });
+    prepareConfirmedPayment(current, { commandId: id, recordedAt, deferCash: true, draft: { ...command.draft, evidenceReference: command.reference, lateReason: command.draft.lateReason || command.note } });
     if (current.paymentProofs?.some((item) => item.status !== "rejected" && item.reference.trim().toLowerCase() === command.reference.trim().toLowerCase() && item.draft.method === command.draft.method)) throw new Error("Este comprovativo já foi registado. Consulte a conferência existente.");
     const proof: PaymentProof = { id: `PROOF-${id}`, studentId: command.draft.studentId, draft: { ...command.draft, amount: money(cents(command.draft.amount)), additionalTargets: command.draft.additionalTargets?.map((target) => ({ ...target, amount: target.amount?.trim() ? money(cents(target.amount)) : undefined })), evidenceReference: command.reference, reference: command.reference }, reference: command.reference.trim(), note: command.note.trim(), status: "pending", recordedAt, recordedBy: author };
     return { patch: { paymentProofs: [...(current.paymentProofs ?? []), proof] }, message: "Comprovativo guardado para conferência. O saldo mantém-se por liquidar.", details: ["Estado: Em análise", "Sem recebimento ou recibo", "Lembretes das cobranças abrangidas suspensos"] };
@@ -65,7 +66,7 @@ export function planService(state: DemoState, command: ServiceCommand, options: 
     payment.reversedBy = `REV-${id}`;
     original.allocations = original.allocations.filter((item) => item.paymentId !== payment.id);
     original.reversals = [...(original.reversals ?? []), { id: `REV-${id}`, paymentId: payment.id, replacementStudentId: command.draft.studentId, replacementPaymentId: `PAY-${id}`, reason: command.reason.trim(), recordedAt, recordedBy: author, releasedAllocations: released }];
-    const prepared = prepareConfirmedPayment(current, { commandId: id, recordedAt, draft: { ...command.draft, lateReason: command.draft.lateReason || command.reason, evidenceReference: command.draft.evidenceReference || `Correcção ${payment.id}` } });
+    const prepared = prepareConfirmedPayment(current, { commandId: id, recordedAt, replaces: { studentId: command.studentId, paymentId: payment.id }, reason: command.reason, draft: { ...command.draft, lateReason: command.draft.lateReason || command.reason, evidenceReference: command.draft.evidenceReference || `Correcção ${payment.id}` } });
     const replacement = prepared.patch.paymentRecords!.find((item) => item.studentId === command.draft.studentId)!.payments.find((item) => item.id === prepared.receipt.paymentId)!;
     replacement.kind = "replacement"; replacement.replaces = { studentId: command.studentId, paymentId: payment.id };
     prepared.receipt.replacesReceiptId = originalReceipt?.id;
@@ -82,7 +83,8 @@ export function planService(state: DemoState, command: ServiceCommand, options: 
     if (!["Numerário", "Transferência", "Multicaixa", "Depósito bancário", "M-Pesa", "e-Mola"].includes(command.method)) throw new Error("Seleccione uma forma de devolução válida.");
     const debit: CreditDebit = { id: `REFUND-${id}`, paymentId: payment.id, amount: money(amount), kind: "refund", effectiveOn: command.effectiveOn, method: command.method, reason: command.reason.trim(), recordedAt, recordedBy: author };
     source.creditDebits = [...(source.creditDebits ?? []), debit];
-    return { patch: { paymentRecords: current.paymentRecords }, message: "Devolução registada e ligada ao recebimento de origem.", details: [`Devolução: ${money(amount)} MT por ${command.method}`, `Crédito restante: ${paymentCredit(source, payment.id)} MT`, "Recebimento e recibo originais preservados"] };
+    const cashBook = captureCashMovement(current.cashBook ?? emptyCashBook(), { id: `CASH-REFUND-${id}`, kind: "refund", amount: debit.amount, method: debit.method, effectiveOn: debit.effectiveOn, recordedAt, description: debit.reason, studentName: current.students.find((item) => item.id === source.studentId)?.fullName, registrationNumber: current.students.find((item) => item.id === source.studentId)?.registrationNumber, source: { studentId: source.studentId, paymentId: payment.id, refundId: debit.id } });
+    return { patch: { paymentRecords: current.paymentRecords, cashBook }, message: "Devolução registada e ligada ao recebimento de origem.", details: [`Devolução: ${money(amount)} MT por ${command.method}`, `Crédito restante: ${paymentCredit(source, payment.id)} MT`, "Recebimento e recibo originais preservados"] };
   }
   if (!samePerson(current, source.studentId, command.studentId)) throw new Error("O crédito só pode ser aplicado a outra matrícula da mesma pessoa.");
   Object.assign(current, prepareBilling(current, recordedAt));

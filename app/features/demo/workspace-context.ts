@@ -1,8 +1,13 @@
+import { appendReportFilters, readReportFilters, reportFiltersFromUrl, reportSections, type ReportSection } from "../reports/context";
+import type { ReportFilters } from "../reports/model";
 import type { PaymentAlertFilter, PaymentWorkspaceSection, WorkspaceView } from "../../components/school-admin-demo.model";
 
 export const workspaceContextKey = "lss-demo-workspace-v1";
 
 export type WorkspaceContext = {
+  reportSection?: ReportSection;
+  reportFilters?: Partial<ReportFilters>;
+  reportPage?: number;
   paymentPeriod?: "month" | "term" | "year";
   yearId: string;
   personId: string;
@@ -37,6 +42,9 @@ export function readWorkspaceContext(raw: string | null, datasetId: string): Par
     if (stored?.datasetId !== datasetId || !stored.context || typeof stored.context !== "object") return {};
     const context = stored.context;
     return {
+      reportSection: reportSections.includes(context.reportSection) ? context.reportSection : "reports",
+      reportFilters: readReportFilters(context.reportFilters),
+      reportPage: Number.isInteger(context.reportPage) && context.reportPage >= 0 ? context.reportPage : 0,
       yearId: typeof context.yearId === "string" ? context.yearId : "",
       personId: typeof context.personId === "string" ? context.personId : "",
       studentTab: ["Dados", "Matrículas", "Financeiro", "Comprovativos", "Histórico"].includes(context.studentTab) ? context.studentTab : "Dados",
@@ -63,6 +71,9 @@ export function contextFromLocation(path: string, query: string, fallback: Works
   const alert = params.get("alert") as PaymentAlertFilter;
   return {
     ...fallback, view,
+    reportSection: reportSections.includes(params.get("rsection") as ReportSection) ? params.get("rsection") as ReportSection : fallback.reportSection ?? "reports",
+    reportFilters: reportFiltersFromUrl(params, fallback.reportFilters ?? {}),
+    reportPage: params.has("rpage") && /^\d{1,4}$/.test(params.get("rpage")!) ? Number(params.get("rpage")) : fallback.reportPage ?? 0,
     yearId: params.get("year") ?? fallback.yearId,
     personId: params.get("student") ?? fallback.personId,
     studentTab: ["Dados", "Matrículas", "Financeiro", "Comprovativos", "Histórico"].includes(params.get("tab") ?? "") ? params.get("tab")! : fallback.studentTab,
@@ -116,6 +127,11 @@ export function workspaceUrl(context: WorkspaceContext, year: string): string {
     if (context.paymentPeriod && context.paymentPeriod !== "year") params.set("period", context.paymentPeriod);
     params.set("section", context.paymentSection);
     if (context.alertFilter !== "all") params.set("alert", context.alertFilter);
+  }
+  if (context.view === "reports" || (context.view === "payments" && context.paymentSection === "reports")) {
+    if (context.reportSection && context.reportSection !== "reports") params.set("rsection", context.reportSection);
+    if (context.reportPage) params.set("rpage", String(context.reportPage));
+    appendReportFilters(params, context.reportFilters ?? {});
   }
   // Pesquisa e contactos nunca entram no URL.
   const query = params.toString();
