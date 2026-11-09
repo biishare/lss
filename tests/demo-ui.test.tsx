@@ -102,10 +102,12 @@ test("Director consulta o cenário comum sem formulários de escrita nem gravaç
 
 test("cancelar reposição deixa o cenário intacto", async () => {
   const raw = storage.getItem(demoStorageKey);
-  window.confirm = () => false;
   open("catalog", true);
   const reset = await screen.findByRole("button", { name: "Repor dados iniciais" });
   fireEvent.click(reset);
+  const confirmation = await screen.findByRole("dialog", { name: "Repor dados iniciais?" });
+  assert.match(confirmation.textContent ?? "", /substituir o cenário local/);
+  fireEvent.click(within(confirmation).getByRole("button", { name: "Cancelar" }));
   await screen.findByText(/Reposição cancelada/);
   assert.equal(storage.getItem(demoStorageKey), raw);
   assert.equal(storage.financialWrites, 0);

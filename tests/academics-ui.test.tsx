@@ -24,7 +24,7 @@ beforeEach(() => {
   window.sessionStorage.clear(); window.sessionStorage.setItem("lss-demo-session-v1", JSON.stringify({ source: "demo", accountId: "demo-secretaria" }));
   window.history.replaceState(null, "", "/"); window.confirm = () => true;
 });
-afterEach(cleanup); after(async () => { await domWindow.happyDOM.close(); });
+afterEach(async () => { cleanup(); await domWindow.happyDOM.waitUntilComplete(); }); after(async () => { await domWindow.happyDOM.close(); });
 function open(view: WorkspaceView = "enrollments") { return render(<AppRouterContext.Provider value={router}><SchoolAdminDemo initialView={view}/></AppRouterContext.Provider>); }
 function saved(): DemoState { return JSON.parse(values.get(demoStorageKey)!); }
 async function identify(name = "Aluno da matrícula guiada") {
@@ -130,14 +130,52 @@ test("transferência pela ficha mostra prévia e conserva a colocação anterior
   assert.ok(screen.getByRole("heading", { name: "Transferência de turma" })); assert.equal(saved().academic!.placements.length, 13);
 });
 
-test("fechar matrícula conserva o preenchimento e respeita cancelamento do aviso", async () => {
-  open(); await identify("Matrícula por concluir"); window.confirm = () => false;
-  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^Fechar$/ }));
-  assert.ok(screen.getByRole("dialog")); window.confirm = () => true;
+test("fechar matrícula com rascunho conservado não pergunta e permite retomar", async () => {
+  open(); await identify("Matrícula por concluir");
+  window.confirm = () => { throw new Error("Não deve abrir uma confirmação nativa."); };
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: /^Fechar$/ }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
   fireEvent.click(screen.getByRole("button", { name: /^Nova matrícula$/ }));
   assert.equal((screen.getByLabelText("Nome completo do aluno") as HTMLInputElement).value, "Matrícula por concluir"); assert.equal(saved().students.length, 12);
+});
+
+test("falha ao conservar matrícula mantém a sessão em memória ao fechar e retomar", async () => {
+  open();
+  const trigger = await screen.findByRole("button", { name: /^Nova matrícula$/ });
+  const storage = window.sessionStorage;
+  Object.defineProperty(window, "sessionStorage", { configurable: true, value: {
+    getItem: storage.getItem.bind(storage), removeItem: storage.removeItem.bind(storage), clear: storage.clear.bind(storage),
+    setItem(key: string, value: string) {
+      if (key === "lss-academic-enrollment-form-v1") throw new Error("Armazenamento indisponível");
+      storage.setItem(key, value);
+    },
+  } });
+  try {
+    fireEvent.click(trigger);
+    fireEvent.change(screen.getByLabelText("Nome completo do aluno"), { target: { value: "Matrícula em memória" } });
+    const dialog = screen.getByRole("dialog");
+    assert.match(dialog.textContent ?? "", /permanece nesta página/);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Fechar" }));
+    await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
+    fireEvent.click(trigger);
+    assert.equal((screen.getByLabelText("Nome completo do aluno") as HTMLInputElement).value, "Matrícula em memória");
+    assert.equal(saved().students.length, 12);
+    assert.equal(writes, 0);
+  } finally { Object.defineProperty(window, "sessionStorage", { configurable: true, value: storage }); }
+});
+
+test("mudar configuração com alterações exige decisão própria e cancelar conserva o formulário", async () => {
+  open("catalog");
+  const name = await screen.findByLabelText(/^Nome da escola/);
+  const raw = values.get(demoStorageKey);
+  fireEvent.change(name, { target: { value: "Escola por guardar" } });
+  fireEvent.click(screen.getByRole("button", { name: "2. Ano e calendário" }));
+  const question = await screen.findByRole("dialog", { name: "Mudar de etapa?" });
+  fireEvent.click(within(question).getByRole("button", { name: "Cancelar" }));
+  await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
+  assert.equal((screen.getByLabelText(/^Nome da escola/) as HTMLInputElement).value, "Escola por guardar");
+  assert.equal(values.get(demoStorageKey), raw);
+  assert.equal(writes, 0);
 });
 
 test("rascunho de inscrição é retomado depois de fechar e recarregar sem duplicar matrícula", async () => {

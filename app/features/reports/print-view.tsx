@@ -1,18 +1,15 @@
 "use client";
 import { useState, type ReactNode } from "react";
+import { TaskSurface } from "../../components/task-surface";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
 import { formatCurrency, formatDateTime } from "../../components/school-admin-demo.model";
 import type { ReportResult } from "./model";
 import { reportColumns } from "./export";
 
 export function PrintDialog({ title, children, onClose }: { title: string; children: ReactNode; onClose(): void }) {
   const [error, setError] = useState("");
-  return <Dialog open fullWidth maxWidth="lg" onClose={onClose} aria-labelledby="report-print-title"><DialogTitle id="report-print-title">{title}</DialogTitle><DialogContent dividers>{error && <Alert severity="error">{error}</Alert>}<article className="lss-report-print">{children}</article></DialogContent><DialogActions sx={{ flexWrap: "wrap" }}><Button onClick={onClose}>Fechar</Button><Button variant="contained" onClick={() => { try { window.print(); } catch { setError("Não foi possível abrir a impressão. O relatório mantém-se disponível para tentar novamente."); } }}>Imprimir / Guardar PDF</Button></DialogActions></Dialog>;
+  return <TaskSurface title={title} mobile="full-screen" maxWidth="lg" onClose={onClose} actions={<><Button onClick={onClose}>Fechar</Button><Button variant="contained" onClick={() => { try { window.print(); } catch { setError("Não foi possível abrir a impressão. O relatório mantém-se disponível para tentar novamente."); } }}>Imprimir / Guardar PDF</Button></>}>{error && <Alert severity="error">{error}</Alert>}<article className="lss-print-target lss-report-print">{children}</article></TaskSurface>;
 }
 export function ReportPrint({ result }: { result: ReportResult }) {
   const columns = reportColumns(result.kind);

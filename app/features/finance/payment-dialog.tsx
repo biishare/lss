@@ -3,10 +3,6 @@ import { useMemo, useRef, useState, type FormEvent } from "react";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import TextField from "@mui/material/TextField";
 import { getChargeBalance, formatCurrency, monthLabel, paymentMethods, type PaymentLaunchDraft, type PaymentReceipt } from "../../components/school-admin-demo.model";
@@ -15,6 +11,7 @@ import { prepareConfirmedPayment } from "../demo/payment-command";
 import { samePerson } from "./service-model";
 import { planService, type ServiceCommand } from "./service-commands";
 import { ReceiptContent } from "./receipt-view";
+import { TaskSurface } from "../../components/task-surface";
 import { schoolToday } from "./domain/billing";
 
 export type ServiceExecute = (command: ServiceCommand, id: string) => { receipt?: PaymentReceipt | null; message: string };
@@ -63,9 +60,14 @@ export function PaymentDialog({ onOpenCash, state, draft, onChange, onClose, con
     finally { submitting.current = false; setBusy(false); }
   }
   const title = receipt ? `Recibo ${receipt.id}` : correction ? "Corrigir recebimento" : "Registar pagamento";
-  return <Dialog open fullWidth maxWidth="sm" onClose={() => !busy && onClose()} aria-labelledby="payment-dialog-title" slotProps={{ paper: { sx: { m: { xs: 1, sm: 4 }, width: { xs: "calc(100% - 16px)", sm: "100%" }, maxHeight: "calc(100dvh - 16px)" } } }}>
-    <DialogTitle id="payment-dialog-title">{title}<p className="mt-1 text-sm font-normal text-slate-500">{student?.fullName} · {student?.registrationNumber} · {student?.academicYearId ?? state.paymentSettings.academicYear} · {draft.category === "tuition" ? `Mensalidade de ${monthLabel(draft.monthKey)}` : draft.category === "registration" ? "Inscrição / Renovação" : draft.description || "Outro item"}</p></DialogTitle>
-    <DialogContent dividers>{error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+  const extended = Boolean(correction || draft.additionalTargets?.length || draft.selectedChargeIds?.length);
+  return <TaskSurface title={title} onClose={onClose} busy={busy}
+    mobile={receipt || extended ? "full-screen" : "sheet"} tall={!receipt && !outcome}
+    dirty={Boolean(correction && reason && !receipt && !outcome)}
+    subtitle={<>{student?.fullName} · {student?.registrationNumber} · {student?.academicYearId ?? state.paymentSettings.academicYear} · {draft.category === "tuition" ? `Mensalidade de ${monthLabel(draft.monthKey)}` : draft.category === "registration" ? "Inscrição / Renovação" : draft.description || "Outro item"}</>}
+    actions={(close) => <><Button onClick={close} disabled={busy}>{receipt || outcome ? "Fechar" : "Fechar e conservar preenchimento"}</Button>
+      {receipt ? <Button onClick={() => { try { window.print(); } catch { setError("O recibo está guardado. Tente imprimir novamente."); } }}>Imprimir / Guardar PDF</Button> : !outcome && <>{!correction && draft.method !== "Numerário" && <Button disabled={busy} onClick={(event) => submit(event, true)}>Guardar para conferência</Button>}<Button type="submit" form="payment-service-form" variant="contained" disabled={busy}>{busy ? "A guardar…" : correction ? "Confirmar correcção" : draft.method === "Numerário" ? "Confirmar pagamento" : "Confirmar após conferência"}</Button></>}</>}>
+    {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
       {receipt ? <ReceiptContent receipt={receipt}/> : outcome ? <Alert severity="success">{outcome}</Alert> : <form id="payment-service-form" onSubmit={submit} className="grid gap-4">
         <TextField select label={correction ? "Aluno do recebimento corrigido" : "Aluno"} value={draft.studentId} onChange={(event) => update({ studentId: event.target.value, targetChargeId: "", selectedChargeIds: [], additionalTargets: [], primaryAllocationAmount: undefined })} slotProps={{ select: { native: true } }}>{state.students.map((item) => <option key={item.id} value={item.id}>{item.fullName} · {item.academicYearId} · {item.registrationNumber}</option>)}</TextField>
         {correction && <><Alert severity="info">O original fica anulado e ligado ao substituto. O valor físico recebido mantém-se em {formatCurrency(original?.amount ?? 0)}.</Alert><TextField label="Motivo da correcção" value={reason} onChange={(event) => { setReason(event.target.value); setError(""); }} required/></>}
@@ -88,9 +90,5 @@ export function PaymentDialog({ onOpenCash, state, draft, onChange, onClose, con
         {preview.details.length > 0 && <Alert severity="warning">{preview.details.map((detail) => <p key={detail}>{detail}</p>)}</Alert>}
         {preview.error && <div className="text-sm text-slate-600"><p>{preview.error}</p>{/caixa/i.test(preview.error) && onOpenCash && <Button onClick={onOpenCash}>Consultar caixa e conservar preenchimento</Button>}</div>}
       </form>}
-    </DialogContent>
-    <DialogActions sx={{ flexWrap: "wrap", gap: 1, p: 2 }}><Button onClick={onClose} disabled={busy}>{receipt || outcome ? "Fechar" : "Fechar e conservar preenchimento"}</Button>
-      {receipt ? <Button onClick={() => { try { window.print(); } catch { setError("O recibo está guardado. Tente imprimir novamente."); } }}>Imprimir / Guardar PDF</Button> : !outcome && <>{!correction && draft.method !== "Numerário" && <Button disabled={busy} onClick={(event) => submit(event, true)}>Guardar para conferência</Button>}<Button type="submit" form="payment-service-form" variant="contained" disabled={busy}>{busy ? "A guardar…" : correction ? "Confirmar correcção" : draft.method === "Numerário" ? "Confirmar pagamento" : "Confirmar após conferência"}</Button></>}
-    </DialogActions>
-  </Dialog>;
+  </TaskSurface>;
 }
