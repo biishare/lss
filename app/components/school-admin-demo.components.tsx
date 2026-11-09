@@ -305,6 +305,7 @@ export function StatusDot({ paid, label }: { paid: boolean; label: string }) {
 }
 
 export function FinanceCell({
+  focusKey,
   label,
   onClick,
   supporting,
@@ -312,6 +313,7 @@ export function FinanceCell({
   tone,
   title,
 }: {
+  focusKey?: string;
   label: string;
   onClick?: () => void;
   supporting?: string;
@@ -363,6 +365,7 @@ export function FinanceCell({
           onClick();
         }}
         className={classes}
+        data-finance-cell={focusKey}
         aria-label={title ?? `${label}${supporting ? `, ${supporting}` : ""}`}
       >
         {content}
@@ -2437,7 +2440,7 @@ export function StudentFilters({
   search: string;
 }) {
   return (
-    <div className="grid min-w-0 gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 md:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_minmax(0,1fr)]">
+    <div className="grid min-w-0 grid-cols-2 gap-3 border-b border-slate-200 bg-slate-50/70 px-4 py-3 md:grid-cols-[minmax(0,14rem)_minmax(0,14rem)_minmax(0,1fr)]">
       <select
         value={currentClassId}
         onChange={(event) => onClassChange(event.target.value)}
@@ -2475,7 +2478,8 @@ export function StudentFilters({
       <input
         value={search}
         onChange={(event) => onSearchChange(event.target.value)}
-        className={inputClasses()}
+        className={cx(inputClasses(), "order-first col-span-2 md:order-none md:col-span-1")}
+        aria-label="Pesquisar aluno"
         placeholder="Pesquisar aluno pelo nome"
         type="search"
       />

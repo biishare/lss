@@ -1,4 +1,8 @@
 "use client";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { PaymentList, financeCellKey } from "../features/finance/payment-list";
+import { FilterPanel } from "./filter-panel";
+import { sumMoney } from "../features/finance/domain/money";
 import { useConfirmation } from "./use-confirmation";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
@@ -6,7 +10,7 @@ import { choiceForCell } from "../features/finance/payment-context";
 import { PaymentDialog } from "../features/finance/payment-dialog";
 import { FinanceServicePanel, type FinanceServiceHandle } from "../features/finance/service-panel";
 import { executeService, type ServiceCommand } from "../features/finance/service-commands";
-import { pendingProofFor, receiptStatus, personCreditSources } from "../features/finance/service-model";
+import { pendingProofFor, receiptStatus } from "../features/finance/service-model";
 import { RulesWorkspace } from "../features/finance/rules-workspace";
 import { executeBilling, synchronizeSchool, type BillingCommand } from "../features/finance/billing-commands";
 import {
@@ -189,7 +193,7 @@ function financeCellAriaLabel({
   state: string;
   studentName: string;
 }) {
-  return `${rubric}, ${studentName}, ${state}, saldo ${balance}. Abrir detalhe financeiro.`;
+  return `${rubric}, ${studentName}, ${state}, saldo ${balance}. Abrir informação financeira.`;
 }
 
 export function SchoolAdminWorkspace({
@@ -232,6 +236,7 @@ export function SchoolAdminWorkspace({
   const rememberPaymentCommand = useCallback((id: string) => { paymentCommandRef.current = id; setPaymentAttemptId(id); }, []);
   const paymentDraftEdited = useRef(false);
   const financeTrigger = useRef<HTMLElement | null>(null);
+  const financeOriginKey = useRef<string | null>(null);
   const financeService = useRef<FinanceServiceHandle>(null);
   const paymentDraftsByYear = useRef<Record<string, { payment: PaymentLaunchDraft; paymentCommandId: string | null }>>({});
   const paymentDraftYear = useRef<string | null>(null);
@@ -247,6 +252,7 @@ export function SchoolAdminWorkspace({
     classes, groups, students,
     years: academic?.years, people: academic?.people, defaultYearId: operationalSettings.academicYear,
     months: getMonthsInRange(operationalSettings.startMonth, operationalSettings.endMonth).map((month) => month.key),
+    defaultMonth: getMonthsInRange("jan", "dec")[Number(academicToday.slice(5, 7)) - 1]?.key,
   }, initialView, switchPaymentDraftYear);
   const selectedYearId = workspace.context.yearId || operationalSettings.academicYear;
   const paymentSettings = academic?.years.find((year) => year.id === selectedYearId)?.settings ?? operationalSettings;
@@ -261,7 +267,10 @@ export function SchoolAdminWorkspace({
   const setActivePaymentSection = workspace.field("paymentSection", true);
   const setPaymentAlertFilter = workspace.field("alertFilter");
   const setSelectedPaymentStudentIds = workspace.field("selectedStudentIds");
+  const desktop = useMediaQuery("(min-width:768px)");
   const [expandedTable, setExpandedTable] = useState(false);
+  const compactPayments = !expandedTable && (workspace.context.paymentDisplay === "list" || (!workspace.context.paymentDisplay && !desktop));
+  const paymentPeriod = workspace.context.paymentPeriod ?? (compactPayments ? "month" : "year");
   const financeTableVisible = activeView === "payments" && (activePaymentSection === "entry"
     || (activeProfile === "director" && activePaymentSection !== "reports"));
   const workspacePositionKey = [activeView, activePaymentSection, selectedClassId, selectedGroupId].join(":");
@@ -620,7 +629,7 @@ export function SchoolAdminWorkspace({
 
     return allStudentsAlphabetically.filter((student) => {
       const belongsToGroup = student.groupId === currentGroupId;
-      const matchesSearch = normalizeText(student.fullName).includes(
+      const matchesSearch = normalizeText(`${student.fullName} ${student.registrationNumber} ${student.guardianPhone ?? ""}`).includes(
         normalizedSearch,
       );
 
@@ -719,28 +728,6 @@ export function SchoolAdminWorkspace({
 
     return total + (month?.due ?? 0);
   }, 0);
-  const selectedMonthDiscount = paymentRows.reduce((total, row) => {
-    const month = row.ledger.monthly.find(
-      (item) => item.month.key === billingMonthKey,
-    );
-
-    return total + (month?.discount ?? 0);
-  }, 0);
-  const selectedMonthPaid = paymentRows.reduce((total, row) => {
-    const month = row.ledger.monthly.find(
-      (item) => item.month.key === billingMonthKey,
-    );
-
-    return total + (month?.paid ?? 0) + (month?.finePaid ?? 0);
-  }, 0);
-  const selectedMonthBalance = paymentRows.reduce((total, row) => {
-    const month = row.ledger.monthly.find(
-      (item) => item.month.key === billingMonthKey,
-    );
-
-    return total + (month?.balance ?? 0) + (month?.fineBalance ?? 0);
-  }, 0);
-  const selectedMonthCarryOut = paymentRows.reduce((total, row) => total + (demoState ? personCreditSources(demoState, row.student.id).reduce((sum, source) => sum + source.available, 0) : row.ledger.totals.carry), 0);
   const selectedProfile =
     profiles.find((profile) => profile.id === activeProfile) ?? profiles[1];
   useEffect(() => {
@@ -1268,6 +1255,7 @@ export function SchoolAdminWorkspace({
   }
 
   function openFinanceCell(selection: FinanceCellSelection) {
+    financeOriginKey.current = financeCellKey(selection);
     financeTrigger.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const choice = demoState && activeProfile === "secretaria" ? choiceForCell(demoState, selection, nowIso()) : undefined;
     if (choice) {
@@ -1956,9 +1944,19 @@ export function SchoolAdminWorkspace({
     setDemoState(result.state);
     return { receipt: result.result.receipt as PaymentReceipt | null, message: String(result.result.message) };
   }
+  function restoreFinanceFocus() {
+    window.requestAnimationFrame(() => {
+      const origin = financeTrigger.current;
+      if (origin?.isConnected && origin.getClientRects().length) { origin.focus({ preventScroll: true }); return; }
+      const replacement = [...document.querySelectorAll<HTMLElement>("[data-finance-cell]")].find((item) => item.dataset.financeCell === financeOriginKey.current);
+      const details = replacement?.closest("details"); if (details) details.open = true;
+      (replacement ?? document.getElementById("workspace-content"))?.focus({ preventScroll: true });
+      replacement?.scrollIntoView?.({ block: "nearest" });
+    });
+  }
   function closePaymentDialog() {
     setPaymentDialogOpen(false);
-    window.requestAnimationFrame(() => financeTrigger.current?.focus({ preventScroll: true }));
+    restoreFinanceFocus();
   }
 
   function changePaymentDraft(draft: PaymentLaunchDraft) {
@@ -3072,7 +3070,7 @@ export function SchoolAdminWorkspace({
     const canEditPaymentRules = selectedProfile.id === "secretaria";
     const activePaymentFilterLabel: Record<PaymentAlertFilter, string> = {
       all: "Todos os alunos",
-      registration: "Inscricoes pendentes",
+      registration: "Inscrições pendentes",
       overdue: "Mensalidades vencidas",
       "first-fine": "1ª multa",
       "second-fine": "2ª multa",
@@ -3081,8 +3079,8 @@ export function SchoolAdminWorkspace({
     };
 
     const displayMonths = paymentMonths.filter((month, index) => {
-      if (workspace.context.paymentPeriod === "month") return month.key === billingMonthKey;
-      if (workspace.context.paymentPeriod === "term") return Math.floor(index / 3) === Math.floor(Math.max(0, paymentMonths.findIndex((item) => item.key === billingMonthKey)) / 3);
+      if (paymentPeriod === "month") return month.key === billingMonthKey;
+      if (paymentPeriod === "term") return Math.floor(index / 3) === Math.floor(Math.max(0, paymentMonths.findIndex((item) => item.key === billingMonthKey)) / 3);
       return true;
     });
     const visibleMonthKeys = new Set(displayMonths.map((item) => item.key));
@@ -3152,46 +3150,12 @@ export function SchoolAdminWorkspace({
 
         {currentPaymentSection?.id === "entry" && (
           <div className="grid gap-6">
-            <section data-workspace-secondary className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
-                <div>
-                  <h3 className="text-base font-semibold">Cobranças mensais</h3>
-                  <p className="text-sm text-slate-500">
-                    Emissão automática no início de cada mês; antecipação disponível nos meses previstos.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-
-                  {developerToolsEnabled && selectedProfile.id === "secretaria" && (
-                    <PrimaryButton onClick={generateMonthlyBilling}>
-                      Gerar propinas
-                    </PrimaryButton>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-x-6 gap-y-2 px-5 py-3 text-sm text-slate-600">
-                <span>Previsto: <strong>{formatCurrency(selectedMonthExpected)}</strong></span>
-                <span>Aplicado: <strong>{formatCurrency(selectedMonthPaid)}</strong></span>
-                <span>Saldo: <strong>{formatCurrency(selectedMonthBalance)}</strong></span>
-                <span>Crédito: <strong>{formatCurrency(selectedMonthCarryOut)}</strong></span>
-                <span>Descontos: <strong>{formatCurrency(selectedMonthDiscount)}</strong></span>
-                {selectedMonthBillingRun && <span>Cobranças emitidas</span>}
-              </div>
-
-              {billingNotice && (
-                <div className="mx-5 mb-5 rounded-md bg-teal-50 px-4 py-3 text-sm font-semibold text-[#185c54] ring-1 ring-teal-100">
-                  {billingNotice}
-                </div>
-              )}
-            </section>
-
             <div className="lss-section-grid lss-payment-grid">
               <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                   <div>
                     <h3 className="text-base font-semibold">
-                      Planilha financeira da turma
+                      {compactPayments ? "Pagamentos da turma" : "Planilha financeira da turma"}
                     </h3>
                     <p className="text-sm text-slate-500">
                       {currentClass?.name ?? "Sem classe"} /{" "}
@@ -3204,8 +3168,7 @@ export function SchoolAdminWorkspace({
                       </p>
                     )}
                     <p className="mt-2 text-sm text-slate-500">
-                      {selectedPaymentRows.length} seleccionados para cobranças
-                      em lote.
+                      {visiblePaymentRows.length} {visiblePaymentRows.length === 1 ? "aluno" : "alunos"} · {selectedPaymentRows.length} seleccionados.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -3224,7 +3187,7 @@ export function SchoolAdminWorkspace({
                       </option>
                     ))}
                   </select></label>
-                    <label className="text-xs font-semibold">Período<select aria-label="Período da planilha" className={inputClasses()} value={workspace.context.paymentPeriod ?? "year"} onChange={(event) => workspace.update({ paymentPeriod: event.target.value as "month" | "term" | "year" })}><option value="month">Mês</option><option value="term">Trimestre</option><option value="year">Ano</option></select></label>
+                    <label className="text-xs font-semibold">Período<select aria-label="Período da planilha" className={inputClasses()} value={paymentPeriod} onChange={(event) => workspace.update({ paymentPeriod: event.target.value as "month" | "term" | "year" })}><option value="month">Mês</option><option value="term">Trimestre</option><option value="year">Ano</option></select></label>
                     {selectedProfile.id === "secretaria" && <PrimaryButton onClick={() => openPaymentEntry()}>Registar pagamento</PrimaryButton>}
                     {selectedPaymentRows.length > 0 && (
                       <SecondaryButton
@@ -3243,7 +3206,7 @@ export function SchoolAdminWorkspace({
                     <SecondaryButton
                       onClick={() => setActivePaymentSection("reports")}
                     >
-                      Ver relatorio
+                      Ver relatório
                     </SecondaryButton>
                   </div>
                 </div>
@@ -3259,6 +3222,13 @@ export function SchoolAdminWorkspace({
                   search={studentSearch}
                 />
 
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+                  <FilterPanel title="Filtros dos pagamentos" value={{ alert: paymentAlertFilter }} clear={() => ({ alert: "all" as PaymentAlertFilter })} apply={(value) => setPaymentAlertFilter(value.alert)} active={paymentAlertFilter === "all" ? [] : [{ key: "alert", label: activePaymentFilterLabel[paymentAlertFilter], remove: () => setPaymentAlertFilter("all") }]}>
+                    {(draft, change) => <label className="text-sm font-semibold">Estado<select className={inputClasses()} value={draft.alert} onChange={(event) => change({ alert: event.target.value as PaymentAlertFilter })}>{Object.entries(activePaymentFilterLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
+                  </FilterPanel>
+                  <SecondaryButton onClick={() => workspace.update({ paymentDisplay: compactPayments ? "sheet" : "list", paymentPeriod: compactPayments ? "year" : "month" })}>{compactPayments ? "Ver planilha completa" : "Ver lista compacta"}</SecondaryButton>
+                </div>
+                {compactPayments ? <PaymentList rows={visiblePaymentRows} state={demoState} settings={paymentSettings} monthKeys={visibleMonthKeys} selected={selectedPaymentStudentIdSet} onSelect={togglePaymentStudentSelection} onCell={openFinanceCell} onStudent={(id) => workspace.update({ view: "enrollments", personId: id, studentTab: "Financeiro" }, true)}/> : (
                 <div className="table-scroll" data-scroll-id="payments" role="region" aria-label="Tabela com deslocamento horizontal" tabIndex={0}>
                                     <table className="lss-finance-table w-full text-left text-sm" style={{ minWidth: Math.max(950, 780 + displayMonths.length * 120) }}>
                     <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
@@ -3349,6 +3319,7 @@ export function SchoolAdminWorkspace({
                               </td>
                               <td className="px-4 py-4">
                                 <FinanceCell
+                                  focusKey={financeCellKey({ kind: "registration", studentId: row.student.id })}
                                   label={registrationState.label}
                                   onClick={() =>
                                     openFinanceCell({
@@ -3396,6 +3367,7 @@ export function SchoolAdminWorkspace({
                                 return (
                                   <td key={month.month.key} className="px-3 py-4">
                                     <FinanceCell
+                                      focusKey={financeCellKey({ kind: "tuition", studentId: row.student.id, monthKey: month.month.key })}
                                       label={monthState.label}
                                       onClick={() =>
                                         openFinanceCell({
@@ -3423,6 +3395,7 @@ export function SchoolAdminWorkspace({
                               })}
                               <td className="px-4 py-4">
                                 <FinanceCell
+                                  focusKey={financeCellKey({ kind: "miscellaneous", studentId: row.student.id })}
                                   label={miscellaneousState.label}
                                   onClick={() =>
                                     openFinanceCell({
@@ -3443,6 +3416,7 @@ export function SchoolAdminWorkspace({
                               </td>
                               <td className="px-4 py-4">
                                 <FinanceCell
+                                  focusKey={financeCellKey({ kind: "debt", studentId: row.student.id })}
                                   label={formatCurrency(debtTiming.overdueDebt)}
                                   onClick={() =>
                                     openFinanceCell({
@@ -3463,6 +3437,7 @@ export function SchoolAdminWorkspace({
                               </td>
                               <td className="px-4 py-4">
                                 <FinanceCell
+                                  focusKey={financeCellKey({ kind: "debt", studentId: row.student.id })}
                                   label={formatCurrency(debtTiming.futureDue)}
                                   onClick={() =>
                                     openFinanceCell({
@@ -3483,6 +3458,7 @@ export function SchoolAdminWorkspace({
                               </td>
                               <td className="px-4 py-4">
                                 <FinanceCell
+                                  focusKey={financeCellKey({ kind: "debt", studentId: row.student.id })}
                                   label={formatCurrency(debt)}
                                   onClick={() =>
                                     openFinanceCell({
@@ -3538,7 +3514,9 @@ export function SchoolAdminWorkspace({
                       )}
                     </tbody>
                   </table>
-                </div>
+                </div>)}
+                <details className="border-t border-slate-200 p-4"><summary className="min-h-11 cursor-pointer content-center text-sm font-semibold">Resumo de {selectedMonth?.label} · {visiblePaymentRows.length} {visiblePaymentRows.length === 1 ? "aluno apresentado" : "alunos apresentados"}</summary><div className="mt-2 flex flex-wrap gap-x-6 gap-y-2 text-sm"><span>Previsto: <strong>{formatCurrency(sumMoney(visiblePaymentRows.map((row) => row.ledger.monthly.find((item) => item.month.key === billingMonthKey)?.due ?? 0)))}</strong></span><span>Aplicado: <strong>{formatCurrency(sumMoney(visiblePaymentRows.flatMap((row) => { const month = row.ledger.monthly.find((item) => item.month.key === billingMonthKey); return [month?.paid ?? 0, month?.finePaid ?? 0]; })))}</strong></span><span>Saldo: <strong>{formatCurrency(sumMoney(visiblePaymentRows.flatMap((row) => { const month = row.ledger.monthly.find((item) => item.month.key === billingMonthKey); return [month?.balance ?? 0, month?.fineBalance ?? 0]; })))}</strong></span></div>{selectedMonthBillingRun && <p className="mt-2 text-xs text-slate-500">Cobranças emitidas.</p>}{billingNotice && <p className="mt-2 text-sm">{billingNotice}</p>}{developerToolsEnabled && selectedProfile.id === "secretaria" && <PrimaryButton onClick={generateMonthlyBilling}>Gerar propinas</PrimaryButton>}</details>
+
               </section>
 
 
@@ -3555,7 +3533,7 @@ export function SchoolAdminWorkspace({
           selection={selectedFinanceCell}
           settings={paymentSettings}
           studentContextLabel={selectedFinanceContextLabel}
-          onClose={() => setSelectedFinanceCell(null)}
+          onClose={() => { setSelectedFinanceCell(null); restoreFinanceFocus(); }}
           onCorrectPayment={openPaymentCorrection}
           onCreateMiscellaneous={openMiscellaneousChargeForm}
           onRegisterPayment={registerPaymentFromCell}
@@ -3572,10 +3550,10 @@ export function SchoolAdminWorkspace({
           key={paymentReceipt?.id}
           receipt={paymentReceipt}
           status={demoState && paymentReceipt ? receiptStatus(demoState, paymentReceipt) : undefined}
-          onClose={() => { setPaymentReceipt(null); window.requestAnimationFrame(() => financeTrigger.current?.focus({ preventScroll: true })); }}
+          onClose={() => { setPaymentReceipt(null); restoreFinanceFocus(); }}
           onPrint={() => window.print()}
         />
-        {demoState && <FinanceServicePanel serviceRef={financeService} state={demoState} studentId={canResumePayment || paymentDialogOpen ? paymentDraft.studentId : ""} yearId={selectedYearId} readOnly={selectedProfile.id !== "secretaria"} execute={executeServiceCommand} correctionTarget={paymentCorrectionTarget} onCloseCorrection={() => { setPaymentCorrectionTarget(null); window.requestAnimationFrame(() => financeTrigger.current?.focus({ preventScroll: true })); }}/>}
+        {demoState && <FinanceServicePanel serviceRef={financeService} state={demoState} studentId={canResumePayment || paymentDialogOpen ? paymentDraft.studentId : ""} yearId={selectedYearId} readOnly={selectedProfile.id !== "secretaria"} execute={executeServiceCommand} correctionTarget={paymentCorrectionTarget} onCloseCorrection={() => { setPaymentCorrectionTarget(null); restoreFinanceFocus(); }}/>}
         {paymentDialogOpen && demoState && selectedProfile.id === "secretaria" && <PaymentDialog onOpenProofs={() => { setPaymentDialogOpen(false); financeService.current?.showProofs(paymentDraft.studentId); }} onCommandId={rememberPaymentCommand} onCompleted={() => { paymentDraftEdited.current = false; setCanResumePayment(false); setPaymentDraft((current) => ({ ...current, amount: "0" })); }} draftNotice={draftStorageNotice} entryMode={paymentEntryMode} canResume={canResumePayment} onOpenCash={openCashWorkspace} state={demoState} draft={paymentDraft} onChange={changePaymentDraft} onClose={closePaymentDialog} commandId={paymentAttemptId} execute={executeServiceCommand} confirm={(draft, id) => { paymentCommandRef.current = id; setPaymentAttemptId(id); const receipt = confirmAcademicPayment(draft, id).receipt; paymentDraftEdited.current = false; setPaymentDraft((current) => ({ ...current, amount: "0" })); return receipt; }}/>}
       </div>
     );

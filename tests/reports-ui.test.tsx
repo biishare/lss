@@ -13,8 +13,10 @@ import { backupArchiveKey, configureBackups, storeBackup } from "../app/features
 import { domWindow } from "./dom-environment";
 
 afterEach(cleanup); after(async () => { await domWindow.happyDOM.close(); });
-function fixture(section: "reports" | "cash" | "continuity" = "reports", role: "secretaria" | "director" = "secretaria", brokenArchive = false) {
+function fixture(section: "reports" | "cash" | "continuity" = "reports", role: "secretaria" | "director" = "secretaria", brokenArchive = false, mixedMethods = false) {
+  window.sessionStorage.clear();
   const f = phase6Fixture(); f.pay({ amount: "1200" });
+  if (mixedMethods) f.pay({ amount: "200", method: "M-Pesa", creditOnly: true, evidenceReference: "MPESA-UI4-CONFERIDO" });
   configureBackups(f.storage, true, 3); storeBackup(f.storage, f.state, "Cópia de teste", f.time);
   if (brokenArchive) f.values.set(backupArchiveKey, JSON.stringify({ version: 1, enabled: true, retention: 3, items: [], beforeRestore: {} }));
   Object.defineProperty(window, "localStorage", { value: f.storage, configurable: true });
@@ -32,7 +34,9 @@ const submitCash = () => fireEvent.submit(document.getElementById("cash-command-
 test("relatório filtra e abre ficha conservando definições; recibo permanece consultável", () => {
   const h = fixture(); assert.ok(screen.getByRole("heading", { name: "Recebimentos" }));
   fireEvent.change(screen.getByLabelText("Pesquisar no relatório"), { target: { value: "Ana Júlia" } });
+  fireEvent.click(screen.getByRole("button", { name: "Filtros" }));
   fireEvent.change(screen.getByLabelText("Forma no relatório"), { target: { value: "Numerário" } });
+  fireEvent.click(screen.getByRole("button", { name: "Aplicar filtros" }));
   fireEvent.click(screen.getByRole("button", { name: "Recibo" })); assert.match(screen.getByRole("dialog").textContent ?? "", /LSS-2026-000001/);
   fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Fechar" }));
   fireEvent.click(screen.getByRole("button", { name: "Ana Júlia Mucavele" })); assert.equal(h.context.view, "enrollments"); assert.equal(h.context.studentTab, "Financeiro"); assert.equal(h.context.reportFilters!.search, "Ana Júlia"); assert.equal(h.context.reportFilters!.method, "Numerário");
@@ -41,7 +45,7 @@ test("datas inválidas impedem exportação e prévia contém período, definiç
   fixture(); fireEvent.change(screen.getByLabelText("Data inicial"), { target: { value: "2026-06-01" } });
   assert.match(screen.getByRole("alert").textContent ?? "", /intervalo/); assert.equal(screen.queryByRole("button", { name: "Exportar CSV" }), null);
   fireEvent.change(screen.getByLabelText("Data inicial"), { target: { value: "2026-05-01" } });
-  fireEvent.click(screen.getByRole("button", { name: "Prévia de impressão / PDF" })); const dialog = screen.getByRole("dialog");
+  fireEvent.click(screen.getByRole("button", { name: "Imprimir / PDF" })); const dialog = screen.getByRole("dialog");
   assert.match(dialog.textContent ?? "", /Período: 2026-05-01 a 2026-05-05/); assert.match(dialog.textContent ?? "", /todos os anos lectivos/i); assert.match(dialog.textContent ?? "", /Dinheiro confirmado pela data efectiva/);
 });
 test("mensagem abre destinatário e valor para copiar sem efectuar envio ou gravação", () => {
@@ -56,7 +60,7 @@ test("fecho mostra efeito, conserva contagem em falha e grava apenas na confirma
   fireEvent.click(screen.getByRole("button", { name: "Fechar caixa" }));
   fireEvent.change(screen.getByLabelText(/^Numerário contado/), { target: { value: "1100" } }); submitCash(); assert.match(screen.getByRole("alert").textContent ?? "", /Justifique/);
   fireEvent.change(screen.getByLabelText("Justificação da diferença / Observação"), { target: { value: "Diferença conferida" } }); submitCash();
-  assert.ok(screen.getByRole("button", { name: "Confirmar operação" })); assert.equal(h.f.writes, writes);
+  assert.ok(screen.getByRole("button", { name: "Confirmar fecho" })); assert.equal(h.f.writes, writes);
   h.fail(true); submitCash(); assert.ok(screen.getAllByRole("alert").some((item) => /Não foi possível guardar/.test(item.textContent ?? ""))); assert.equal((screen.getByLabelText(/^Numerário contado/) as HTMLInputElement).value, "1100");
   h.fail(false); submitCash(); assert.equal(h.f.writes, writes + 1); assert.equal(h.f.state.cashBook!.sessions[0].differenceCents, -10000); assert.equal(screen.queryByRole("dialog"), null);
 });
@@ -86,4 +90,60 @@ test("arquivo de recuperação corrompido mantém a página utilizável e conser
   assert.ok(screen.getByRole("heading", { name: "Cópias de segurança e recuperação" }));
   assert.ok(screen.getByRole("button", { name: "Descarregar cópia actual" }));
   assert.equal(h.f.values.get(backupArchiveKey), raw); assert.equal(h.f.writes, writes);
+});
+
+
+test("filtros só publicam ao aplicar; cancelar, limpar e remover conservam o conjunto correcto", () => {
+  const h = fixture("reports", "secretaria", false, true), raw = JSON.stringify(h.f.state), writes = h.f.writes;
+  const openFilters = () => fireEvent.click(screen.getByRole("button", { name: /^Filtros(?: \(\d+\))?$/ }));
+  openFilters();
+  fireEvent.change(screen.getByLabelText("Forma no relatório"), { target: { value: "M-Pesa" } });
+  assert.equal(h.context.reportFilters!.method, "");
+  assert.ok(screen.getByText(/2 registos · Total/));
+  fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+  openFilters(); assert.equal((screen.getByLabelText("Forma no relatório") as HTMLSelectElement).value, "");
+  fireEvent.change(screen.getByLabelText("Forma no relatório"), { target: { value: "M-Pesa" } });
+  fireEvent.click(screen.getByRole("button", { name: "Aplicar filtros" }));
+  assert.equal(h.context.reportFilters!.method, "M-Pesa");
+  assert.ok(screen.getByText("1 registo · Total 200 MT"));
+  fireEvent.click(screen.getByRole("button", { name: "Imprimir / PDF" }));
+  assert.match(screen.getByRole("dialog").textContent ?? "", /Forma: M-Pesa/);
+  assert.match(screen.getByRole("dialog").textContent ?? "", /Total: 200 MT/);
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Fechar" }));
+  openFilters(); fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
+  assert.equal(h.context.reportFilters!.method, "M-Pesa");
+  fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+  fireEvent.click(screen.getByRole("button", { name: "Remover filtro M-Pesa" }));
+  assert.equal(h.context.reportFilters!.method, "");
+  assert.ok(screen.getByText(/2 registos · Total/));
+  assert.equal(JSON.stringify(h.f.state), raw); assert.equal(h.f.writes, writes);
+});
+
+test("saída de caixa fecha e retoma o mesmo ID sem gravar antes da confirmação", (t) => {
+  const h = fixture("cash"), writes = h.f.writes;
+  t.mock.timers.enable({ apis: ["Date"], now: new Date(h.f.time) });
+  fireEvent.click(screen.getByRole("button", { name: "Registar saída" }));
+  fireEvent.change(screen.getByLabelText(/^Valor \(MT\)/), { target: { value: "100" } });
+  fireEvent.change(screen.getByLabelText(/^Motivo/), { target: { value: "Material autorizado" } });
+  const key = `lss-cash-tasks-v1-${h.f.state.datasetId}`, original = JSON.parse(window.sessionStorage.getItem(key)!).tasks[0];
+  submitCash(); assert.ok(screen.getByRole("button", { name: "Confirmar saída" }));
+  fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Fechar" }));
+  assert.equal(h.f.writes, writes);
+  fireEvent.click(screen.getByRole("button", { name: "Retomar saída" }));
+  assert.equal((screen.getByLabelText(/^Motivo/) as HTMLInputElement).value, "Material autorizado");
+  assert.equal(JSON.parse(window.sessionStorage.getItem(key)!).tasks[0].id, original.id);
+  submitCash(); submitCash();
+  assert.equal(h.f.writes, writes + 1);
+  assert.equal(h.f.state.operations.filter((item) => item.id === original.id).length, 1);
+  assert.equal(JSON.parse(window.sessionStorage.getItem(key)!).tasks.length, 0);
+});
+
+test("o detalhe filtrado do caixa e a sua impressão excluem as outras formas", () => {
+  fixture("cash", "secretaria", false, true);
+  fireEvent.change(screen.getByLabelText("Forma no detalhe"), { target: { value: "M-Pesa" } });
+  assert.match(screen.getByRole("status").textContent ?? "", /1 movimento.*200 MT/);
+  fireEvent.click(screen.getByRole("button", { name: "Imprimir detalhe / PDF" }));
+  const dialog = screen.getByRole("dialog");
+  assert.match(dialog.textContent ?? "", /Forma: M-Pesa.*1 movimento.*200 MT/);
+  assert.doesNotMatch(dialog.textContent ?? "", /Numerário|1200 MT/);
 });
