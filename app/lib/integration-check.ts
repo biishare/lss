@@ -1,4 +1,5 @@
 import "server-only";
+import { getVercelOidcToken } from "@vercel/oidc";
 
 type IntegrationCheck =
   | { status: "connected"; value: string | null }
@@ -14,8 +15,18 @@ export async function loadIntegrationCheck(): Promise<IntegrationCheck> {
   }
 
   try {
+    const headers = new Headers({ Accept: "application/json" });
+    if (
+      process.env.VERCEL_ENV === "preview" &&
+      base.protocol === "https:" &&
+      base.hostname.endsWith(".vercel.app")
+    ) {
+      const token = await getVercelOidcToken();
+      if (token) headers.set("x-vercel-trusted-oidc-idp-token", token);
+    }
+
     const response = await fetch(new URL("/api/v1/integration-check", base), {
-      headers: { Accept: "application/json" },
+      headers,
       cache: "no-store",
       redirect: "error",
       signal: AbortSignal.timeout(10_000),
