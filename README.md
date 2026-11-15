@@ -4,8 +4,8 @@ Demo navegável do Liceu São Silvestre, construída com Next.js, React,
 TypeScript, Material UI e Tailwind CSS. Usa apenas dados fictícios e guarda as
 alterações no `localStorage` do navegador.
 
-Na implementação actual não existe backend, base de dados central, autenticação
-real ou integração externa.
+O ambiente de apresentação utiliza uma sessão local. Em desenvolvimento, a
+página de verificação pode consultar um registo fictício na API dedicada.
 
 ## Especificação vigente
 
@@ -57,6 +57,13 @@ cenário. O URL inclui apenas IDs/contexto, sem pesquisa ou contactos.
 - `/payments` — políticas por classe/ano, cobranças diversas, planilha e lançamentos;
 - `/reports` — relatórios detalháveis, caixa, conferência e cópias;
 - `/settings` — escola, calendário, níveis, classes, salas e regras.
+
+## Verificar a leitura pela API
+
+Com a `lss-api` e o MongoDB de desenvolvimento em execução, arranca o front com
+`LSS_ENABLE_INTEGRATION_CHECK=true` e `LSS_API_BASE_URL=http://127.0.0.1:4000`
+em `.env.local`. Abre `/integracao` para ver o valor lido no MongoDB ou o estado
+da ligação. As duas aplicações precisam da opção activa no ambiente de teste.
 
 ## Dados locais
 
