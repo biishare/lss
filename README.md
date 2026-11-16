@@ -1,30 +1,64 @@
-# LSS — demonstração de gestão escolar
+# LSS — gestão escolar
 
-Demo navegável do Liceu São Silvestre, construída com Next.js, React,
-TypeScript, Material UI e Tailwind CSS. Usa apenas dados fictícios e guarda as
-alterações no `localStorage` do navegador.
+Aplicação escolar do Liceu São Silvestre, construída com Next.js, React,
+TypeScript, Material UI e Tailwind CSS. A Secretaria opera a escola e o
+Director consulta os dados. As contas são geridas no `lss-admin`.
 
-Na implementação actual não existe backend, base de dados central, autenticação
-real ou integração externa.
+## Modo central da Fase 8
 
-## Especificação vigente
+O modo central é a configuração por defeito. A aplicação valida a sessão
+através de `lss-api` antes de carregar alunos, turmas, pagamentos ou relatórios.
+Os pedidos passam pelo servidor Next.js na origem do `lss` e os cookies de
+sessão `HttpOnly` são conservados nessa origem. A API autoriza e confirma cada
+operação. Em caso de indisponibilidade, o formulário continua aberto.
 
-O trabalho seguinte é definido pela
-[`especificação mesclada v3`](docs/lss-especificacao-mesclada-v3.md), que combina
-o PDF v2 com a proposta posterior do utilizador. Por decisão posterior, a base
-central, autenticação e validação no servidor serão feitas depois numa **API
-dedicada**. A etapa actual continua local e preserva a demo; não cria SQL, ORM
-ou serviços financeiros remotos. O progresso é registado em
-[`docs/upgrade-progress.md`](docs/upgrade-progress.md).
+| Variável do servidor do `lss` | Configuração |
+| --- | --- |
+| `LSS_DATA_MODE` | `central` para a API. `demo` para um ambiente de apresentação separado. |
+| `LSS_API_ORIGIN` | Origem HTTPS da `lss-api` no mesmo ambiente. |
+| `LSS_SCHOOL_ORIGINS` | Origens do `lss`, separadas por vírgulas. |
 
-## Executar
+Na API, inclua as origens de `lss` do mesmo ambiente em `LSS_TRUSTED_ORIGINS`,
+conservando as origens do painel e dos outros clientes autorizados. O acesso
+de produção começa com as contas da Secretaria e do Director activadas pelo
+administrador. `CLOUDINARY_URL`, MongoDB e os segredos Better Auth são
+configurados no servidor da API. O envio de logótipo usa essa configuração.
+
+Para Previews protegidos, autorize o projecto `lss` como origem de confiança
+de Preview para Preview em `lss-api`. O servidor encaminha a identidade OIDC
+da Vercel. `/api/health/ready` verifica o percurso até à base central.
+
+O adaptador converte montantes em cêntimos inteiros. Após perda da resposta de
+uma escrita, consulta o comando confirmado e reutiliza a mesma chave ao
+repetir. Mantém a pesquisa pessoal em memória e envia-a no corpo do pedido.
+
+Actualize o contrato tipado a partir do `openapi.json` da API.
+
+```bash
+node scripts/generate-school-contract.mjs ../lss-api/openapi.json
+```
+
+### Verificar a integração
+
+Os ensaios de navegador arrancam o `lss`, a API e um replica set MongoDB
+descartável. Usam contas e registos sintéticos e precisam de um checkout
+`../lss-api` com `npm ci` executado. `LSS_API_CHECKOUT` indica um caminho
+alternativo. O Chrome pode ser instalado por `npx playwright install chromium`.
+
+```bash
+npm ci
+npm run build
+npm run test:central
+```
+
+## Executar a apresentação local
 
 Use Node.js 24.x; esta entrega foi validada com Node.js 24.22.1.
 O runner de testes usa o suporte a TypeScript do Node, além do mínimo do Next.js.
 
 ```bash
 npm ci
-npm run dev
+LSS_DATA_MODE=demo npm run dev
 ```
 
 Abra [http://localhost:3000](http://localhost:3000) e entre com o utilizador e a
@@ -35,9 +69,8 @@ A conta determina o painel e o papel:
 - **Director** — consulta indicadores, alunos, pagamentos, relatórios e
   configurações em modo de leitura.
 
-Os pares de acesso são fictícios e a validação é local, num adaptador de
-apresentação. Não constituem segurança de produção. Sessões e autorização
-reais serão fornecidas pela API posterior. Não se guardam palavras-passe submetidas.
+Neste modo, os pares de acesso fictícios são validados pelo adaptador local
+de apresentação. Os dados e os rascunhos de exemplo pertencem ao navegador.
 
 A interface apresentada ao cliente usa identidade da escola e percursos normais,
 sem rótulos Demo, escolha de perfil ou utilitários técnicos. Os limites da demo

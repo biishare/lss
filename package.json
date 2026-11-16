@@ -12,7 +12,8 @@
     "test:ui": "node --import tsx --test tests/*.test.tsx",
     "test:rehearsal": "node --test --experimental-strip-types --loader ./tests/ts-extension-loader.mjs tests/pilot-rehearsal.test.ts tests/synthetic-readiness.test.ts",
     "benchmark": "node --import tsx scripts/benchmark-readiness.ts",
-    "test:browser": "playwright test"
+    "test:browser": "playwright test",
+    "test:central": "playwright test --config=playwright.central.config.ts"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",
@@ -20,9 +21,11 @@
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^9.4.0",
     "@mui/material-nextjs": "^9.4.0",
+    "@vercel/oidc": "4.0.9",
     "next": "16.3.0",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "server-only": "0.0.1"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
