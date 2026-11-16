@@ -92,7 +92,8 @@ export function CentralWorkspace({ actor, initialView }: { actor: SchoolActor; i
 
   function selectStudent(area: "enrollments" | "payments", id: string) {
     const url = new URL(window.location.href);
-    url.searchParams.set("student", id);
+    if (id) url.searchParams.set("student", id);
+    else url.searchParams.delete("student");
     window.history.replaceState(null, "", url.pathname + url.search);
     setStudents(previous => ({ ...previous, [area]: id }));
   }
@@ -139,7 +140,7 @@ export function CentralWorkspace({ actor, initialView }: { actor: SchoolActor; i
               selectStudent={(id) => selectStudent("enrollments", id)} openPayment={(id) => navigate("payments", id)} />
           </Activity>}
           {visited.includes("payments") && <Activity mode={view === "payments" ? "visible" : "hidden"}>
-            <Payments key={students.payments} year={year} canWrite={canWrite} selected={students.payments}
+            <Payments key={year?.id ?? ""} year={year} canWrite={canWrite} selected={students.payments}
               selectStudent={(id) => selectStudent("payments", id)} />
           </Activity>}
           {visited.includes("reports") && <Activity mode={view === "reports" ? "visible" : "hidden"}>

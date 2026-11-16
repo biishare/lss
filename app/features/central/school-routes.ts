@@ -7,6 +7,7 @@ export const schoolRoutes = [
   ["POST", "/api/v1/finance/benefits"],
   ["POST", "/api/v1/finance/benefits/preview"],
   ["GET", "/api/v1/finance/charges"],
+  ["GET", "/api/v1/finance/groups/{id}/payment-sheet"],
   ["POST", "/api/v1/finance/charges/extras/preview"],
   ["POST", "/api/v1/finance/charges/extras"],
   ["POST", "/api/v1/finance/charges/{id}/adjustments/preview"],

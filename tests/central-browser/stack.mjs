@@ -16,7 +16,7 @@ const replica = await MongoMemoryReplSet.create({
 });
 const day = new Intl.DateTimeFormat("sv-SE", { timeZone: "Africa/Maputo" }).format(new Date());
 const currentYear = Number(day.slice(0, 4));
-const competence = day.slice(0, 7);
+const billingMonths = Array.from({ length: 12 }, (_, index) => currentYear + "-" + String(index + 1).padStart(2, "0"));
 const password = process.env.LSS_TEST_PASSWORD;
 if (!password) throw new Error("Inicie este ensaio através do Playwright.");
 
@@ -55,7 +55,7 @@ try {
   const create = (path, body) => command("/api/v1/" + path, body, staff.cookie, 201).then((reply) => reply.result);
   const year = await create("academic-years", {
     year: currentYear, label: "Ano lectivo de teste", startsOn: currentYear + "-01-01",
-    endsOn: currentYear + "-12-31", billingMonths: [competence],
+    endsOn: currentYear + "-12-31", billingMonths,
   });
   const level = await create("levels", { name: "Ensino de teste" });
   const schoolClass = await create("classes", { yearId: year.id, levelId: level.id, name: "Classe de teste" });
@@ -65,7 +65,7 @@ try {
   await command("/api/v1/academic-years/" + year.id + "/activate", { revision: year.revision, reason: "Ensaio de integração" }, staff.cookie, 200);
   await create("finance/policies", { yearId: year.id, levelId: level.id, classId: null, expectedRevision: 0,
     effectiveOn: year.startsOn, registrationCents: 5000, renewalCents: 4000, tuitionCents: 25050,
-    billingMonths: [competence], registrationGraceDays: 5, tuitionDueDay: 10, penaltyRules: [], reason: "Valores sintéticos do ensaio" });
+    billingMonths, registrationGraceDays: 5, tuitionDueDay: 10, penaltyRules: [], reason: "Valores sintéticos do ensaio" });
 
   next = spawn(process.execPath, ["node_modules/next/dist/bin/next", "start", "--hostname", "127.0.0.1", "--port", "3108"], {
     stdio: "inherit",

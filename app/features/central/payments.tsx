@@ -1,14 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { Activity, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import TextField from "@mui/material/TextField";
+import { TaskSurface } from "../../components/task-surface";
 import { apiRequest, type Schema } from "./client";
 import { CommandDialog, DateField, Heading, Paging, RecordList, ResourceState, Select } from "./controls";
 import { cents, dateLabel, methods, money, schoolDay, statuses, text } from "./format";
+import { ClassPaymentSheet, type SheetSelection } from "./payment-sheet";
 import { PreviewTask } from "./preview-task";
 import { Receipt } from "./receipts";
 import { StudentSearch, type Student } from "./students";
@@ -35,23 +37,26 @@ function MethodField({ initial = "cash" }: { initial?: keyof typeof methods }) {
   </Select>;
 }
 
-function ChargeFields({ charges }: { charges: Charge[] }) {
+function ChargeFields({ charges, initialChargeId }: { charges: Charge[]; initialChargeId?: string }) {
   return <fieldset className="grid gap-1 border-0 p-0">
     <legend className="mb-1 text-sm font-semibold">Cobranças a liquidar</legend>
     {charges.map(charge => <FormControlLabel key={charge.id} label={charge.label + " · " + money(charge.outstandingCents)}
-      control={<Checkbox name="chargeId" value={charge.id} />} />)}
+      control={<Checkbox name="chargeId" value={charge.id} defaultChecked={charge.id === initialChargeId} />} />)}
     {charges.length === 0 && <p className="text-sm text-slate-600">Sem cobranças com saldo nesta página.</p>}
   </fieldset>;
 }
 
-function PaymentFields({ charges, payment }: { charges: Charge[]; payment?: Payment }) {
+function PaymentFields({ charges, payment, initialChargeId }: { charges: Charge[]; payment?: Payment; initialChargeId?: string }) {
+  const initialAmount = payment?.amountCents ?? charges.find(charge => charge.id === initialChargeId)?.outstandingCents;
+  const amount = initialAmount === undefined ? "" :
+    Math.floor(initialAmount / 100) + "." + String(initialAmount % 100).padStart(2, "0");
   return <>
-    <TextField label="Valor em MT" name="amount" required defaultValue={payment ? (payment.amountCents / 100).toFixed(2) : ""}
+    <TextField label="Valor em MT" name="amount" required defaultValue={amount}
       slotProps={{ htmlInput: { inputMode: "decimal" } }} />
     <DateField label="Data efectiva" name="effectiveOn" defaultValue={payment?.effectiveOn ?? schoolDay()} required />
     <MethodField initial={payment?.method} />
     <TextField label="Referência" name="reference" defaultValue={payment?.reference ?? ""} />
-    <ChargeFields charges={charges} />
+    <ChargeFields charges={charges} initialChargeId={initialChargeId} />
     <FormControlLabel control={<Checkbox name="asCredit" />} label="Manter o valor como crédito" />
   </>;
 }
@@ -72,8 +77,9 @@ function PaymentReview({ result }: { result: { amountCents: number; allocatedCen
   </div>;
 }
 
-function FinanceTask({ op, student, year, charges, close, change }: {
-  op: Operation; student: Student; year?: Year; charges: Charge[]; close(): void;
+function FinanceTask({ op, student, year, charges, initialChargeId, close, change }: {
+  op: Operation; student: Pick<Student, "id" | "fullName">; year?: Year; charges: Charge[];
+  initialChargeId?: string; close(): void;
   change(message: string, receipt?: ReceiptData): void;
 }) {
   const studentId = student.id;
@@ -86,7 +92,7 @@ function FinanceTask({ op, student, year, charges, close, change }: {
     preview={body => apiRequest("POST", "/api/v1/finance/payments/preview", { body })}
     submit={(body, { previewToken }, key) => apiRequest("POST", "/api/v1/finance/payments", { body: { ...body, previewToken }, key })}
     review={result => <PaymentReview result={result} />} label="Confirmar pagamento" complete={confirmed}>
-    <PaymentFields charges={openCharges} />
+    <PaymentFields charges={openCharges} initialChargeId={initialChargeId} />
   </PreviewTask>;
 
   if (op.kind === "proof") return <CommandDialog {...common}
@@ -203,7 +209,7 @@ function FinanceTask({ op, student, year, charges, close, change }: {
 }
 
 function ExtraTask({ student, year, close, change }: {
-  student: Student; year?: Year; close(): void; change(message: string): void;
+  student: Pick<Student, "id" | "fullName">; year?: Year; close(): void; change(message: string): void;
 }) {
   const enrollments = useRemote(student.id + ":" + (year?.id ?? ""), (signal) =>
     apiRequest("GET", "/api/v1/enrollments", { query: { studentId: student.id, yearId: year?.id, status: "active", page: 1, limit: 100 }, signal }));
@@ -227,6 +233,60 @@ function ExtraTask({ student, year, close, change }: {
 export function Payments({ year, canWrite, selected, selectStudent }: {
   year?: Year; canWrite: boolean; selected: string; selectStudent(id: string): void;
 }) {
+  const [sheetRevision, setSheetRevision] = useState(0);
+  const [sheetSelection, setSheetSelection] = useState<SheetSelection>();
+  const [paying, setPaying] = useState(false);
+  const [sheetReceipt, setSheetReceipt] = useState<ReceiptData>();
+  const [notice, setNotice] = useState("");
+
+  function closeCharge() {
+    setSheetSelection(undefined);
+    setPaying(false);
+  }
+
+  const charge = sheetSelection?.charge;
+  const payable = charge && charge.status !== "unconfigured" && charge.status !== "cancelled" && charge.outstandingCents > 0
+    ? charge : undefined;
+
+  return <div className="grid min-w-0 gap-4">
+    <Heading title="Pagamentos" action={selected ? <Button onClick={() => selectStudent("")}>Voltar à planilha</Button> : undefined} />
+    <Activity mode={selected ? "hidden" : "visible"}>
+      {notice && <Alert severity="success" className="mb-4">{notice}</Alert>}
+      {year ? <ClassPaymentSheet key={year.id} year={year} revision={sheetRevision} openAccount={selectStudent}
+        openCharge={value => { setNotice(""); setSheetSelection(value); }} />
+        : <p className="text-sm text-slate-600">Seleccione um ano lectivo para consultar a planilha da turma.</p>}
+    </Activity>
+    <StudentSearch open={value => selectStudent(value.id)} selected={selected} label="Abrir conta" />
+    {selected && <StudentPayments key={selected} year={year} canWrite={canWrite} selected={selected} />}
+    {!selected && sheetSelection && (paying && canWrite && payable
+      ? <FinanceTask op={{ kind: "payment" }} student={sheetSelection.student} year={year}
+          charges={[payable]} initialChargeId={payable.id} close={closeCharge}
+          change={(message, saved) => {
+            closeCharge();
+            setNotice(message);
+            setSheetReceipt(saved);
+            setSheetRevision(current => current + 1);
+          }} />
+      : <TaskSurface title={sheetSelection.title} subtitle={sheetSelection.student.fullName} onClose={closeCharge}
+          actions={<>
+            <Button onClick={closeCharge}>Fechar</Button>
+            {canWrite && payable && <Button variant="contained" onClick={() => setPaying(true)}>Registar pagamento</Button>}
+          </>}>
+          <p><strong>{sheetSelection.status}</strong></p>
+          {charge && charge.status !== "unconfigured" && <dl className="grid grid-cols-[1fr_auto] gap-2 text-sm">
+            <dt>Vencimento</dt><dd>{dateLabel(charge.dueOn)}</dd>
+            <dt>Valor da cobrança</dt><dd>{money(charge.dueCents)}</dd>
+            <dt>Multa</dt><dd>{money(charge.penaltyCents)}</dd>
+            <dt>Valor pago</dt><dd>{money(charge.principalPaidCents + charge.penaltyPaidCents)}</dd>
+            <dt className="font-semibold">{charge.status === "forecast" ? "Valor previsto" : "Saldo"}</dt>
+            <dd className="font-semibold">{money(charge.outstandingCents)}</dd>
+          </dl>}
+        </TaskSurface>)}
+    {sheetReceipt && <Receipt id={sheetReceipt.id} initial={sheetReceipt} close={() => setSheetReceipt(undefined)} />}
+  </div>;
+}
+
+function StudentPayments({ year, canWrite, selected }: { year?: Year; canWrite: boolean; selected: string }) {
   const [section, setSection] = useState<"charges" | "payments" | "proofs" | "history">("charges");
   const [sectionPage, setSectionPage] = useState(1);
   const [op, setOp] = useState<Operation>();
@@ -248,14 +308,7 @@ export function Payments({ year, canWrite, selected, selectStudent }: {
   const operations: Mode[] = ["payment", "proof", "credit", "refund", "extra", "benefit"];
 
   return <div className="grid gap-4">
-    <Heading title="Pagamentos" detail="Seleccione um aluno para consultar a conta e os recebimentos." />
     {notice && <Alert severity="success">{notice}</Alert>}
-    <StudentSearch open={value => {
-      selectStudent(value.id);
-      setSection("charges");
-      setSectionPage(1);
-      setNotice("");
-    }} selected={selected} label="Abrir conta" />
     <ResourceState {...student} retry={student.refresh} />
     {student.value && <section className="lss-responsive-card grid gap-4">
       <Heading title={student.value.fullName} detail={student.value.permanentNumber ?? undefined} />

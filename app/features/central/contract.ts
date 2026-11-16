@@ -94,6 +94,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/finance/groups/{id}/payment-sheet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consultar a planilha financeira da turma
+         * @description Devolve a pauta da turma, as cobranças de inscrição e propinas, e as previsões do calendário de cada matrícula. A consulta é de leitura.
+         */
+        get: operations["readFinancePaymentSheet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/finance/charges/extras/preview": {
         parameters: {
             query?: never;
@@ -1707,6 +1727,27 @@ export interface components {
             /** @example null */
             dueCents: number | null;
             pendingProof: boolean;
+        };
+        FinancePaymentSheet: {
+            groupId: string;
+            yearId: string;
+            /** Format: date */
+            on: string;
+            /** Format: date */
+            today: string;
+            months: string[];
+            page: number;
+            limit: number;
+            total: number;
+            items: {
+                studentId: string;
+                enrollmentId: string;
+                rosterNumber: string;
+                fullName: string;
+                permanentNumber: string;
+                balanceCents: number;
+                charges: (components["schemas"]["FinanceCharge"] | components["schemas"]["FinanceUnconfiguredCharge"])[];
+            }[];
         };
         FinanceExtrasPreview: {
             items: {
@@ -4117,6 +4158,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FinanceChargePage"];
+                };
+            };
+            401: components["responses"]["Error401"];
+            403: components["responses"]["Error403"];
+            404: components["responses"]["Error404"];
+            409: components["responses"]["Error409"];
+            422: components["responses"]["Error422"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Error503"];
+        };
+    };
+    readFinancePaymentSheet: {
+        parameters: {
+            query?: {
+                page?: components["parameters"]["AcademicPage"];
+                limit?: components["parameters"]["AcademicLimit"];
+                /** @description Data da pauta. Por defeito, a data da escola dentro dos limites do ano lectivo. */
+                on?: string;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["AcademicId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Planilha da turma. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinancePaymentSheet"];
                 };
             };
             401: components["responses"]["Error401"];
