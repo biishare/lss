@@ -93,8 +93,8 @@ function WorkspaceShellView({
   institutionLabel = institutionName,
 }: ShellProps) {
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const desktop = useMediaQuery("(min-width:1200px)", { noSsr: true });
-  const tablet = useMediaQuery("(min-width:768px)", { noSsr: true });
+  const desktop = useMediaQuery("(min-width:1200px)");
+  const tablet = useMediaQuery("(min-width:768px)");
   const previousViewport = useRef({ desktop, tablet });
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const activeArea = ["classes", "rooms", "groups"].includes(activeView) ? "enrollments" : activeView;

@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
-import { WorkspaceEntry } from "../components/workspace-entry";
+import { SchoolEntry } from "../components/school-entry";
+
+export const dynamic = "force-dynamic";
 
 export default function WorkspaceLayout({ children }: { children: ReactNode }) {
-  return <><WorkspaceEntry />{children}</>;
+  return <><SchoolEntry />{children}</>;
 }
