@@ -9,6 +9,7 @@ import { apiRequest, issueMessage, requestPath, type Schema } from "./client";
 import { DateField, Heading, Paging, RecordList, ResourceState, Select } from "./controls";
 import { dateLabel, methods, money, schoolDay, statuses } from "./format";
 import { CashDesk } from "./cash";
+import { directorReportDates, type DirectorReport } from "./director-indicators";
 import { Receipt } from "./receipts";
 import { useRemote } from "./use-remote";
 import type { Year } from "./workspace";
@@ -37,13 +38,13 @@ function totalOf(page: ReportPage) {
   return page.unit === "cents" ? money(page.totalAmountCents ?? 0) : String(page.totalQuantity ?? 0);
 }
 
-export function Reports({ year, canWrite, openStudent }: {
-  year?: Year; canWrite: boolean; openStudent(id: string): void;
+export function Reports({ year, initialReport, canWrite, openStudent }: {
+  year?: Year; initialReport?: DirectorReport; canWrite: boolean; openStudent(id: string): void;
 }) {
   const [section, setSection] = useState<"reports" | "cash">("reports");
-  const [kind, setKind] = useState<ReportKind>("receipts");
+  const [kind, setKind] = useState<ReportKind>(initialReport ?? "receipts");
   const [page, setPage] = useState(1);
-  const [applied, setApplied] = useState(defaultFilters);
+  const [applied, setApplied] = useState(() => ({ ...defaultFilters(), ...directorReportDates(initialReport, year) }));
   const { from, to, method, classId, groupId } = applied;
   const [receipt, setReceipt] = useState<string>();
   const [print, setPrint] = useState<{ meta: ReportPage; rows: ReportRow[] }>();
@@ -167,7 +168,10 @@ export function Reports({ year, canWrite, openStudent }: {
         <RecordList rows={report.value.items} empty="Sem registos para os filtros seleccionados." render={row => <>
           <div><strong>{rowLabel(row)}</strong><p className="text-sm text-slate-600">
             {[row.date && dateLabel(row.date), row.competence, row.status && (statuses[row.status] ?? row.status)].filter(Boolean).join(" · ")}
-          </p></div>
+          </p>
+          {row.occupied !== undefined && row.capacity !== undefined &&
+            <p className="text-sm text-slate-600">Ocupação {row.occupied} de {row.capacity}</p>}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <strong>{valueOf(report.value!.unit, row)}</strong>
             {row.studentId && <Button onClick={() => openStudent(row.studentId!)}>Ficha</Button>}

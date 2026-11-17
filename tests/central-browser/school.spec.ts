@@ -11,7 +11,7 @@ async function enter(page: Page, email: string) {
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
 }
 
-test("Secretaria confirma matrícula, recupera um pagamento com resposta perdida e consulta o caixa", async ({ page }, info) => {
+test("Secretaria confirma matrícula, recupera um pagamento com resposta perdida e fecha o caixa", async ({ page }, info) => {
   const prematureReads: string[] = [];
   const record = (request: { url(): string }) => {
     if (request.url().includes("/api/v1/")) prematureReads.push(request.url());
@@ -114,6 +114,14 @@ test("Secretaria confirma matrícula, recupera um pagamento com resposta perdida
   await expect(cell).toHaveText("Pago");
   await expect(page.getByRole("button", { name: "Ano", exact: true })).toHaveAttribute("aria-pressed", "true");
 
+  await page.getByRole("button", { name: "Relatórios", exact: true }).first().click();
+  await page.getByRole("button", { name: "Fechar caixa", exact: true }).click();
+  await expect(editor.getByText("501,00 MT", { exact: true })).toBeVisible();
+  await editor.getByLabel("Numerário contado em MT").fill("501,00");
+  await editor.getByRole("button", { name: "Confirmar fecho", exact: true }).click();
+  await expect(page.getByText("Fecho registado.")).toBeVisible();
+  await expect(page.getByText("Sem caixa aberto.")).toBeVisible();
+
   await page.getByRole("button", { name: "Sair", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Entrar no LSS" })).toBeVisible();
   expect((await page.request.get("/api/v1/students")).status()).toBe(401);
@@ -152,6 +160,25 @@ test("Director acede no telemóvel e o servidor recusa a escrita", async ({ page
   await page.getByRole("button", { name: "Abrir menu" }).click();
   await page.getByRole("button", { name: "Relatórios", exact: true }).last().click();
   await expect(page.getByRole("heading", { name: "Relatórios escolares" })).toBeVisible();
+
+  await page.goto("/dashboard");
+  const indicators = page.getByRole("region", { name: "Indicadores do Director" });
+  const card = (title: string) => indicators.getByRole("article").filter({ has: page.getByRole("heading", { name: title, exact: true }) });
+  await expect(card("Recebimentos do mês").getByText("501,00 MT", { exact: true })).toBeVisible();
+  await expect(card("Dívida vencida").getByText("0,00 MT", { exact: true })).toBeVisible();
+  await expect(card("Matrículas confirmadas").getByText("1", { exact: true })).toBeVisible();
+  await expect(card("Vagas disponíveis").getByText("19", { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await page.screenshot({ path: info.outputPath("indicadores-director-mobile.png"), animations: "disabled" });
+  await indicators.getByRole("button", { name: "Ver relatório de vagas disponíveis" }).click();
+  await expect(page.getByRole("heading", { name: "Vagas por turma", exact: true })).toBeVisible();
+  await expect(page.getByText("Ocupação 1 de 20")).toBeVisible();
+  await page.goBack();
+  await indicators.getByRole("button", { name: "Ver relatório de recebimentos do mês" }).click();
+  await expect(page.getByRole("heading", { name: "Recebimentos", exact: true })).toBeVisible();
+  await expect(page.getByText("2 registos · Total 501,00 MT")).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("2 registos · Total 501,00 MT")).toBeVisible();
 
   const admin = await request.post(apiOrigin + "/api/auth/sign-in/email", {
     headers: { Origin: appOrigin }, data: { email: "admin@example.test", password },

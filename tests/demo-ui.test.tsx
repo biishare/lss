@@ -1,6 +1,6 @@
 import "./dom-environment";
 import assert from "node:assert/strict";
-import { after, afterEach, beforeEach, test } from "node:test";
+import { after, afterEach, before, beforeEach, mock, test } from "node:test";
 import { render, screen, fireEvent, waitFor, cleanup, within, act, configure } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { WorkspaceEntry as SchoolAdminDemo } from "../app/components/workspace-entry";
@@ -12,6 +12,7 @@ import type { WorkspaceView } from "../app/components/school-admin-demo.model";
 // The workspace is now imported only after session recognition. The cold import
 // includes TSX transformation in Node; these tests assert results, not load time.
 configure({ asyncUtilTimeout: 5000 });
+const fixtureTime = "2026-11-08T12:00:00.000Z";
 
 class TestStorage {
   values = new Map<string, string>();
@@ -36,18 +37,22 @@ const router: AppRouterInstance = {
   replace: (url) => window.history.replaceState(null, "", url),
 };
 
+before(() => mock.timers.enable({ apis: ["Date"], now: new Date(fixtureTime) }));
 beforeEach(() => {
   window.history.replaceState(null, "", "/");
   storage = new TestStorage();
-  const initial = createDemoState("example", { now: "2026-11-08T12:00:00.000Z", datasetId: "ui-scenario" });
-  const seed = { ...initial, ...prepareBilling(initial, "2026-11-08T12:00:00.000Z") };
+  const initial = createDemoState("example", { now: fixtureTime, datasetId: "ui-scenario" });
+  const seed = { ...initial, ...prepareBilling(initial, fixtureTime) };
   storage.values.set(demoStorageKey, JSON.stringify({ ...seed, revision: 1 }));
   Object.defineProperty(window, "localStorage", { value: storage, configurable: true });
   window.sessionStorage.clear();
   window.sessionStorage.setItem("lss-demo-session-v1", JSON.stringify({ profile: "secretaria", accountName: "Marta — Secretaria" }));
 });
 afterEach(() => { cleanup(); });
-after(async () => { await domWindow.happyDOM.close(); });
+after(async () => {
+  mock.timers.reset();
+  await domWindow.happyDOM.close();
+});
 
 function open(view: WorkspaceView = "overview", developerToolsEnabled = false) {
   return render(<AppRouterContext.Provider value={router}><SchoolAdminDemo initialView={view} developerToolsEnabled={developerToolsEnabled} /></AppRouterContext.Provider>);

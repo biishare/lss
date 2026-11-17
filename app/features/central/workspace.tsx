@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, lazy, Suspense, useEffect, useState } from "react";
+import { Activity, lazy, Suspense, useEffect, useReducer, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import { WorkspaceShell } from "../../components/workspace-shell";
@@ -9,6 +9,7 @@ import type { WorkspaceView } from "../../components/school-admin-demo.model";
 import { institutionName, workspacePath, workspaceView } from "../../lib/workspace-navigation";
 import { apiRequest, isSchoolActor, issueMessage, SchoolApiError, type Schema, type SchoolActor } from "./client";
 import { Heading, ResourceState, Select } from "./controls";
+import { DirectorIndicators, directorReport, type DirectorReport } from "./director-indicators";
 import { useRemote } from "./use-remote";
 
 const Academics = lazy(() => import("./academics").then(module => ({ default: module.Academics })));
@@ -23,6 +24,8 @@ export function CentralWorkspace({ actor, initialView }: { actor: SchoolActor; i
   const [visited, setVisited] = useState<WorkspaceView[]>([initialView]);
   const [yearId, setYearId] = useState("");
   const [students, setStudents] = useState({ enrollments: "", payments: "" });
+  const [report, setReport] = useState<DirectorReport>();
+  const [reportRevision, resetReport] = useReducer((revision: number) => revision + 1, 0);
   const [collapsed, setCollapsed] = useState(false);
   const [error, setError] = useState("");
   const [leaving, setLeaving] = useState(false);
@@ -44,6 +47,7 @@ export function CentralWorkspace({ actor, initialView }: { actor: SchoolActor; i
       if (route === "enrollments" || route === "payments") {
         setStudents(previous => ({ ...previous, [route]: params.get("student") ?? "" }));
       }
+      if (route === "reports") setReport(directorReport(params.get("indicador")));
     }
     const restore = window.setTimeout(readLocation, 0);
     window.addEventListener("popstate", readLocation);
@@ -70,13 +74,19 @@ export function CentralWorkspace({ actor, initialView }: { actor: SchoolActor; i
     return () => { abort.abort(); window.clearInterval(interval); window.removeEventListener("focus", verify); };
   }, [actor.id, actor.role]);
 
-  function navigate(next: WorkspaceView, student?: string) {
+  function navigate(next: WorkspaceView, student?: string, indicator?: DirectorReport) {
     const query = new URLSearchParams();
     if (year) query.set("year", year.id);
     if (next === "enrollments" || next === "payments") {
       const id = student ?? students[next];
       if (id) query.set("student", id);
       setStudents(previous => ({ ...previous, [next]: id }));
+    }
+    if (next === "reports") {
+      const requested = indicator ?? report;
+      if (requested) query.set("indicador", requested);
+      setReport(requested);
+      if (indicator) resetReport();
     }
     window.history.pushState(null, "", workspacePath(next) + (query.size ? "?" + query.toString() : ""));
     setView(next);
@@ -128,7 +138,9 @@ export function CentralWorkspace({ actor, initialView }: { actor: SchoolActor; i
         <Suspense fallback={<WorkspacePlaceholder view={view} />}>
           {view === "overview" && <section className="lss-responsive-card grid gap-4">
             <Heading title={canWrite ? "Atendimento escolar" : "Acompanhamento escolar"}
-              detail={year ? "Consulte as áreas de trabalho do ano seleccionado." : "Configure o ano lectivo para iniciar as matrículas."} />
+              detail={year ? undefined : canWrite ? "Configure o ano lectivo para iniciar as matrículas." : "Ainda não há ano lectivo configurado."} />
+            {actor.role === "director" && actor.permissions.readReports &&
+              <DirectorIndicators year={year} open={indicator => navigate("reports", undefined, indicator)} />}
             <div className="flex flex-wrap gap-2">
               <Button variant="contained" onClick={() => navigate(year ? "enrollments" : "catalog")}>{year ? "Alunos e turmas" : "Configurações"}</Button>
               <Button variant="outlined" onClick={() => navigate("payments")}>Pagamentos</Button>
@@ -144,7 +156,8 @@ export function CentralWorkspace({ actor, initialView }: { actor: SchoolActor; i
               selectStudent={(id) => selectStudent("payments", id)} />
           </Activity>}
           {visited.includes("reports") && <Activity mode={view === "reports" ? "visible" : "hidden"}>
-            <Reports key={year?.id ?? ""} year={year} canWrite={canWrite} openStudent={(id) => navigate("enrollments", id)} />
+            <Reports key={JSON.stringify([year?.id, report, reportRevision])} year={year} initialReport={report} canWrite={canWrite}
+              openStudent={(id) => navigate("enrollments", id)} />
           </Activity>}
           {visited.includes("catalog") && <Activity mode={view === "catalog" ? "visible" : "hidden"}>
             <Settings institution={catalog.value[0]} year={year} years={years}

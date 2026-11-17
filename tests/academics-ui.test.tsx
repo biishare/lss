@@ -1,6 +1,6 @@
 import "./dom-environment";
 import assert from "node:assert/strict";
-import { after, afterEach, beforeEach, test } from "node:test";
+import { after, afterEach, before, beforeEach, mock, test } from "node:test";
 import { cleanup, fireEvent, render, screen, waitFor, within, configure } from "@testing-library/react";
 import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { WorkspaceEntry as SchoolAdminDemo } from "../app/components/workspace-entry";
@@ -13,18 +13,24 @@ import type { WorkspaceView } from "../app/components/school-admin-demo.model";
 
 // Includes the cold, deferred workspace import and Node's TSX transformation.
 configure({ asyncUtilTimeout: 5000 });
+const fixtureTime = "2026-11-08T12:00:00.000Z";
 
 let values: Map<string, string>, writes: number;
 const router: AppRouterInstance = { bfcacheId: "academic-test", back() {}, forward() {}, refresh() {}, prefetch: async () => {}, push: (url) => window.history.pushState(null, "", url), replace: (url) => window.history.replaceState(null, "", url) };
+before(() => mock.timers.enable({ apis: ["Date"], now: new Date(fixtureTime) }));
 beforeEach(() => {
   values = new Map(); writes = 0;
-  const initial = createDemoState("example", { now: "2026-11-08T12:00:00.000Z", datasetId: "academic-ui" });
-  values.set(demoStorageKey, JSON.stringify({ ...initial, ...prepareBilling(initial, "2026-11-08T12:00:00.000Z") }));
+  const initial = createDemoState("example", { now: fixtureTime, datasetId: "academic-ui" });
+  values.set(demoStorageKey, JSON.stringify({ ...initial, ...prepareBilling(initial, fixtureTime) }));
   Object.defineProperty(window, "localStorage", { configurable: true, value: { getItem: (key: string) => values.get(key) ?? null, setItem: (key: string, value: string) => { values.set(key, value); if (key === demoStorageKey) writes++; } } });
   window.sessionStorage.clear(); window.sessionStorage.setItem("lss-demo-session-v1", JSON.stringify({ source: "demo", accountId: "demo-secretaria" }));
   window.history.replaceState(null, "", "/"); window.confirm = () => true;
 });
-afterEach(async () => { cleanup(); await domWindow.happyDOM.waitUntilComplete(); }); after(async () => { await domWindow.happyDOM.close(); });
+afterEach(async () => { cleanup(); await domWindow.happyDOM.waitUntilComplete(); });
+after(async () => {
+  mock.timers.reset();
+  await domWindow.happyDOM.close();
+});
 function open(view: WorkspaceView = "enrollments") { return render(<AppRouterContext.Provider value={router}><SchoolAdminDemo initialView={view}/></AppRouterContext.Provider>); }
 function saved(): DemoState { return JSON.parse(values.get(demoStorageKey)!); }
 async function identify(name = "Aluno da matrícula guiada") {
@@ -113,7 +119,7 @@ test("sala é cadastrada uma vez e fica disponível nas turmas sem activação r
 test("renovação pela ficha reutiliza a pessoa e conserva o financeiro anterior", async () => {
   const repository = createLocalDemoRepository(window.localStorage);
   let state = saved(), number = 0;
-  const run = (command: AcademicCommand) => { state = executeAcademic(repository, state, command, { id: `prepare-${++number}`, role: "secretaria", recordedAt: "2026-11-08T12:00:00.000Z" }).state; };
+  const run = (command: AcademicCommand) => { state = executeAcademic(repository, state, command, { id: `prepare-${++number}`, role: "secretaria", recordedAt: fixtureTime }).state; };
   run({ type: "class", name: "7.ª classe", levelId: "secondary-1", yearId: "2027" });
   const schoolClass = state.classes.find((item) => item.academicYear === "2027")!;
   run({ type: "group", name: "Turma A", classId: schoolClass.id, roomId: "room-a1", shift: "Manhã", capacity: 30, days: [1, 2, 3, 4, 5], startsAt: "07:00", endsAt: "12:30", reason: "" });
