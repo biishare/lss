@@ -140,7 +140,10 @@ test("Secretaria confirma matrícula, recupera um pagamento com resposta perdida
   await expect(page.getByText("Fecho registado.")).toBeVisible();
   await expect(page.getByText("Sem caixa aberto.")).toBeVisible();
 
-  await page.getByRole("button", { name: "Sair", exact: true }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Abrir menu" }).click();
+  await page.getByRole("dialog", { name: "Navegação" })
+    .getByRole("button", { name: "Sair", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Entrar no LSS" })).toBeVisible();
   expect((await page.request.get("/api/v1/students")).status()).toBe(401);
 });

@@ -56,7 +56,8 @@ test("dados ilegíveis só são lidos depois da entrada e sair conserva o origin
   await expect(page.getByRole("button", { name: "Tentar novamente" })).toBeVisible();
   await page.screenshot({ path: info.outputPath("erro-dados-com-navegacao.png"), fullPage: true });
   expect(await page.evaluate((key) => localStorage.getItem(key), demoStorageKey)).toBe("{incompleto");
-  await page.getByRole("banner").getByRole("button", { name: "Sair", exact: true }).click();
+  await page.getByRole("complementary", { name: "Navegação principal" })
+    .getByRole("button", { name: "Sair", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Entrar no LSS" })).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/");
   expect(await page.evaluate((key) => localStorage.getItem(key), demoStorageKey)).toBe("{incompleto");
