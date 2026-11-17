@@ -12,7 +12,6 @@ export class AcademicError extends Error {
   constructor(message: string, field = "") { super(message); this.name = "AcademicError"; this.field = field; }
 }
 export type AcademicCommand =
-  | { type: "institution"; name: string; contact: string; logoText: string }
   | { type: "year"; id: string; label: string; startsOn: string; endsOn: string; billingMonths: string[]; settings: PaymentSettings }
   | { type: "year-status"; yearId: string; status: AcademicYear["status"]; reason: string }
   | { type: "level"; id?: string; name: string }
@@ -77,12 +76,6 @@ export function executeAcademic(repository: DemoRepository, expected: DemoState,
         academic.events.push(entry); return entry.id;
       };
       switch (command.type) {
-        case "institution": {
-          const before = { ...academic.institution };
-          academic.institution = { ...before, name: required(command.name, "name", "o nome da escola"), contact: command.contact.trim(), logoText: required(command.logoText, "logoText", "a sigla") };
-          event("Dados da escola actualizados", academic.institution.id, { before, after: academic.institution });
-          break;
-        }
         case "year": {
           if (!/^\d{4}$/.test(command.id)) throw new AcademicError("Indique o ano com quatro algarismos.", "id");
           date(command.startsOn, "startsOn"); date(command.endsOn, "endsOn");

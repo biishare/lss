@@ -162,7 +162,7 @@ export function CentralWorkspace({ actor, initialView }: { actor: SchoolActor; i
           </Activity>}
           {visited.includes("catalog") && <Activity mode={view === "catalog" ? "visible" : "hidden"}>
             <Settings institution={catalog.value[0]} year={year} years={years}
-              canWrite={canWrite} canEditInstitution={actor.permissions.updateInstitution} refresh={catalog.refresh} />
+              canWrite={canWrite} refresh={catalog.refresh} />
           </Activity>}
         </Suspense>
       </>}

@@ -222,6 +222,18 @@ test("Filas de acções no telemóvel deslizam até às bordas sem barra visíve
   const first = settings.getByRole("button", { name: "Instituição", exact: true });
   const last = settings.getByRole("button", { name: "Propinas", exact: true });
   await expect(first).toBeVisible();
+  const institutionResponse = await page.request.get("/api/v1/institution");
+  expect(institutionResponse.status()).toBe(200);
+  const institution = await institutionResponse.json();
+  await expect(page.getByRole("heading", { name: institution.name, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Editar instituição|Actualizar logótipo/ })).toHaveCount(0);
+  expect((await page.request.patch("/api/v1/institution", {
+    headers: { Origin: appOrigin }, data: { name: "Tentativa de alteração", revision: institution.revision },
+  })).status()).toBe(404);
+  expect((await page.request.post("/api/v1/institution/logo", {
+    headers: { Origin: appOrigin, "Content-Type": "image/png", "X-Institution-Revision": String(institution.revision) },
+    data: Buffer.from("teste"),
+  })).status()).toBe(404);
 
   const initial = await actionRowLayout(settings);
   expect(initial.left).toBe(0);
