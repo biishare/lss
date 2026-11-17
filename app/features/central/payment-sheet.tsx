@@ -106,32 +106,34 @@ export function ClassPaymentSheet({ year, revision, openAccount, openCharge }: {
   const visibleMonths = period === "year" ? months : period === "term" ? months.slice(termStart, termStart + 3) : months.filter(item => item === month);
   const widerColumns = period === "month" ? "hidden sm:table-cell" : "";
 
-  return <section className="lss-responsive-card grid min-w-0 gap-4" data-wide="true">
-    <Heading title="Planilha financeira da turma" detail={data ? "Pauta em " + dateLabel(data.on) : undefined} />
-    <ResourceState {...classes} retry={classes.refresh} />
-    <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <Select label="Classe" value={classId} disabled={!classes.value} onChange={event => {
-        setClassId(event.target.value);
-        setGroupId("");
-        setPage(1);
-      }}>
-        <option value="">Seleccione a classe</option>
-        {classes.value?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-      </Select>
-      <Select label="Turma" value={groupId} disabled={!groups.value?.length} onChange={event => {
-        setGroupId(event.target.value);
-        setPage(1);
-      }}>
-        <option value="">Seleccione a turma</option>
-        {groups.value?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-      </Select>
-      {period !== "year" && months.length > 0 && <Select label={period === "term" ? "Mês de referência" : "Mês"}
-        value={month} onChange={event => setMonthChoice(event.target.value)}>
-        {months.map(item => <option key={item} value={item}>{monthName(item)}</option>)}
-      </Select>}
+  return <section className="grid min-w-0 gap-3">
+    <div className="lss-responsive-card grid gap-4" data-wide="true">
+      <Heading title="Planilha financeira da turma" detail={data ? "Pauta em " + dateLabel(data.on) : undefined} />
+      <ResourceState {...classes} retry={classes.refresh} />
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <Select label="Classe" value={classId} disabled={!classes.value} onChange={event => {
+          setClassId(event.target.value);
+          setGroupId("");
+          setPage(1);
+        }}>
+          <option value="">Seleccione a classe</option>
+          {classes.value?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </Select>
+        <Select label="Turma" value={groupId} disabled={!groups.value?.length} onChange={event => {
+          setGroupId(event.target.value);
+          setPage(1);
+        }}>
+          <option value="">Seleccione a turma</option>
+          {groups.value?.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+        </Select>
+        {period !== "year" && months.length > 0 && <Select label={period === "term" ? "Mês de referência" : "Mês"}
+          value={month} onChange={event => setMonthChoice(event.target.value)}>
+          {months.map(item => <option key={item} value={item}>{monthName(item)}</option>)}
+        </Select>}
+      </div>
+      <ResourceState {...groups} retry={groups.refresh} />
+      {groups.value?.length === 0 && <p className="text-sm text-slate-600">Sem turmas na classe seleccionada.</p>}
     </div>
-    <ResourceState {...groups} retry={groups.refresh} />
-    {groups.value?.length === 0 && <p className="text-sm text-slate-600">Sem turmas na classe seleccionada.</p>}
     <div className="lss-action-row" data-edge-to-edge role="group" aria-label="Período da planilha">
       {Object.entries(periods).map(([value, label]) => <Button key={value} aria-pressed={period === value}
         variant={period === value ? "contained" : "text"} onClick={() => setPeriod(value as keyof typeof periods)}>{label}</Button>)}

@@ -10,10 +10,9 @@ export type ActiveFilter = { key: string; label: string; remove(): void };
 
 // One controlled copy is edited. Neither typing nor clearing publishes filters.
 // Only the editor's presentation changes at the shell's 768px breakpoint.
-export function FilterPanel<T>({ title, value, clear, apply, validate, active, edgeToEdge, children }: {
+export function FilterPanel<T>({ title, value, clear, apply, validate, active, children }: {
   title: string; value: T; clear(value: T): T; apply(value: T): void;
   validate?(value: T): string; active: ActiveFilter[];
-  edgeToEdge?: boolean;
   children(value: T, change: (value: T) => void): ReactNode;
 }) {
   const desktop = useMediaQuery("(min-width:768px)");
@@ -34,7 +33,7 @@ export function FilterPanel<T>({ title, value, clear, apply, validate, active, e
     <div><Button type="button" onClick={() => { setDraft(clear(draft)); setError(""); }}>Limpar filtros</Button><p className="text-xs text-slate-500">Limpar altera esta cópia. Os resultados só mudam ao aplicar.</p></div>
   </form>;
   return <div className="min-w-0">
-    <div className="lss-action-row" data-edge-to-edge={edgeToEdge || undefined}>
+    <div className="lss-action-row" data-edge-to-edge>
       <Button ref={trigger} variant="outlined" aria-expanded={draft !== null} onClick={() => { if (draft !== null) close(); else { setDraft(structuredClone(value)); setError(""); } }}>Filtros{active.length ? ` (${active.length})` : ""}</Button>
       {active.map((item) => <Button key={item.key} type="button" variant="outlined" aria-label={`Remover filtro ${item.label}`} onClick={item.remove} sx={{ borderRadius: 8, minHeight: 44 }}>{item.label}<span aria-hidden="true" className="ml-2">×</span></Button>)}
     </div>

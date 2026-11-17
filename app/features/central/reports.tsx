@@ -117,68 +117,72 @@ export function Reports({ year, initialReport, canWrite, openStudent }: {
       <Button variant={section === "cash" ? "contained" : "outlined"} onClick={() => setSection("cash")}>Caixa</Button>
     </div>
     {section === "cash" ? <CashDesk canWrite={canWrite} /> : <>
-      <section className="lss-responsive-card grid gap-4">
-        <Heading title="Relatórios escolares" />
-        <ResourceState {...catalog} retry={catalog.refresh} />
-        {catalog.value && <>
-          <Select label="Relatório" value={kind} onChange={(event) => { setKind(event.target.value as ReportKind); setPage(1); }}>
-            {catalog.value.items.map(item => <option value={item.kind} key={item.kind}>{item.title}</option>)}
-          </Select>
-          {detail && <p className="text-sm text-slate-600">{detail.description}</p>}
-          {flags.has("from") && <p className="text-xs text-slate-600">Período {dateLabel(from)} a {dateLabel(to)}</p>}
-          {(flags.has("from") || flags.has("method") || classes.value || groups.value) &&
-            <FilterPanel title="Filtros do relatório" value={applied} clear={defaultFilters} apply={applyFilters} edgeToEdge
-              validate={draft => flags.has("from") && (!draft.from || !draft.to || draft.from > draft.to)
-                ? "Escolha um intervalo ordenado de datas." : ""}
-              active={[
-                ...(flags.has("method") && method ? [{ key: "method", label: methods[method], remove: () => applyFilters({ ...applied, method: "" }) }] : []),
-                ...(flags.has("classId") && classId ? [{ key: "class", label: classes.value?.items.find(item => item.id === classId)?.name ?? "Classe", remove: () => applyFilters({ ...applied, classId: "", groupId: "" }) }] : []),
-                ...(flags.has("groupId") && groupId ? [{ key: "group", label: groups.value?.items.find(item => item.id === groupId)?.name ?? "Turma", remove: () => applyFilters({ ...applied, groupId: "" }) }] : []),
-              ]}>
-              {(draft, change) => <>
-                {flags.has("from") && <DateField label="De" value={draft.from} required onChange={event => change({ ...draft, from: event.target.value })} />}
-                {flags.has("to") && <DateField label="Até" value={draft.to} required onChange={event => change({ ...draft, to: event.target.value })} />}
-                {flags.has("method") && <Select label="Meio de pagamento" value={draft.method}
-                  onChange={event => change({ ...draft, method: event.target.value as FilterDraft["method"] })}>
-                  <option value="">Todos</option>{Object.entries(methods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-                </Select>}
-                {classes.value && <Select label="Classe" value={draft.classId}
-                  onChange={event => change({ ...draft, classId: event.target.value, groupId: "" })}>
-                  <option value="">Todas</option>{classes.value.items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </Select>}
-                {groups.value && <Select label="Turma" value={draft.groupId}
-                  onChange={event => change({ ...draft, groupId: event.target.value })}>
-                  <option value="">Todas</option>{groups.value.items.filter(item => !draft.classId || item.classId === draft.classId)
-                    .map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
-                </Select>}
-              </>}
-            </FilterPanel>}
-        </>}
+      <section className="grid gap-3">
+        <div className="lss-responsive-card grid gap-4">
+          <Heading title="Relatórios escolares" />
+          <ResourceState {...catalog} retry={catalog.refresh} />
+          {catalog.value && <>
+            <Select label="Relatório" value={kind} onChange={(event) => { setKind(event.target.value as ReportKind); setPage(1); }}>
+              {catalog.value.items.map(item => <option value={item.kind} key={item.kind}>{item.title}</option>)}
+            </Select>
+            {detail && <p className="text-sm text-slate-600">{detail.description}</p>}
+            {flags.has("from") && <p className="text-xs text-slate-600">Período {dateLabel(from)} a {dateLabel(to)}</p>}
+          </>}
+        </div>
+        {catalog.value && (flags.has("from") || flags.has("method") || classes.value || groups.value) &&
+          <FilterPanel title="Filtros do relatório" value={applied} clear={defaultFilters} apply={applyFilters}
+            validate={draft => flags.has("from") && (!draft.from || !draft.to || draft.from > draft.to)
+              ? "Escolha um intervalo ordenado de datas." : ""}
+            active={[
+              ...(flags.has("method") && method ? [{ key: "method", label: methods[method], remove: () => applyFilters({ ...applied, method: "" }) }] : []),
+              ...(flags.has("classId") && classId ? [{ key: "class", label: classes.value?.items.find(item => item.id === classId)?.name ?? "Classe", remove: () => applyFilters({ ...applied, classId: "", groupId: "" }) }] : []),
+              ...(flags.has("groupId") && groupId ? [{ key: "group", label: groups.value?.items.find(item => item.id === groupId)?.name ?? "Turma", remove: () => applyFilters({ ...applied, groupId: "" }) }] : []),
+            ]}>
+            {(draft, change) => <>
+              {flags.has("from") && <DateField label="De" value={draft.from} required onChange={event => change({ ...draft, from: event.target.value })} />}
+              {flags.has("to") && <DateField label="Até" value={draft.to} required onChange={event => change({ ...draft, to: event.target.value })} />}
+              {flags.has("method") && <Select label="Meio de pagamento" value={draft.method}
+                onChange={event => change({ ...draft, method: event.target.value as FilterDraft["method"] })}>
+                <option value="">Todos</option>{Object.entries(methods).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+              </Select>}
+              {classes.value && <Select label="Classe" value={draft.classId}
+                onChange={event => change({ ...draft, classId: event.target.value, groupId: "" })}>
+                <option value="">Todas</option>{classes.value.items.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </Select>}
+              {groups.value && <Select label="Turma" value={draft.groupId}
+                onChange={event => change({ ...draft, groupId: event.target.value })}>
+                <option value="">Todas</option>{groups.value.items.filter(item => !draft.classId || item.classId === draft.classId)
+                  .map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+              </Select>}
+            </>}
+          </FilterPanel>}
         {invalid && <Alert severity="error">Escolha um intervalo com a data final igual ou posterior à inicial.</Alert>}
         {issue && <Alert severity="error">{issue}</Alert>}
       </section>
       <ResourceState {...report} retry={report.refresh} />
-      {report.value && <section className="lss-responsive-card grid gap-3" data-wide="true">
-        <Heading title={report.value.title} detail={report.value.total + (report.value.total === 1 ? " registo" : " registos") + " · Total " + totalOf(report.value)}
-          action={<div className="lss-action-row" data-edge-to-edge>
-            <Button variant="outlined" onClick={() => exportReport("csv")} disabled={Boolean(delivery)}>Exportar CSV</Button>
-            <Button variant="outlined" onClick={() => exportReport("print")} disabled={Boolean(delivery)}>Imprimir / PDF</Button>
-          </div>} />
+      {report.value && <section className="grid gap-3">
+        <Heading title={report.value.title} detail={report.value.total + (report.value.total === 1 ? " registo" : " registos") + " · Total " + totalOf(report.value)} />
+        <div className="lss-action-row" data-edge-to-edge role="group" aria-label="Exportar relatório">
+          <Button variant="outlined" onClick={() => exportReport("csv")} disabled={Boolean(delivery)}>Exportar CSV</Button>
+          <Button variant="outlined" onClick={() => exportReport("print")} disabled={Boolean(delivery)}>Imprimir / PDF</Button>
+        </div>
         {delivery && <p role="status" className="text-sm">A preparar o relatório…</p>}
-        <RecordList rows={report.value.items} empty="Sem registos para os filtros seleccionados." render={row => <>
-          <div><strong>{rowLabel(row)}</strong><p className="text-sm text-slate-600">
-            {[row.date && dateLabel(row.date), row.competence, row.status && (statuses[row.status] ?? row.status)].filter(Boolean).join(" · ")}
-          </p>
-          {row.occupied !== undefined && row.capacity !== undefined &&
-            <p className="text-sm text-slate-600">Ocupação {row.occupied} de {row.capacity}</p>}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <strong>{valueOf(report.value!.unit, row)}</strong>
-            {row.studentId && <Button onClick={() => openStudent(row.studentId!)}>Ficha</Button>}
-            {row.receiptId && <Button onClick={() => setReceipt(row.receiptId ?? undefined)}>Recibo</Button>}
-          </div>
-        </>} />
-        <Paging {...report.value} change={setPage} />
+        <div className="lss-responsive-card grid gap-3" data-wide="true">
+          <RecordList rows={report.value.items} empty="Sem registos para os filtros seleccionados." render={row => <>
+            <div><strong>{rowLabel(row)}</strong><p className="text-sm text-slate-600">
+              {[row.date && dateLabel(row.date), row.competence, row.status && (statuses[row.status] ?? row.status)].filter(Boolean).join(" · ")}
+            </p>
+            {row.occupied !== undefined && row.capacity !== undefined &&
+              <p className="text-sm text-slate-600">Ocupação {row.occupied} de {row.capacity}</p>}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <strong>{valueOf(report.value!.unit, row)}</strong>
+              {row.studentId && <Button onClick={() => openStudent(row.studentId!)}>Ficha</Button>}
+              {row.receiptId && <Button onClick={() => setReceipt(row.receiptId ?? undefined)}>Recibo</Button>}
+            </div>
+          </>} />
+          <Paging {...report.value} change={setPage} />
+        </div>
       </section>}
     </>}
     {receipt && <Receipt id={receipt} close={() => setReceipt(undefined)} />}

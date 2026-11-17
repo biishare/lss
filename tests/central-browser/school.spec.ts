@@ -23,6 +23,8 @@ async function actionRowLayout(row: Locator) {
       lastButtonRight: buttons[buttons.length - 1].right,
       lines: new Set(buttons.map(button => Math.round(button.top))).size,
       scrollLeft: element.scrollLeft,
+      scrollbarWidth: getComputedStyle(element).scrollbarWidth,
+      insideCard: Boolean(element.closest(".lss-responsive-card")),
     };
   });
 }
@@ -212,7 +214,7 @@ test("Director acede no telemóvel e o servidor recusa a escrita", async ({ page
   await expect(page.getByText("A sessão expirou. Entre novamente.")).toBeVisible();
 });
 
-test("Filas de acções no telemóvel mantêm uma linha e deslizam até às bordas", async ({ page }) => {
+test("Filas de acções no telemóvel deslizam até às bordas sem barra visível", async ({ page }, info) => {
   await page.setViewportSize({ width: 320, height: 700 });
   await page.goto("/settings");
   await enter(page, "secretaria@example.test");
@@ -228,6 +230,7 @@ test("Filas de acções no telemóvel mantêm uma linha e deslizam até às bord
   expect(initial.firstButtonLeft).toBeGreaterThan(0);
   expect(initial.lastButtonRight).toBeGreaterThan(initial.right);
   expect(initial.lines).toBe(1);
+  expect(initial.scrollbarWidth).toBe("none");
 
   await first.focus();
   const buttonCount = await settings.getByRole("button").count();
@@ -240,16 +243,46 @@ test("Filas de acções no telemóvel mantêm uma linha e deslizam até às bord
   await page.keyboard.press("Enter");
   await expect(page.getByRole("heading", { name: "Propinas e inscrição" })).toBeVisible();
 
-  await page.setViewportSize({ width: 740, height: 700 });
-  await page.goto("/dashboard");
-  const shortcuts = page.locator("main .lss-action-row").filter({
-    has: page.getByRole("button", { name: "Pagamentos", exact: true }),
-  });
+  const catalog = Promise.withResolvers<void>();
+  await page.route("**/api/v1/institution", async route => {
+    await catalog.promise;
+    await route.continue();
+  }, { times: 1 });
+  try {
+    await page.goto("/dashboard");
+    const skeleton = page.locator('main [aria-busy="true"] .MuiSkeleton-root').first();
+    await expect(skeleton).toBeVisible();
+    expect(await skeleton.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+    await expect(page.getByText("A carregar…", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("A preparar o conteúdo…", { exact: true })).toHaveCSS("width", "1px");
+  } finally {
+    catalog.resolve();
+  }
+
+  const shortcuts = page.getByRole("navigation", { name: "Atalhos escolares" });
   await expect(shortcuts).toBeVisible();
-  const card = await actionRowLayout(shortcuts);
-  expect(card.left).toBe(0);
-  expect(card.right).toBe(card.viewportWidth);
-  expect(card.pageWidth).toBe(card.viewportWidth);
-  expect(card.firstButtonLeft).toBeGreaterThan(initial.firstButtonLeft);
-  expect(card.lines).toBe(1);
+  await page.setViewportSize({ width: 740, height: 700 });
+  const home = await actionRowLayout(shortcuts);
+  expect(home.left).toBe(0);
+  expect(home.right).toBe(home.viewportWidth);
+  expect(home.pageWidth).toBe(home.viewportWidth);
+  expect(home.firstButtonLeft).toBe(initial.firstButtonLeft);
+  expect(home.lines).toBe(1);
+  expect(home.insideCard).toBe(false);
+
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.screenshot({ path: info.outputPath("inicio-mobile.png") });
+  await shortcuts.getByRole("button", { name: "Alunos e turmas", exact: true }).click();
+  const toolbar = page.getByRole("group", { name: "Acções de alunos e turmas" });
+  await expect(toolbar.getByRole("button")).toHaveCount(3);
+  const students = await actionRowLayout(toolbar);
+  expect(students.lines).toBe(1);
+  expect(students.pageWidth).toBe(students.viewportWidth);
+  expect(students.lastButtonRight).toBeLessThanOrEqual(students.right);
+  expect(students.insideCard).toBe(false);
+  await page.screenshot({ path: info.outputPath("alunos-mobile.png") });
+  await toolbar.getByRole("button", { name: "Turmas" }).click();
+  await expect(toolbar.getByRole("button", { name: "Turmas" })).toHaveAttribute("aria-pressed", "true");
+  await toolbar.getByRole("button", { name: "Novo aluno" }).click();
+  await expect(page.getByRole("dialog", { name: "Novo aluno" })).toBeVisible();
 });

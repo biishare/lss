@@ -307,12 +307,14 @@ export function Settings({ institution, year, years, canWrite, canEditInstitutio
         aria-pressed={section === key} onClick={() => { setSection(key); setPage(1); setNotice(""); }}>{label}</Button>)}
     </nav>
     {notice && <Alert severity="success">{notice}</Alert>}
-    {section === "institution" && <section className="lss-responsive-card grid gap-4">
-      <Heading title={institution.name} detail={[institution.email, institution.phone, institution.address].filter(Boolean).join(" · ")} />
-      {institution.logo && <Image unoptimized src={institution.logo.url} width={institution.logo.width} height={institution.logo.height}
-        alt={"Logótipo de " + institution.name} className="h-auto max-h-24 w-auto max-w-44 object-contain" />}
-      <p className="text-sm text-slate-600">Moeda {institution.currency} · Fuso horário {institution.timeZone}</p>
-      {canEditInstitution && <div className="lss-action-row" data-edge-to-edge>
+    {section === "institution" && <section className="grid gap-3">
+      <div className="lss-responsive-card grid gap-4">
+        <Heading title={institution.name} detail={[institution.email, institution.phone, institution.address].filter(Boolean).join(" · ")} />
+        {institution.logo && <Image unoptimized src={institution.logo.url} width={institution.logo.width} height={institution.logo.height}
+          alt={"Logótipo de " + institution.name} className="h-auto max-h-24 w-auto max-w-44 object-contain" />}
+        <p className="text-sm text-slate-600">Moeda {institution.currency} · Fuso horário {institution.timeZone}</p>
+      </div>
+      {canEditInstitution && <div className="lss-action-row" data-edge-to-edge role="group" aria-label="Acções da instituição">
         <Button variant="outlined" onClick={() => setInstitutionTask("details")}>Editar instituição</Button>
         <Button variant="outlined" onClick={() => setInstitutionTask("logo")}>Actualizar logótipo</Button>
       </div>}

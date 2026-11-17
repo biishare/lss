@@ -155,7 +155,7 @@ function AcademicHistory({ student }: { student: Student }) {
   const [page, change] = useState(1);
   const history = useRemote(student.id + ":" + page, (signal) =>
     apiRequest("GET", "/api/v1/students/{id}/history", { params: { id: student.id }, query: { page, limit: 12 }, signal }));
-  return <section aria-label="Histórico escolar" className="grid gap-2">
+  return <section aria-label="Histórico escolar" className="lss-responsive-card grid gap-2">
     <Heading title="Histórico escolar" />
     <ResourceState {...history} retry={history.refresh} />
     {history.value && <>
@@ -196,34 +196,42 @@ export function Academics({ year, canWrite, selected, selectStudent, openPayment
   }
 
   return <div className="grid gap-4">
-    <Heading title="Alunos e turmas" detail="Pesquise pela ficha do aluno e acompanhe as suas matrículas."
-      action={canWrite && tab === "students" && <Button variant="contained" onClick={() => setEdit("new")}>Novo aluno</Button>} />
-    {year && <div className="lss-action-row" data-edge-to-edge>
-      <Button aria-pressed={tab === "students"} variant={tab === "students" ? "contained" : "outlined"} onClick={() => setTab("students")}>Alunos</Button>
-      <Button aria-pressed={tab === "groups"} variant={tab === "groups" ? "contained" : "outlined"} onClick={() => setTab("groups")}>Turmas</Button>
+    <Heading title="Alunos e turmas" />
+    {(year || canWrite) && <div className="lss-action-row lss-student-toolbar" data-edge-to-edge
+      role="group" aria-label="Acções de alunos e turmas">
+      {year && <div className="lss-student-tabs" role="group" aria-label="Vista académica">
+        <Button size="small" aria-pressed={tab === "students"} onClick={() => setTab("students")}>Alunos</Button>
+        <Button size="small" aria-pressed={tab === "groups"} onClick={() => setTab("groups")}>Turmas</Button>
+      </div>}
+      {canWrite && <Button size="small" variant="contained" onClick={() => setEdit("new")}>Novo aluno</Button>}
     </div>}
     {tab === "groups" && year ? <AcademicGroups year={year} openStudent={select} /> : <>
     {notice && <Alert severity="success">{notice}</Alert>}
     <StudentSearch key={listVersion} open={item => select(item.id)} selected={selected} />
     <ResourceState {...student} retry={student.refresh} />
-    {student.value && <section className="lss-responsive-card grid gap-4">
-      <Heading title={student.value.fullName} detail={student.value.permanentNumber ?? "Ficha em preparação"}
-        action={<div className="lss-action-row" data-edge-to-edge>
-          {canWrite && <Button variant="outlined" onClick={() => setEdit(student.value)}>Editar ficha</Button>}
-          <Button variant="outlined" onClick={() => openPayment(selected)}>Ver pagamentos</Button>
-          <Button onClick={() => setHistory(!history)} aria-expanded={history}>Histórico escolar</Button>
-        </div>} />
-      <p className="text-sm text-slate-600">{[student.value.guardianName, student.value.guardianPhone].filter(Boolean).join(" · ")}</p>
+    {student.value && <section className="grid gap-4">
+      <div className="lss-responsive-card grid gap-2">
+        <Heading title={student.value.fullName} detail={student.value.permanentNumber ?? "Ficha em preparação"} />
+        {(student.value.guardianName || student.value.guardianPhone) && <p className="text-sm text-slate-600">
+          {[student.value.guardianName, student.value.guardianPhone].filter(Boolean).join(" · ")}
+        </p>}
+      </div>
+      <div className="lss-action-row" data-edge-to-edge role="group" aria-label="Acções da ficha">
+        {canWrite && <Button variant="outlined" onClick={() => setEdit(student.value)}>Editar ficha</Button>}
+        <Button variant="outlined" onClick={() => openPayment(selected)}>Ver pagamentos</Button>
+        <Button onClick={() => setHistory(!history)} aria-expanded={history}>Histórico escolar</Button>
+      </div>
       {history && <AcademicHistory student={student.value} />}
       {year ? <>
-        <Heading title="Matrículas" detail={year.label} action={canWrite && year.status === "active" && enrollments.value &&
+        <Heading title="Matrículas" detail={year.label} />
+        {canWrite && year.status === "active" && enrollments.value &&
           !enrollments.value.items.some(row => row.status === "active" || row.status === "draft") &&
-          <div className="lss-action-row" data-edge-to-edge>
+          <div className="lss-action-row" data-edge-to-edge role="group" aria-label="Acções de matrículas">
             <Button variant="contained" onClick={() => setEnroll({ action: "confirm" })}>Nova matrícula</Button>
             <Button variant="outlined" onClick={() => setRenewal(true)}>Renovar matrícula</Button>
-          </div>} />
+          </div>}
         <ResourceState {...enrollments} retry={enrollments.refresh} />
-        {enrollments.value && <>
+        {enrollments.value && <div className="lss-responsive-card grid gap-2">
           <RecordList rows={enrollments.value.items} empty="Sem matrículas neste ano lectivo." render={(row) => <>
             <div><strong>{row.number ?? "Matrícula em preparação"}</strong>
               <p className="text-sm text-slate-600">{statuses[row.status]} · {dateLabel(row.enrolledOn)}</p></div>
@@ -238,7 +246,7 @@ export function Academics({ year, canWrite, selected, selectStudent, openPayment
             </div>}
           </>} />
           <Paging {...enrollments.value} change={setPage} />
-        </>}
+        </div>}
       </> : <Alert severity="info">Configure um ano lectivo antes de registar matrículas.</Alert>}
     </section>}
     </>}

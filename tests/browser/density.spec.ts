@@ -30,6 +30,11 @@ for (const width of [320, 390]) test(`pagamentos abre na lista do mês e conserv
   await page.setViewportSize({ width, height: 844 }); await seed(page); await page.goto("/payments");
   const list = page.getByRole("region", { name: "Lista compacta de pagamentos", exact: true });
   await expect(list).toBeVisible();
+  const areas = page.getByText("Áreas de pagamentos", { exact: true });
+  await areas.click();
+  await expect(page.getByRole("navigation", { name: "Áreas de pagamentos" })).toBeVisible();
+  await noOverflow(page);
+  await areas.click();
   await expect(page.getByLabel("Mês de mensalidade", { exact: true })).toHaveValue("may");
   await expect(page.getByLabel("Período da planilha", { exact: true })).toHaveValue("month");
   await page.getByRole("searchbox").fill("LSS-2026-001");

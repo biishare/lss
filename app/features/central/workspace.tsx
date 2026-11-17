@@ -127,7 +127,8 @@ export function CentralWorkspace({ actor, initialView }: { actor: SchoolActor; i
     expanded={false} onExpandedChange={() => {}}>
     <div className="grid min-w-0 gap-4">
       {error && <Alert severity="error">{error}</Alert>}
-      <ResourceState {...catalog} retry={catalog.refresh} />
+      <ResourceState error={catalog.error} retry={catalog.refresh} />
+      {!catalog.value && catalog.loading && <WorkspacePlaceholder view={view} />}
       {catalog.value && <>
         {years.length > 0 && <div className="w-full max-w-xs">
           <Select fullWidth size="small" label="Ano lectivo" value={year?.id ?? ""}
@@ -136,16 +137,16 @@ export function CentralWorkspace({ actor, initialView }: { actor: SchoolActor; i
           </Select>
         </div>}
         <Suspense fallback={<WorkspacePlaceholder view={view} />}>
-          {view === "overview" && <section className="lss-responsive-card grid gap-4">
+          {view === "overview" && <section className="grid min-w-0 gap-3">
             <Heading title={canWrite ? "Atendimento escolar" : "Acompanhamento escolar"}
               detail={year ? undefined : canWrite ? "Configure o ano lectivo para iniciar as matrículas." : "Ainda não há ano lectivo configurado."} />
             {actor.role === "director" && actor.permissions.readReports &&
               <DirectorIndicators year={year} open={indicator => navigate("reports", undefined, indicator)} />}
-            <div className="lss-action-row" data-edge-to-edge>
-              <Button variant="contained" onClick={() => navigate(year ? "enrollments" : "catalog")}>{year ? "Alunos e turmas" : "Configurações"}</Button>
-              <Button variant="outlined" onClick={() => navigate("payments")}>Pagamentos</Button>
-              <Button variant="outlined" onClick={() => navigate("reports")}>Relatórios</Button>
-            </div>
+            <nav className="lss-action-row" data-edge-to-edge aria-label="Atalhos escolares">
+              <Button size="small" variant="contained" onClick={() => navigate(year ? "enrollments" : "catalog")}>{year ? "Alunos e turmas" : "Configurações"}</Button>
+              <Button size="small" variant="outlined" onClick={() => navigate("payments")}>Pagamentos</Button>
+              <Button size="small" variant="outlined" onClick={() => navigate("reports")}>Relatórios</Button>
+            </nav>
           </section>}
           {visited.includes("enrollments") && <Activity mode={view === "enrollments" ? "visible" : "hidden"}>
             <Academics key={year?.id ?? ""} year={year} canWrite={canWrite} selected={students.enrollments}

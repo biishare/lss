@@ -9,7 +9,7 @@ import { TaskSurface } from "../../components/task-surface";
 import { useCommand } from "./use-remote";
 
 export function Heading({ title, detail, action }: { title: string; detail?: string; action?: ReactNode }) {
-  return <div className="lss-action-heading flex flex-wrap items-start justify-between gap-3">
+  return <div className="flex flex-wrap items-start justify-between gap-3">
     <div><h2 className="text-xl font-bold">{title}</h2>{detail && <p className="mt-1 text-sm text-slate-600">{detail}</p>}</div>
     {action}
   </div>;
@@ -18,8 +18,8 @@ export function Heading({ title, detail, action }: { title: string; detail?: str
 export function ResourceState({ loading, error, retry }: { loading?: boolean; error?: string; retry(): void }) {
   if (error) return <Alert severity="error" action={<Button color="inherit" onClick={retry}>Tentar novamente</Button>}>{error}</Alert>;
   if (!loading) return null;
-  return <div role="status" aria-busy="true" className="grid gap-3 p-4">
-    <span className="text-sm text-slate-600">A carregar…</span>
+  return <div role="status" className="grid gap-3">
+    <span className="sr-only">A carregar…</span>
     {[0, 1, 2].map((id) => <Skeleton key={id} aria-hidden="true" animation={false} variant="rounded" height={42} />)}
   </div>;
 }
