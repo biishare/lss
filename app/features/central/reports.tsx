@@ -112,7 +112,7 @@ export function Reports({ year, initialReport, canWrite, openStudent }: {
   }
 
   return <div className="grid gap-4">
-    <div className="flex flex-wrap gap-2">
+    <div className="lss-action-row" data-edge-to-edge>
       <Button variant={section === "reports" ? "contained" : "outlined"} onClick={() => setSection("reports")}>Relatórios</Button>
       <Button variant={section === "cash" ? "contained" : "outlined"} onClick={() => setSection("cash")}>Caixa</Button>
     </div>
@@ -127,7 +127,7 @@ export function Reports({ year, initialReport, canWrite, openStudent }: {
           {detail && <p className="text-sm text-slate-600">{detail.description}</p>}
           {flags.has("from") && <p className="text-xs text-slate-600">Período {dateLabel(from)} a {dateLabel(to)}</p>}
           {(flags.has("from") || flags.has("method") || classes.value || groups.value) &&
-            <FilterPanel title="Filtros do relatório" value={applied} clear={defaultFilters} apply={applyFilters}
+            <FilterPanel title="Filtros do relatório" value={applied} clear={defaultFilters} apply={applyFilters} edgeToEdge
               validate={draft => flags.has("from") && (!draft.from || !draft.to || draft.from > draft.to)
                 ? "Escolha um intervalo ordenado de datas." : ""}
               active={[
@@ -160,7 +160,7 @@ export function Reports({ year, initialReport, canWrite, openStudent }: {
       <ResourceState {...report} retry={report.refresh} />
       {report.value && <section className="lss-responsive-card grid gap-3" data-wide="true">
         <Heading title={report.value.title} detail={report.value.total + (report.value.total === 1 ? " registo" : " registos") + " · Total " + totalOf(report.value)}
-          action={<div className="flex flex-wrap gap-2">
+          action={<div className="lss-action-row" data-edge-to-edge>
             <Button variant="outlined" onClick={() => exportReport("csv")} disabled={Boolean(delivery)}>Exportar CSV</Button>
             <Button variant="outlined" onClick={() => exportReport("print")} disabled={Boolean(delivery)}>Imprimir / PDF</Button>
           </div>} />

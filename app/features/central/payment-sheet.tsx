@@ -132,7 +132,7 @@ export function ClassPaymentSheet({ year, revision, openAccount, openCharge }: {
     </div>
     <ResourceState {...groups} retry={groups.refresh} />
     {groups.value?.length === 0 && <p className="text-sm text-slate-600">Sem turmas na classe seleccionada.</p>}
-    <div className="flex flex-wrap gap-2" role="group" aria-label="Período da planilha">
+    <div className="lss-action-row" data-edge-to-edge role="group" aria-label="Período da planilha">
       {Object.entries(periods).map(([value, label]) => <Button key={value} aria-pressed={period === value}
         variant={period === value ? "contained" : "text"} onClick={() => setPeriod(value as keyof typeof periods)}>{label}</Button>)}
     </div>

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const appOrigin = "http://127.0.0.1:3108";
 const apiOrigin = "http://127.0.0.1:4108";
@@ -9,6 +9,22 @@ async function enter(page: Page, email: string) {
   await page.getByRole("textbox", { name: "E-mail" }).fill(email);
   await page.locator('input[name="password"]').fill(password);
   await page.getByRole("button", { name: "Entrar", exact: true }).click();
+}
+
+async function actionRowLayout(row: Locator) {
+  return row.evaluate(element => {
+    const { left, right } = element.getBoundingClientRect();
+    const buttons = Array.from(element.querySelectorAll("button"), button => button.getBoundingClientRect());
+    return {
+      left, right,
+      viewportWidth: document.documentElement.clientWidth,
+      pageWidth: document.documentElement.scrollWidth,
+      firstButtonLeft: buttons[0].left,
+      lastButtonRight: buttons[buttons.length - 1].right,
+      lines: new Set(buttons.map(button => Math.round(button.top))).size,
+      scrollLeft: element.scrollLeft,
+    };
+  });
 }
 
 test("Secretaria confirma matrícula, recupera um pagamento com resposta perdida e fecha o caixa", async ({ page }, info) => {
@@ -194,4 +210,46 @@ test("Director acede no telemóvel e o servidor recusa a escrita", async ({ page
   expect(disabled.status()).toBe(200);
   await page.reload();
   await expect(page.getByText("A sessão expirou. Entre novamente.")).toBeVisible();
+});
+
+test("Filas de acções no telemóvel mantêm uma linha e deslizam até às bordas", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 700 });
+  await page.goto("/settings");
+  await enter(page, "secretaria@example.test");
+  const settings = page.getByRole("navigation", { name: "Configurações escolares" });
+  const first = settings.getByRole("button", { name: "Instituição", exact: true });
+  const last = settings.getByRole("button", { name: "Propinas", exact: true });
+  await expect(first).toBeVisible();
+
+  const initial = await actionRowLayout(settings);
+  expect(initial.left).toBe(0);
+  expect(initial.right).toBe(initial.viewportWidth);
+  expect(initial.pageWidth).toBe(initial.viewportWidth);
+  expect(initial.firstButtonLeft).toBeGreaterThan(0);
+  expect(initial.lastButtonRight).toBeGreaterThan(initial.right);
+  expect(initial.lines).toBe(1);
+
+  await first.focus();
+  const buttonCount = await settings.getByRole("button").count();
+  for (let index = 1; index < buttonCount; index++) await page.keyboard.press("Tab");
+  await expect(last).toBeFocused();
+  await expect.poll(async () => (await actionRowLayout(settings)).scrollLeft).toBeGreaterThan(0);
+  const scrolled = await actionRowLayout(settings);
+  expect(scrolled.firstButtonLeft).toBeLessThan(initial.left);
+  expect(scrolled.lastButtonRight).toBeLessThanOrEqual(initial.right);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "Propinas e inscrição" })).toBeVisible();
+
+  await page.setViewportSize({ width: 740, height: 700 });
+  await page.goto("/dashboard");
+  const shortcuts = page.locator("main .lss-action-row").filter({
+    has: page.getByRole("button", { name: "Pagamentos", exact: true }),
+  });
+  await expect(shortcuts).toBeVisible();
+  const card = await actionRowLayout(shortcuts);
+  expect(card.left).toBe(0);
+  expect(card.right).toBe(card.viewportWidth);
+  expect(card.pageWidth).toBe(card.viewportWidth);
+  expect(card.firstButtonLeft).toBeGreaterThan(initial.firstButtonLeft);
+  expect(card.lines).toBe(1);
 });

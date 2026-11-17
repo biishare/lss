@@ -141,7 +141,7 @@ export function CentralWorkspace({ actor, initialView }: { actor: SchoolActor; i
               detail={year ? undefined : canWrite ? "Configure o ano lectivo para iniciar as matrículas." : "Ainda não há ano lectivo configurado."} />
             {actor.role === "director" && actor.permissions.readReports &&
               <DirectorIndicators year={year} open={indicator => navigate("reports", undefined, indicator)} />}
-            <div className="flex flex-wrap gap-2">
+            <div className="lss-action-row" data-edge-to-edge>
               <Button variant="contained" onClick={() => navigate(year ? "enrollments" : "catalog")}>{year ? "Alunos e turmas" : "Configurações"}</Button>
               <Button variant="outlined" onClick={() => navigate("payments")}>Pagamentos</Button>
               <Button variant="outlined" onClick={() => navigate("reports")}>Relatórios</Button>

@@ -198,7 +198,7 @@ export function Academics({ year, canWrite, selected, selectStudent, openPayment
   return <div className="grid gap-4">
     <Heading title="Alunos e turmas" detail="Pesquise pela ficha do aluno e acompanhe as suas matrículas."
       action={canWrite && tab === "students" && <Button variant="contained" onClick={() => setEdit("new")}>Novo aluno</Button>} />
-    {year && <div className="flex flex-wrap gap-2">
+    {year && <div className="lss-action-row" data-edge-to-edge>
       <Button aria-pressed={tab === "students"} variant={tab === "students" ? "contained" : "outlined"} onClick={() => setTab("students")}>Alunos</Button>
       <Button aria-pressed={tab === "groups"} variant={tab === "groups" ? "contained" : "outlined"} onClick={() => setTab("groups")}>Turmas</Button>
     </div>}
@@ -208,7 +208,7 @@ export function Academics({ year, canWrite, selected, selectStudent, openPayment
     <ResourceState {...student} retry={student.refresh} />
     {student.value && <section className="lss-responsive-card grid gap-4">
       <Heading title={student.value.fullName} detail={student.value.permanentNumber ?? "Ficha em preparação"}
-        action={<div className="flex flex-wrap gap-2">
+        action={<div className="lss-action-row" data-edge-to-edge>
           {canWrite && <Button variant="outlined" onClick={() => setEdit(student.value)}>Editar ficha</Button>}
           <Button variant="outlined" onClick={() => openPayment(selected)}>Ver pagamentos</Button>
           <Button onClick={() => setHistory(!history)} aria-expanded={history}>Histórico escolar</Button>
@@ -218,7 +218,7 @@ export function Academics({ year, canWrite, selected, selectStudent, openPayment
       {year ? <>
         <Heading title="Matrículas" detail={year.label} action={canWrite && year.status === "active" && enrollments.value &&
           !enrollments.value.items.some(row => row.status === "active" || row.status === "draft") &&
-          <div className="flex flex-wrap gap-2">
+          <div className="lss-action-row" data-edge-to-edge>
             <Button variant="contained" onClick={() => setEnroll({ action: "confirm" })}>Nova matrícula</Button>
             <Button variant="outlined" onClick={() => setRenewal(true)}>Renovar matrícula</Button>
           </div>} />

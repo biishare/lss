@@ -2028,7 +2028,7 @@ export function SchoolAdminWorkspace({
         expandable={financeTableVisible} expanded={financeTableVisible && expandedTable}
         onExpandedChange={setExpandedTable}
       >
-        {academicArea && developerToolsEnabled && !demoState?.academic && <nav aria-label="Ferramentas académicas anteriores" className="mb-5 flex flex-wrap gap-2">
+        {academicArea && developerToolsEnabled && !demoState?.academic && <nav aria-label="Ferramentas académicas anteriores" className="lss-action-row mb-5" data-edge-to-edge>
           {([ ["enrollments", "Alunos"], ["groups", "Turmas"], ["classes", "Classes"], ["rooms", "Salas"] ] as const).map(([view, label]) => (
             <SecondaryButton key={view} onClick={() => setActiveView(view)}>{label}</SecondaryButton>
           ))}
@@ -3087,7 +3087,7 @@ export function SchoolAdminWorkspace({
     const visibleMonthKeys = new Set(displayMonths.map((item) => item.key));
     return (
       <div className="grid gap-6">
-        <details data-workspace-secondary open={desktop || paymentAreasOpen} onToggle={(event) => { if (!desktop) setPaymentAreasOpen(event.currentTarget.open); }}><summary className="min-h-11 cursor-pointer content-center text-sm font-semibold text-teal-800 md:hidden">Áreas de pagamentos</summary><nav aria-label="Áreas de pagamentos" className="flex flex-wrap gap-2 pb-1">
+        <details data-workspace-secondary open={desktop || paymentAreasOpen} onToggle={(event) => { if (!desktop) setPaymentAreasOpen(event.currentTarget.open); }}><summary className="min-h-11 cursor-pointer content-center text-sm font-semibold text-teal-800 md:hidden">Áreas de pagamentos</summary><nav aria-label="Áreas de pagamentos" className="lss-action-row" data-edge-to-edge>
           {visiblePaymentSections.map((section) => (
             <button
               key={section.id}

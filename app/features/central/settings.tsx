@@ -302,7 +302,7 @@ export function Settings({ institution, year, years, canWrite, canEditInstitutio
 
   return <div className="grid gap-4">
     <Heading title="Configurações escolares" />
-    <nav className="flex flex-wrap gap-2" aria-label="Configurações escolares">
+    <nav className="lss-action-row" data-edge-to-edge aria-label="Configurações escolares">
       {sections.map(([key, label]) => <Button key={key} variant={section === key ? "contained" : "text"}
         aria-pressed={section === key} onClick={() => { setSection(key); setPage(1); setNotice(""); }}>{label}</Button>)}
     </nav>
@@ -312,7 +312,7 @@ export function Settings({ institution, year, years, canWrite, canEditInstitutio
       {institution.logo && <Image unoptimized src={institution.logo.url} width={institution.logo.width} height={institution.logo.height}
         alt={"Logótipo de " + institution.name} className="h-auto max-h-24 w-auto max-w-44 object-contain" />}
       <p className="text-sm text-slate-600">Moeda {institution.currency} · Fuso horário {institution.timeZone}</p>
-      {canEditInstitution && <div className="flex flex-wrap gap-2">
+      {canEditInstitution && <div className="lss-action-row" data-edge-to-edge>
         <Button variant="outlined" onClick={() => setInstitutionTask("details")}>Editar instituição</Button>
         <Button variant="outlined" onClick={() => setInstitutionTask("logo")}>Actualizar logótipo</Button>
       </div>}

@@ -314,13 +314,15 @@ function StudentPayments({ year, canWrite, selected }: { year?: Year; canWrite: 
       <Heading title={student.value.fullName} detail={student.value.permanentNumber ?? undefined} />
       <ResourceState {...credit} retry={credit.refresh} />
       {credit.value && <p>Crédito disponível <strong>{money(credit.value.balanceCents)}</strong></p>}
-      {canWrite && <div className="flex flex-wrap gap-2">
+      {canWrite && <div className="lss-action-row" data-edge-to-edge>
         {operations.map(kind => <Button key={kind} variant={kind === "payment" ? "contained" : "outlined"}
           onClick={() => setOp({ kind })}>{labels[kind]}</Button>)}
       </div>}
-      <nav className="flex flex-wrap gap-2 border-b border-slate-100 pb-3" aria-label="Conta do aluno">
-        {Object.entries(financeSections).map(([kind, label]) => <Button key={kind} aria-pressed={section === kind}
-          variant={section === kind ? "contained" : "text"} onClick={() => { setSection(kind as typeof section); setSectionPage(1); }}>{label}</Button>)}
+      <nav className="border-b border-slate-100 pb-2" aria-label="Conta do aluno">
+        <div className="lss-action-row" data-edge-to-edge>
+          {Object.entries(financeSections).map(([kind, label]) => <Button key={kind} aria-pressed={section === kind}
+            variant={section === kind ? "contained" : "text"} onClick={() => { setSection(kind as typeof section); setSectionPage(1); }}>{label}</Button>)}
+        </div>
       </nav>
       <ResourceState {...rowData} retry={rowData.refresh} />
       {section === "charges" && charges.value && <RecordList rows={charges.value.items} empty="Sem cobranças registadas."
