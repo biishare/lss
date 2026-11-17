@@ -3087,23 +3087,29 @@ export function SchoolAdminWorkspace({
     const visibleMonthKeys = new Set(displayMonths.map((item) => item.key));
     return (
       <div className="grid gap-6">
-        <details data-workspace-secondary open={desktop || paymentAreasOpen} onToggle={(event) => { if (!desktop) setPaymentAreasOpen(event.currentTarget.open); }}><summary className="min-h-11 cursor-pointer content-center text-sm font-semibold text-teal-800 md:hidden">Áreas de pagamentos</summary><nav aria-label="Áreas de pagamentos" className="lss-action-row" data-edge-to-edge>
-          {visiblePaymentSections.map((section) => (
-            <button
-              key={section.id}
-              type="button"
-              onClick={() => setActivePaymentSection(section.id)}
-              className={cx(
-                "min-h-11 shrink-0 rounded-md px-4 text-sm font-semibold transition-colors",
-                currentPaymentSection?.id === section.id
-                  ? "bg-[#185c54] text-white"
-                  : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-              )}
-            >
-              {section.label}
-            </button>
-          ))}
-        </nav></details>
+        <details className="min-w-0" data-workspace-secondary open={desktop || paymentAreasOpen}
+          onToggle={(event) => { if (!desktop) setPaymentAreasOpen(event.currentTarget.open); }}>
+          <summary className="min-h-11 cursor-pointer content-center text-sm font-semibold text-teal-800 md:hidden">
+            Áreas de pagamentos
+          </summary>
+          <nav aria-label="Áreas de pagamentos" className="lss-action-row" data-edge-to-edge>
+            {visiblePaymentSections.map((section) => (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => setActivePaymentSection(section.id)}
+                className={cx(
+                  "min-h-11 shrink-0 rounded-md px-4 text-sm font-semibold transition-colors",
+                  currentPaymentSection?.id === section.id
+                    ? "bg-[#185c54] text-white"
+                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                )}
+              >
+                {section.label}
+              </button>
+            ))}
+          </nav>
+        </details>
 
         {currentPaymentSection?.id === "settings" && (
           <div className="grid gap-6">
