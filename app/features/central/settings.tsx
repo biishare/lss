@@ -1,12 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
 import Image from "next/image";
-import { TaskSurface } from "../../components/task-surface";
-import { apiRequest, issueMessage, type Schema } from "./client";
+import { apiRequest, type Schema } from "./client";
 import { CommandDialog, DateField, Heading, Paging, RecordList, ResourceState, Select } from "./controls";
 import { cents, dateLabel, integer, money, schoolDay, statuses, text } from "./format";
 import { useRemote } from "./use-remote";
@@ -20,70 +19,6 @@ const shiftLabels = { manha: "Manhã", tarde: "Tarde", noite: "Noite" } as const
 
 function months(value: string) {
   return value.split(/[,\s]+/u).filter(Boolean);
-}
-
-function InstitutionEditor({ institution, close, saved }: {
-  institution: Institution; close(): void; saved(message: string): void;
-}) {
-  const [working, setWorking] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [error, setError] = useState("");
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (working) return;
-    const data = new FormData(event.currentTarget);
-    setWorking(true);
-    setError("");
-    try {
-      await apiRequest("PATCH", "/api/v1/institution", { body: {
-        revision: institution.revision, name: text(data, "name"), phone: text(data, "phone") || null,
-        email: text(data, "email") || null, address: text(data, "address") || null,
-      } });
-      saved("Dados da instituição guardados.");
-    } catch (cause) { setError(issueMessage(cause)); }
-    finally { setWorking(false); }
-  }
-  return <TaskSurface title="Editar dados da instituição" mobile="full-screen" busy={working} dirty={dirty} onClose={close}
-    actions={(cancel) => <><Button onClick={cancel}>Cancelar</Button>
-      <Button form="lss-institution" type="submit" variant="contained" disabled={working}>Guardar alterações</Button></>}>
-    {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-    <form className="grid gap-4" id="lss-institution" onSubmit={submit} onChange={() => setDirty(true)}>
-      <TextField label="Nome da instituição" name="name" defaultValue={institution.name} required />
-      <TextField label="E-mail institucional" name="email" type="email" defaultValue={institution.email ?? ""} />
-      <TextField label="Telefone" name="phone" type="tel" defaultValue={institution.phone ?? ""} />
-      <TextField label="Morada" name="address" multiline minRows={2} defaultValue={institution.address ?? ""} />
-    </form>
-  </TaskSurface>;
-}
-
-function LogoEditor({ institution, close, saved }: {
-  institution: Institution; close(): void; saved(message: string): void;
-}) {
-  const [working, setWorking] = useState(false);
-  const [file, setFile] = useState<File>();
-  const [error, setError] = useState("");
-  async function send() {
-    if (!file || working) return;
-    if (file.size > 2 * 1024 * 1024 || !["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
-      setError("Escolha um ficheiro PNG, JPEG ou WebP até 2 MiB.");
-      return;
-    }
-    setError("");
-    setWorking(true);
-    try {
-      await apiRequest("POST", "/api/v1/institution/logo", { file, revision: institution.revision });
-      saved("Logótipo actualizado.");
-    } catch (cause) { setError(issueMessage(cause)); }
-    finally { setWorking(false); }
-  }
-  return <TaskSurface title="Actualizar logótipo" mobile="full-screen" busy={working} dirty={Boolean(file)} onClose={close}
-    actions={(cancel) => <><Button onClick={cancel}>Cancelar</Button>
-      <Button variant="contained" onClick={send} disabled={!file || working}>Guardar logótipo</Button></>}>
-    {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-    <label className="grid gap-2"><strong>Ficheiro do logótipo</strong>
-      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => setFile(event.target.files?.[0])} />
-    </label>
-  </TaskSurface>;
 }
 
 function YearEditor({ year, action, close, saved }: {
@@ -262,12 +197,11 @@ const sections: [Section, string][] = [
   ["rooms", "Salas"], ["groups", "Turmas"], ["policies", "Propinas"],
 ];
 
-export function Settings({ institution, year, years, canWrite, canEditInstitution, refresh }: {
-  institution: Institution; year?: Year; years: Year[]; canWrite: boolean; canEditInstitution: boolean; refresh(): void;
+export function Settings({ institution, year, years, canWrite, refresh }: {
+  institution: Institution; year?: Year; years: Year[]; canWrite: boolean; refresh(): void;
 }) {
   const [section, setSection] = useState<Section>("institution");
   const [page, setPage] = useState(1);
-  const [institutionTask, setInstitutionTask] = useState<"details" | "logo">();
   const [yearTask, setYearTask] = useState<{ record?: Year; action?: "activate" | "close" }>();
   const [editor, setEditor] = useState<"new" | CatalogRow>();
   const [policy, setPolicy] = useState<"new" | Policy>();
@@ -290,12 +224,11 @@ export function Settings({ institution, year, years, canWrite, canEditInstitutio
 
   function saved(message: string) {
     const catalogueChanged = Boolean(editor);
-    setInstitutionTask(undefined);
     setYearTask(undefined);
     setEditor(undefined);
     setPolicy(undefined);
     setNotice(message);
-    if (institutionTask || yearTask) refresh();
+    if (yearTask) refresh();
     if (catalogueChanged) records.refresh();
     if (policy) policies.refresh();
   }
@@ -307,17 +240,11 @@ export function Settings({ institution, year, years, canWrite, canEditInstitutio
         aria-pressed={section === key} onClick={() => { setSection(key); setPage(1); setNotice(""); }}>{label}</Button>)}
     </nav>
     {notice && <Alert severity="success">{notice}</Alert>}
-    {section === "institution" && <section className="grid gap-3">
-      <div className="lss-responsive-card grid gap-4">
-        <Heading title={institution.name} detail={[institution.email, institution.phone, institution.address].filter(Boolean).join(" · ")} />
-        {institution.logo && <Image unoptimized src={institution.logo.url} width={institution.logo.width} height={institution.logo.height}
-          alt={"Logótipo de " + institution.name} className="h-auto max-h-24 w-auto max-w-44 object-contain" />}
-        <p className="text-sm text-slate-600">Moeda {institution.currency} · Fuso horário {institution.timeZone}</p>
-      </div>
-      {canEditInstitution && <div className="lss-action-row" data-edge-to-edge role="group" aria-label="Acções da instituição">
-        <Button variant="outlined" onClick={() => setInstitutionTask("details")}>Editar instituição</Button>
-        <Button variant="outlined" onClick={() => setInstitutionTask("logo")}>Actualizar logótipo</Button>
-      </div>}
+    {section === "institution" && <section className="lss-responsive-card grid gap-4">
+      <Heading title={institution.name} detail={[institution.email, institution.phone, institution.address].filter(Boolean).join(" · ")} />
+      {institution.logo && <Image unoptimized src={institution.logo.url} width={institution.logo.width} height={institution.logo.height}
+        alt={"Logótipo de " + institution.name} className="h-auto max-h-24 w-auto max-w-44 object-contain" />}
+      <p className="text-sm text-slate-600">Moeda {institution.currency} · Fuso horário {institution.timeZone}</p>
     </section>}
     {section === "years" && <section className="lss-responsive-card grid gap-4">
       <Heading title="Anos lectivos" action={canWrite && <Button variant="contained" onClick={() => setYearTask({})}>Novo ano lectivo</Button>} />
@@ -361,8 +288,6 @@ export function Settings({ institution, year, years, canWrite, canEditInstitutio
         <Paging {...policies.value} change={setPage} />
       </>}
     </section>}
-    {institutionTask === "details" && <InstitutionEditor institution={institution} saved={saved} close={() => setInstitutionTask(undefined)} />}
-    {institutionTask === "logo" && <LogoEditor institution={institution} saved={saved} close={() => setInstitutionTask(undefined)} />}
     {yearTask && <YearEditor year={yearTask.record} action={yearTask.action} saved={saved} close={() => setYearTask(undefined)} />}
     {selectedCatalog && editor && <CatalogEditor kind={selectedCatalog} year={year}
       record={editor === "new" ? undefined : editor} saved={saved} close={() => setEditor(undefined)} />}

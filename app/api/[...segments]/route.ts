@@ -3,8 +3,6 @@ import {
   allowsSchoolRoute, demoMode, sessionCookies, takeSessionCookies, trustedSchoolOrigin, upstream,
 } from "../../features/central/upstream";
 
-const logoPath = "/api/v1/institution/logo";
-const imageTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 const sessionWriters = new Set(["/api/auth/sign-in/email", "/api/auth/sign-out", "/api/v1/me/password"]);
 
 function problem(status: number, code: string, message: string) {
@@ -64,20 +62,18 @@ async function forward(request: Request, context: { params: Promise<{ segments: 
       if (!source || !trustedSchoolOrigin(source)) return problem(403, "FORBIDDEN", "A origem do pedido não está autorizada.");
       outgoing.set("Origin", source);
       const type = request.headers.get("content-type")?.split(";", 1)[0].trim().toLowerCase();
-      if (path === logoPath ? !type || !imageTypes.has(type) : type !== "application/json") {
-        return problem(415, "UNSUPPORTED_MEDIA_TYPE", "Indique um formato de ficheiro ou dados válido.");
+      if (type !== "application/json") {
+        return problem(415, "UNSUPPORTED_MEDIA_TYPE", "Envie os dados no formato JSON.");
       }
-      if (type) outgoing.set("Content-Type", type);
+      outgoing.set("Content-Type", type);
       const command = request.headers.get("Idempotency-Key");
       if (command) outgoing.set("Idempotency-Key", command);
-      const revision = request.headers.get("X-Institution-Revision");
-      if (path === logoPath && revision) outgoing.set("X-Institution-Revision", revision);
-      body = await limitedBody(request, path === logoPath ? 2 * 1024 * 1024 : 16 * 1024);
+      body = await limitedBody(request, 16 * 1024);
       if (!body) return problem(413, "PAYLOAD_TOO_LARGE", "O pedido excede o limite permitido.");
     }
 
     // Identity of the institution and own-password endpoints are shared with lss-admin.
-    if (path === "/api/v1/institution" || path === logoPath || path === "/api/v1/me/password") {
+    if (path === "/api/v1/institution" || path === "/api/v1/me/password") {
       const identity = await upstream("/api/v1/me", { headers: outgoing, signal: request.signal });
       if (!identity.headers.get("content-type")?.includes("application/json")) {
         await identity.body?.cancel();

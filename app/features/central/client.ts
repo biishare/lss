@@ -40,8 +40,6 @@ type RequestOptions<O> = {
   params?: Parameters<O, "path">;
   query?: Parameters<O, "query">;
   body?: Body<O>;
-  file?: File;
-  revision?: number;
   key?: string;
   signal?: AbortSignal;
 };
@@ -78,12 +76,11 @@ export async function apiRequest<M extends Method, P extends RouteFor<M>>(
   method: M, path: P, options: RequestOptions<Operation<M, P>> = {},
 ): Promise<Result<Operation<M, P>>> {
   const headers = new Headers();
-  if (method !== "GET") headers.set("Content-Type", options.file?.type ?? "application/json");
+  if (method !== "GET") headers.set("Content-Type", "application/json");
   if (options.key) headers.set("Idempotency-Key", options.key);
-  if (options.revision !== undefined) headers.set("X-Institution-Revision", String(options.revision));
   const response = await fetch(requestPath(path, options.params, options.query), {
     method, headers, mode: "same-origin", credentials: "same-origin", cache: "no-store", signal: options.signal,
-    body: method === "GET" ? undefined : options.file ?? JSON.stringify(options.body ?? {}),
+    body: method === "GET" ? undefined : JSON.stringify(options.body ?? {}),
   }).catch((cause: unknown) => {
     if (options.signal?.aborted) throw cause;
     throw new SchoolApiError(503, unavailable);

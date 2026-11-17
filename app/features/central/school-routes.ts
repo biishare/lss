@@ -37,8 +37,6 @@ export const schoolRoutes = [
   ["POST", "/api/v1/me/password"],
   ["POST", "/api/v1/access-reset/complete"],
   ["GET", "/api/v1/institution"],
-  ["PATCH", "/api/v1/institution"],
-  ["POST", "/api/v1/institution/logo"],
   ["GET", "/api/v1/academic-years"],
   ["POST", "/api/v1/academic-years"],
   ["GET", "/api/v1/academic-years/{id}"],

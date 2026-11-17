@@ -564,7 +564,7 @@ export interface paths {
         head?: never;
         /**
          * Editar os contactos ou nome da instituição
-         * @description Administrador ou Secretaria. A revisão esperada deve corresponder à revisão actual.
+         * @description Apenas Administrador. A revisão esperada deve corresponder à revisão actual.
          */
         patch: operations["editInstitution"];
         trace?: never;
@@ -580,7 +580,7 @@ export interface paths {
         put?: never;
         /**
          * Substituir o logótipo público da instituição
-         * @description Administrador ou Secretaria. Envia uma imagem até 2 MiB e 4096 por 4096 píxeis.
+         * @description Apenas Administrador. Envia uma imagem até 2 MiB e 4096 por 4096 píxeis.
          */
         post: operations["replaceInstitutionLogo"];
         delete?: never;
