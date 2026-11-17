@@ -9,7 +9,7 @@ import { TaskSurface } from "../../components/task-surface";
 import { useCommand } from "./use-remote";
 
 export function Heading({ title, detail, action }: { title: string; detail?: string; action?: ReactNode }) {
-  return <div className="flex flex-wrap items-start justify-between gap-3">
+  return <div className="lss-action-heading flex flex-wrap items-start justify-between gap-3">
     <div><h2 className="text-xl font-bold">{title}</h2>{detail && <p className="mt-1 text-sm text-slate-600">{detail}</p>}</div>
     {action}
   </div>;

@@ -63,7 +63,7 @@ export function CashDesk({ canWrite }: { canWrite: boolean }) {
     <ResourceState {...current} retry={current.refresh} />
     {current.value && (active ? <>
       <p>Caixa de {dateLabel(active.businessDate)} · <strong>{money(active.totals.expectedCashCents)}</strong> esperado em numerário</p>
-      <div className="flex flex-wrap gap-2">
+      <div className="lss-action-row" data-edge-to-edge>
         <Button variant="outlined" onClick={() => setSelected(active)}>Ver movimentos</Button>
         {canWrite && <>
           <Button variant="outlined" onClick={() => setTask("movement")}>Registar movimento</Button>
