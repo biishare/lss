@@ -185,14 +185,17 @@ test("falha ao conservar matrícula mantém a sessão em memória ao fechar e re
 
 test("mudar configuração com alterações exige decisão própria e cancelar conserva o formulário", async () => {
   open("catalog");
-  const name = await screen.findByLabelText(/^Nome da escola/);
-  const raw = values.get(demoStorageKey);
-  fireEvent.change(name, { target: { value: "Escola por guardar" } });
+  await screen.findByRole("heading", { name: /^Liceu São Silvestre$/ });
+  assert.equal(screen.queryByLabelText(/^Nome da escola/), null);
   fireEvent.click(screen.getByRole("button", { name: "2. Ano e calendário" }));
+  const name = await screen.findByLabelText(/^Designação do ano/);
+  const raw = values.get(demoStorageKey);
+  fireEvent.change(name, { target: { value: "Ano lectivo por guardar" } });
+  fireEvent.click(screen.getByRole("button", { name: "1. Escola" }));
   const question = await screen.findByRole("dialog", { name: "Mudar de etapa?" });
   fireEvent.click(within(question).getByRole("button", { name: "Cancelar" }));
   await waitFor(() => assert.equal(screen.queryByRole("dialog"), null));
-  assert.equal((screen.getByLabelText(/^Nome da escola/) as HTMLInputElement).value, "Escola por guardar");
+  assert.equal((screen.getByLabelText(/^Designação do ano/) as HTMLInputElement).value, "Ano lectivo por guardar");
   assert.equal(values.get(demoStorageKey), raw);
   assert.equal(writes, 0);
 });
