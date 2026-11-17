@@ -123,11 +123,14 @@ export function FinanceServicePanel({ state, studentId, yearId, readOnly, execut
     } catch (failure) { setError(failure instanceof Error ? failure.message : "Não foi possível guardar. O preenchimento foi conservado."); }
     finally { busy.current = false; setSaving(false); }
   }
-  return <section ref={panel} className="min-w-0 rounded-lg border border-slate-200 bg-white p-4" data-workspace-secondary>
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold">Conferência e movimentos</h3><p className="text-sm text-slate-500">{pending.length} comprovativos em análise · recibos, crédito e devoluções</p></div><div className="lss-action-row"><Button data-service-section="movements" variant="outlined" onClick={() => { setSection("movements"); setOpen(true); }}>Consultar movimentos</Button><Button data-service-section="proofs" onClick={() => { setSection("proofs"); setOpen(true); }}>{readOnly ? "Consultar comprovativos" : "Conferir comprovativos"}</Button><Button data-service-section="credit" onClick={() => { setSection("credit"); setOpen(true); }}>Crédito e devoluções</Button></div></div>
+  return <section ref={panel} className="grid min-w-0 gap-3" data-workspace-secondary>
+    <div><h3 className="font-bold">Conferência e movimentos</h3><p className="text-sm text-slate-500">{pending.length} comprovativos em análise · recibos, crédito e devoluções</p></div>
+    <div className="lss-action-row" data-edge-to-edge role="group" aria-label="Conferência e movimentos"><Button data-service-section="movements" variant="outlined" onClick={() => { setSection("movements"); setOpen(true); }}>Consultar movimentos</Button><Button data-service-section="proofs" onClick={() => { setSection("proofs"); setOpen(true); }}>{readOnly ? "Consultar comprovativos" : "Conferir comprovativos"}</Button><Button data-service-section="credit" onClick={() => { setSection("credit"); setOpen(true); }}>Crédito e devoluções</Button></div>
     {notice && <Alert severity="success" sx={{ mt: 2 }}>{notice}</Alert>}
     {open && <div className="mt-4 grid gap-3" aria-label="Consulta de movimentos">
-      <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm">{selected ? state.students.find((item) => item.id === selected)?.fullName : "Todos os alunos"} · {yearId}</p><div className="lss-action-row"><Button onClick={() => setChoosingStudent((value) => !value)}>Escolher aluno</Button><Button onClick={() => { setFilter(""); setChoosingStudent(false); }}>Todos os alunos</Button><Button onClick={() => setOpen(false)}>Fechar consulta</Button></div></div>
+      <p className="text-sm">{selected ? state.students.find((item) => item.id === selected)?.fullName : "Todos os alunos"} · {yearId}</p>
+      <div className="lss-action-row" data-edge-to-edge role="group" aria-label="Filtros de movimentos"><Button onClick={() => setChoosingStudent((value) => !value)}>Escolher aluno</Button><Button onClick={() => { setFilter(""); setChoosingStudent(false); }}>Todos os alunos</Button><Button onClick={() => setOpen(false)}>Fechar consulta</Button></div>
+      <div className="lss-responsive-card" data-wide="true">
       {choosingStudent && <StudentSearch students={state.students} onChoose={(item) => { setFilter(item.id); setChoosingStudent(false); }} />}
       {section === "credit" && <>
       {!selected && <Alert severity="info">Escolha o aluno para consultar as origens de crédito e registar uma operação.</Alert>}
@@ -149,6 +152,7 @@ export function FinanceServicePanel({ state, studentId, yearId, readOnly, execut
       <h3 className="mt-6 mb-3 font-bold">Histórico de crédito e devoluções</h3>
       {state.paymentRecords.filter((record) => selected && samePerson(state, record.studentId, selected)).flatMap((record) => (record.creditDebits ?? []).map((item) => <p key={item.id} className="border-b border-slate-100 py-3 text-sm">{item.kind === "refund" ? "Devolução" : "Crédito entre anos"} · {formatCurrency(item.amount)} · {item.method} · {formatDate(item.effectiveOn)}<span className="block">{item.reason} · {item.recordedBy} · Origem {item.paymentId}</span></p>))}
       </>}
+      </div>
     </div>}
     {!readOnly && Object.values(tasks).length > 0 && <section className="mt-3" aria-label="Preenchimentos por concluir"><h4 className="text-sm font-semibold">Preenchimentos por concluir</h4>{Object.values(tasks).map((task) => <Button key={task.id} onClick={() => resume(task)}>Retomar {task.command.kind === "review-proof" ? "conferência" : task.command.kind === "refund" ? "devolução" : "aplicação de crédito"}</Button>)}</section>}
     {command && <TaskSurface title={command.kind === "review-proof" ? "Conferir comprovativo" : command.kind === "refund" ? "Registar devolução" : "Aplicar crédito"}

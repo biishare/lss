@@ -57,30 +57,34 @@ export function CashDesk({ canWrite }: { canWrite: boolean }) {
     sessions.refresh();
   };
 
-  return <section className="lss-responsive-card grid gap-4">
-    <Heading title="Caixa" detail="Consulte os movimentos e os fechos de numerário." />
-    {notice && <Alert severity="success">{notice}</Alert>}
-    <ResourceState {...current} retry={current.refresh} />
-    {current.value && (active ? <>
-      <p>Caixa de {dateLabel(active.businessDate)} · <strong>{money(active.totals.expectedCashCents)}</strong> esperado em numerário</p>
-      <div className="lss-action-row" data-edge-to-edge>
+  return <section className="grid gap-3">
+    <div className="lss-responsive-card grid gap-3">
+      <Heading title="Caixa" detail="Consulte os movimentos e os fechos de numerário." />
+      {notice && <Alert severity="success">{notice}</Alert>}
+      <ResourceState {...current} retry={current.refresh} />
+      {current.value && (active
+        ? <p>Caixa de {dateLabel(active.businessDate)} · <strong>{money(active.totals.expectedCashCents)}</strong> esperado em numerário</p>
+        : <div className="flex flex-wrap items-center gap-3"><p className="text-sm">Sem caixa aberto.</p>
+          {canWrite && <Button variant="contained" onClick={() => setTask("open")}>Abrir caixa</Button>}</div>)}
+    </div>
+    {active && <div className="lss-action-row" data-edge-to-edge role="group" aria-label="Acções de caixa">
         <Button variant="outlined" onClick={() => setSelected(active)}>Ver movimentos</Button>
         {canWrite && <>
           <Button variant="outlined" onClick={() => setTask("movement")}>Registar movimento</Button>
           <Button variant="contained" onClick={() => setTask("close")}>Fechar caixa</Button>
         </>}
-      </div>
-    </> : <div className="flex flex-wrap items-center gap-3"><p className="text-sm">Sem caixa aberto.</p>
-      {canWrite && <Button variant="contained" onClick={() => setTask("open")}>Abrir caixa</Button>}</div>)}
-    <Heading title="Sessões de caixa" />
-    <ResourceState {...sessions} retry={sessions.refresh} />
-    {sessions.value && <>
-      <RecordList rows={sessions.value.items} empty="Ainda não há sessões registadas." render={row => <>
-        <div><strong>{dateLabel(row.businessDate)}</strong><p className="text-sm text-slate-600">{statuses[row.status]} · {row.openedBy.name}</p></div>
-        <Button onClick={() => setSelected(row)}>Consultar movimentos</Button>
-      </>} />
-      <Paging {...sessions.value} change={setPage} />
-    </>}
+    </div>}
+    <section className="lss-responsive-card grid gap-3">
+      <Heading title="Sessões de caixa" />
+      <ResourceState {...sessions} retry={sessions.refresh} />
+      {sessions.value && <>
+        <RecordList rows={sessions.value.items} empty="Ainda não há sessões registadas." render={row => <>
+          <div><strong>{dateLabel(row.businessDate)}</strong><p className="text-sm text-slate-600">{statuses[row.status]} · {row.openedBy.name}</p></div>
+          <Button onClick={() => setSelected(row)}>Consultar movimentos</Button>
+        </>} />
+        <Paging {...sessions.value} change={setPage} />
+      </>}
+    </section>
     {task === "open" && <CommandDialog title="Abrir caixa" close={() => setTask(undefined)} label="Abrir caixa"
       submit={(data, key) => apiRequest("POST", "/api/v1/cash-sessions", { body: { openingCents: cents(data.get("amount")) }, key })}
       completed={() => done("Caixa aberto.")}>

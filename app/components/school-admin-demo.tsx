@@ -3152,6 +3152,9 @@ export function SchoolAdminWorkspace({
         {currentPaymentSection?.id === "entry" && (
           <div className="grid gap-6">
             <div className="lss-section-grid lss-payment-grid">
+              <FilterPanel title="Filtros dos pagamentos" value={{ alert: paymentAlertFilter }} clear={() => ({ alert: "all" as PaymentAlertFilter })} apply={(value) => setPaymentAlertFilter(value.alert)} active={paymentAlertFilter === "all" ? [] : [{ key: "alert", label: activePaymentFilterLabel[paymentAlertFilter], remove: () => setPaymentAlertFilter("all") }]}>
+                {(draft, change) => <label className="text-sm font-semibold">Estado<select className={inputClasses()} value={draft.alert} onChange={(event) => change({ alert: event.target.value as PaymentAlertFilter })}>{Object.entries(activePaymentFilterLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
+              </FilterPanel>
               <section className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
                   <div>
@@ -3201,9 +3204,6 @@ export function SchoolAdminWorkspace({
                 />
 
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
-                  <FilterPanel title="Filtros dos pagamentos" value={{ alert: paymentAlertFilter }} clear={() => ({ alert: "all" as PaymentAlertFilter })} apply={(value) => setPaymentAlertFilter(value.alert)} active={paymentAlertFilter === "all" ? [] : [{ key: "alert", label: activePaymentFilterLabel[paymentAlertFilter], remove: () => setPaymentAlertFilter("all") }]}>
-                    {(draft, change) => <label className="text-sm font-semibold">Estado<select className={inputClasses()} value={draft.alert} onChange={(event) => change({ alert: event.target.value as PaymentAlertFilter })}>{Object.entries(activePaymentFilterLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
-                  </FilterPanel>
                   <TextButton ariaLabel={compactPayments ? "Ver planilha completa" : "Ver lista compacta"} onClick={() => workspace.update({ paymentDisplay: compactPayments ? "sheet" : "list", paymentPeriod: compactPayments ? "year" : "month" })}>{compactPayments ? "Planilha completa" : "Lista compacta"}</TextButton>
                 </div>
                 {compactPayments ? <PaymentList rows={visiblePaymentRows} state={demoState} settings={paymentSettings} monthKeys={visibleMonthKeys} selected={selectedPaymentStudentIdSet} onSelect={togglePaymentStudentSelection} onCell={openFinanceCell} onStudent={(id) => workspace.update({ view: "enrollments", personId: id, studentTab: "Financeiro" }, true)}/> : (

@@ -310,49 +310,51 @@ function StudentPayments({ year, canWrite, selected }: { year?: Year; canWrite: 
   return <div className="grid gap-4">
     {notice && <Alert severity="success">{notice}</Alert>}
     <ResourceState {...student} retry={student.refresh} />
-    {student.value && <section className="lss-responsive-card grid gap-4">
-      <Heading title={student.value.fullName} detail={student.value.permanentNumber ?? undefined} />
-      <ResourceState {...credit} retry={credit.refresh} />
-      {credit.value && <p>Crédito disponível <strong>{money(credit.value.balanceCents)}</strong></p>}
-      {canWrite && <div className="lss-action-row" data-edge-to-edge>
+    {student.value && <section className="grid gap-3">
+      <div className="lss-responsive-card grid gap-2">
+        <Heading title={student.value.fullName} detail={student.value.permanentNumber ?? undefined} />
+        <ResourceState {...credit} retry={credit.refresh} />
+        {credit.value && <p>Crédito disponível <strong>{money(credit.value.balanceCents)}</strong></p>}
+      </div>
+      {canWrite && <div className="lss-action-row" data-edge-to-edge role="group" aria-label="Acções de pagamento">
         {operations.map(kind => <Button key={kind} variant={kind === "payment" ? "contained" : "outlined"}
           onClick={() => setOp({ kind })}>{labels[kind]}</Button>)}
       </div>}
-      <nav className="border-b border-slate-100 pb-2" aria-label="Conta do aluno">
-        <div className="lss-action-row" data-edge-to-edge>
-          {Object.entries(financeSections).map(([kind, label]) => <Button key={kind} aria-pressed={section === kind}
-            variant={section === kind ? "contained" : "text"} onClick={() => { setSection(kind as typeof section); setSectionPage(1); }}>{label}</Button>)}
-        </div>
+      <nav className="lss-action-row" data-edge-to-edge aria-label="Conta do aluno">
+        {Object.entries(financeSections).map(([kind, label]) => <Button key={kind} aria-pressed={section === kind}
+          variant={section === kind ? "contained" : "text"} onClick={() => { setSection(kind as typeof section); setSectionPage(1); }}>{label}</Button>)}
       </nav>
-      <ResourceState {...rowData} retry={rowData.refresh} />
-      {section === "charges" && charges.value && <RecordList rows={charges.value.items} empty="Sem cobranças registadas."
-        render={charge => <>
-          <div><strong>{charge.label}</strong><p className="text-sm text-slate-600">{charge.competence} · {statuses[charge.status] ?? charge.status}</p>
-            {charge.pendingProof && <p className="text-sm">Aguarda conferência</p>}</div>
-          <div className="flex items-center gap-2"><strong>{charge.status === "unconfigured" ? "Preço por configurar" : money(charge.outstandingCents)}</strong>
-            {canWrite && charge.status !== "unconfigured" && charge.issuedAt && charge.status !== "cancelled" &&
-              <Button size="small" onClick={() => setOp({ kind: "adjust", charge })}>Ajustar</Button>}
-          </div>
-        </>} />}
-      {section === "payments" && payments.value && <RecordList rows={payments.value.items} empty="Sem recebimentos registados."
-        render={payment => <>
-          <div><strong>{money(payment.amountCents)}</strong>
-            <p className="text-sm text-slate-600">{dateLabel(payment.effectiveOn)} · {methods[payment.method]} · {statuses[payment.status]}</p></div>
-          <div className="flex flex-wrap gap-2">
-            {payment.receiptId && <Button onClick={() => setReceipt({ id: payment.receiptId! })}>Recibo {payment.receiptNumber}</Button>}
-            {canWrite && payment.status === "confirmed" && <Button onClick={() => setOp({ kind: "correction", payment })}>Corrigir</Button>}
-          </div>
-        </>} />}
-      {section === "proofs" && proofs.value && <RecordList rows={proofs.value.items} empty="Sem comprovativos registados."
-        render={proof => <>
-          <div><strong>{money(proof.intent.amountCents)} · {statuses[proof.status]}</strong>
-            <p className="text-sm text-slate-600">{dateLabel(proof.recordedAt)} · {methods[proof.intent.method]}</p></div>
-          {canWrite && proof.status === "pending" && <Button onClick={() => setOp({ kind: "review", proof })}>Conferir</Button>}
-        </>} />}
-      {section === "history" && history.value && <RecordList rows={history.value.items} empty="Sem alterações financeiras registadas."
-        render={entry => <div><strong>{entry.reason || entry.action}</strong>
-          <p className="text-sm text-slate-600">{dateLabel(entry.effectiveOn ?? entry.recordedAt)}</p></div>} />}
-      {rowData.value && <Paging {...rowData.value} change={setSectionPage} />}
+      <div className="lss-responsive-card grid gap-2">
+        <ResourceState {...rowData} retry={rowData.refresh} />
+        {section === "charges" && charges.value && <RecordList rows={charges.value.items} empty="Sem cobranças registadas."
+          render={charge => <>
+            <div><strong>{charge.label}</strong><p className="text-sm text-slate-600">{charge.competence} · {statuses[charge.status] ?? charge.status}</p>
+              {charge.pendingProof && <p className="text-sm">Aguarda conferência</p>}</div>
+            <div className="flex items-center gap-2"><strong>{charge.status === "unconfigured" ? "Preço por configurar" : money(charge.outstandingCents)}</strong>
+              {canWrite && charge.status !== "unconfigured" && charge.issuedAt && charge.status !== "cancelled" &&
+                <Button size="small" onClick={() => setOp({ kind: "adjust", charge })}>Ajustar</Button>}
+            </div>
+          </>} />}
+        {section === "payments" && payments.value && <RecordList rows={payments.value.items} empty="Sem recebimentos registados."
+          render={payment => <>
+            <div><strong>{money(payment.amountCents)}</strong>
+              <p className="text-sm text-slate-600">{dateLabel(payment.effectiveOn)} · {methods[payment.method]} · {statuses[payment.status]}</p></div>
+            <div className="flex flex-wrap gap-2">
+              {payment.receiptId && <Button onClick={() => setReceipt({ id: payment.receiptId! })}>Recibo {payment.receiptNumber}</Button>}
+              {canWrite && payment.status === "confirmed" && <Button onClick={() => setOp({ kind: "correction", payment })}>Corrigir</Button>}
+            </div>
+          </>} />}
+        {section === "proofs" && proofs.value && <RecordList rows={proofs.value.items} empty="Sem comprovativos registados."
+          render={proof => <>
+            <div><strong>{money(proof.intent.amountCents)} · {statuses[proof.status]}</strong>
+              <p className="text-sm text-slate-600">{dateLabel(proof.recordedAt)} · {methods[proof.intent.method]}</p></div>
+            {canWrite && proof.status === "pending" && <Button onClick={() => setOp({ kind: "review", proof })}>Conferir</Button>}
+          </>} />}
+        {section === "history" && history.value && <RecordList rows={history.value.items} empty="Sem alterações financeiras registadas."
+          render={entry => <div><strong>{entry.reason || entry.action}</strong>
+            <p className="text-sm text-slate-600">{dateLabel(entry.effectiveOn ?? entry.recordedAt)}</p></div>} />}
+        {rowData.value && <Paging {...rowData.value} change={setSectionPage} />}
+      </div>
     </section>}
     {op && student.value && (charges.value
       ? <FinanceTask op={op} student={student.value} year={year} charges={charges.value.items.filter((charge) => charge.status !== "unconfigured")}
