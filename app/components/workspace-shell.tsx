@@ -144,6 +144,18 @@ function WorkspaceShellView({
       </nav>
     );
   }
+
+  function signOutButton(compactMode: boolean) {
+    return <Tooltip title={compactMode ? "Sair" : ""} placement="right" arrow>
+      <Button fullWidth aria-label="Sair"
+        onClick={() => { setDrawerOpen(false); onSignOut(); }}
+        sx={{ justifyContent: compactMode ? "center" : "flex-start", minWidth: 44, gap: 1.5, color: "text.secondary", px: compactMode ? 0 : 1.5 }}>
+        <NavigationIcon view="signout" />
+        {!compactMode && "Sair"}
+      </Button>
+    </Tooltip>;
+  }
+
   return (
     <div className="lss-workspace min-h-dvh bg-slate-50 text-slate-950" data-expanded={expanded}>
       <a href="#workspace-content" className="lss-skip-link">Saltar para o conteúdo</a>
@@ -159,7 +171,6 @@ function WorkspaceShellView({
         <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
           {year && <span aria-label={`Ano lectivo ${year}`} className="text-xs font-semibold text-slate-600">{year}</span>}
           <div className="lss-account-label text-right text-sm"><p className="font-semibold">{accountName}</p><p className="text-xs text-slate-500">{roleLabel}</p></div>
-          <Tooltip title="Sair" arrow><IconButton onClick={onSignOut} aria-label="Sair"><NavigationIcon view="signout"/></IconButton></Tooltip>
         </div>
       </header>
 
@@ -172,21 +183,27 @@ function WorkspaceShellView({
           <IconButton onClick={() => setDrawerOpen(false)} aria-label="Fechar menu"><NavigationIcon view="close"/></IconButton>
         </div>
         {navigation(false)}
-        <p className="mt-6 border-t border-slate-100 pt-4 text-sm text-slate-600">{accountName} · {roleLabel}</p>
+        <div className="mt-auto grid gap-2 pt-6">
+          <p className="border-t border-slate-100 px-3 pt-4 text-sm text-slate-600">{accountName} · {roleLabel}</p>
+          {signOutButton(false)}
+        </div>
       </Drawer>
 
       <div className="lss-shell-grid" data-collapsed={collapsed}>
         <aside className="lss-workspace-sidebar" aria-label="Navegação principal">
           {navigation(compact)}
-          <Tooltip title={compact ? "Expandir menu" : "Recolher menu"} placement="right">
-            <IconButton aria-label={compact ? "Expandir menu" : "Recolher menu"} className="lss-sidebar-toggle"
-              onClick={(event) => {
-                if (desktop) onCollapsedChange(!collapsed);
-                else { triggerRef.current = event.currentTarget; setDrawerOpen(true); }
-              }}>
-              <NavigationIcon view={compact ? "expand" : "collapse"}/>
-            </IconButton>
-          </Tooltip>
+          <div className="mt-auto grid gap-2 border-t border-slate-100 pt-3">
+            {signOutButton(compact)}
+            <Tooltip title={compact ? "Expandir menu" : "Recolher menu"} placement="right">
+              <IconButton aria-label={compact ? "Expandir menu" : "Recolher menu"} className="justify-self-center"
+                onClick={(event) => {
+                  if (desktop) onCollapsedChange(!collapsed);
+                  else { triggerRef.current = event.currentTarget; setDrawerOpen(true); }
+                }}>
+                <NavigationIcon view={compact ? "expand" : "collapse"}/>
+              </IconButton>
+            </Tooltip>
+          </div>
         </aside>
         <main id="workspace-content" tabIndex={-1} className="lss-workspace-content">
           {expandable && <div className="lss-expansion-toolbar">

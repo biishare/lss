@@ -73,7 +73,14 @@ for (const width of [390, 1440]) {
     expect(page.url()).not.toContain(encodeURIComponent(name));
     expect(page.url()).not.toContain(phone);
 
-    await page.getByRole("banner").getByRole("button", { name: "Sair", exact: true }).click();
+    const signOut = { name: "Sair", exact: true };
+    await expect(page.getByRole("banner").getByRole("button", signOut)).toHaveCount(0);
+    if (width < 768) {
+      await page.getByRole("button", { name: "Abrir menu" }).click();
+      await page.getByRole("dialog", { name: "Navegação" }).getByRole("button", signOut).click();
+    } else {
+      await page.getByRole("complementary", { name: "Navegação principal" }).getByRole("button", signOut).click();
+    }
     await expect(page.getByRole("heading", { name: "Entrar no LSS", exact: true })).toBeVisible();
     expect(await page.evaluate((key) => sessionStorage.getItem(key), demoSessionKey)).toBeNull();
     expect(await snapshot(page)).toEqual(saved);

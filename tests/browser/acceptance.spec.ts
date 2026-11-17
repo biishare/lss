@@ -223,7 +223,8 @@ for (const role of ["secretaria", "director"] as const) {
     await navigate(page, "Pagamentos");
     if (role === "director") await expect(page.getByRole("button", { name: "Registar pagamento", exact: true })).toHaveCount(0);
     const saved = await snapshot(page);
-    await page.getByRole("button", { name: "Sair", exact: true }).click();
+    await page.getByRole("complementary", { name: "Navegação principal" })
+      .getByRole("button", { name: "Sair", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Entrar no LSS", exact: true })).toBeVisible();
     expect(await snapshot(page)).toEqual(saved);
     expect(await page.evaluate((key) => sessionStorage.getItem(key), demoSessionKey)).toBeNull();

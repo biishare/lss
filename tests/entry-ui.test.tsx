@@ -115,9 +115,10 @@ test("skeleton conserva a conta, navegação e saída sem apresentar totais fict
   assert.ok(screen.getByRole("region", { name: "A preparar o conteúdo" }).getAttribute("aria-busy"));
   assert.ok(screen.getByRole("status"));
   assert.doesNotMatch(document.body.textContent ?? "", /0 alunos|0,00|Sem pagamentos/);
-  fireEvent.click(within(screen.getByRole("complementary", { name: "Navegação principal" })).getByRole("button", { name: "Pagamentos" }));
+  const navigation = within(screen.getByRole("complementary", { name: "Navegação principal" }));
+  fireEvent.click(navigation.getByRole("button", { name: "Pagamentos" }));
   assert.equal(window.location.pathname, "/payments");
-  fireEvent.click(screen.getByRole("button", { name: "Sair" }));
+  fireEvent.click(navigation.getByRole("button", { name: "Sair" }));
   assert.equal(signedOut, true);
   assert.equal(storage.reads, 0);
 });

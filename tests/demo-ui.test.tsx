@@ -284,7 +284,7 @@ test("login abre o papel atribuído à conta e sair conserva a escola sem guarda
   fireEvent.click(mainNavigation().getByRole("button", { name: "Pagamentos" }));
   await screen.findByRole("heading", { name: "Planilha financeira da turma" });
   assert.equal(screen.queryByRole("button", { name: "Confirmar pagamento" }), null);
-  fireEvent.click(screen.getByRole("button", { name: "Sair" }));
+  fireEvent.click(mainNavigation().getByRole("button", { name: "Sair" }));
   await screen.findByRole("heading", { name: "Entrar no LSS" });
   assert.equal(storage.getItem(demoStorageKey), raw);
   assert.equal(storage.financialWrites, 0);

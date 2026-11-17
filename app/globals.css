@@ -444,7 +444,6 @@ textarea:focus-visible,
 .lss-expansion-toolbar p { margin-right: auto; }
 .lss-navigation-item[data-active="true"] { background: var(--lss-color-primary-soft); color: var(--lss-color-primary); }
 .lss-navigation-item { white-space: nowrap; min-height: 44px; }
-.lss-sidebar-toggle { margin-top: auto; align-self: center; }
 
 .lss-skip-link { position: fixed; top: -100px; left: 16px; z-index: 1500; padding: 12px; border-radius: 6px; background: white; color: var(--lss-color-primary); }
 .lss-skip-link:focus { top: 8px; }
