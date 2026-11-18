@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const appOrigin = "http://127.0.0.1:3108";
@@ -106,11 +107,11 @@ test("Secretaria confirma matrícula, recupera um pagamento com resposta perdida
   const sheet = page.getByRole("region", { name: "Grelha de propinas" });
   const student = sheet.getByRole("row", { name: /Aluno sintético da integração/ });
   await expect(student).toBeVisible();
-  await expect(sheet.getByRole("columnheader")).toHaveCount(4);
+  await expect(sheet.getByRole("columnheader")).toHaveCount(5);
   await page.getByRole("button", { name: "Trimestre", exact: true }).click();
-  await expect(sheet.getByRole("columnheader")).toHaveCount(6);
+  await expect(sheet.getByRole("columnheader")).toHaveCount(7);
   await page.getByRole("button", { name: "Ano", exact: true }).click();
-  await expect(sheet.getByRole("columnheader")).toHaveCount(15);
+  await expect(sheet.getByRole("columnheader")).toHaveCount(16);
   const month = new Intl.DateTimeFormat("pt-MZ", { month: "long", timeZone: "UTC" })
     .format(new Date(schoolDay() + "T00:00:00Z"));
   const cell = student.getByRole("button", { name: new RegExp("Propina de " + month, "i") });
@@ -175,7 +176,7 @@ test("Director acede no telemóvel e o servidor recusa a escrita", async ({ page
   await expect(detail.getByRole("button", { name: "Registar pagamento", exact: true })).toHaveCount(0);
   await detail.getByRole("button", { name: "Fechar", exact: true }).click();
   await page.getByRole("button", { name: "Ano", exact: true }).click();
-  await expect(sheet.getByRole("columnheader")).toHaveCount(15);
+  await expect(sheet.getByRole("columnheader")).toHaveCount(16);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await page.screenshot({ path: info.outputPath("planilha-mobile.png"), animations: "disabled" });
   await page.getByRole("button", { name: "Abrir menu" }).click();
@@ -300,4 +301,63 @@ test("Filas de acções no telemóvel deslizam até às bordas sem barra visíve
   await expect(toolbar.getByRole("button", { name: "Turmas" })).toHaveAttribute("aria-pressed", "true");
   await toolbar.getByRole("button", { name: "Novo aluno" }).click();
   await expect(page.getByRole("dialog", { name: "Novo aluno" })).toBeVisible();
+});
+
+test("Secretaria emite o uniforme para toda a escola e recebe pela planilha no telemóvel", async ({ page }, info) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/payments");
+  await enter(page, "secretaria@example.test");
+  const heading = page.getByRole("heading", { name: "Planilha financeira da turma" });
+  await expect(heading).toBeVisible();
+
+  const year = (await (await page.request.get("/api/v1/academic-years")).json()).items[0];
+  const group = (await (await page.request.get("/api/v1/groups?yearId=" + year.id)).json()).items[0];
+  async function post(path: string, data: object, status: number) {
+    const response = await page.request.post("/api/v1/" + path, {
+      headers: { Origin: appOrigin, "Idempotency-Key": randomUUID() }, data,
+    });
+    expect(response.status()).toBe(status);
+    return response.json();
+  }
+  const student = await post("students", { fullName: "Aluno do uniforme escolar" }, 201);
+  const draft = await post("enrollments", { studentId: student.id, yearId: year.id, groupId: group.id }, 201);
+  await post("enrollments/" + draft.id + "/confirm", {
+    revision: draft.revision, groupId: group.id, enrolledOn: schoolDay(), tuitionStartMonth: schoolDay().slice(0, 7),
+  }, 200);
+  const { total } = await (await page.request.get("/api/v1/enrollments?yearId=" + year.id + "&status=active")).json();
+
+  await page.getByRole("combobox", { name: "Classe", exact: true }).selectOption({ label: "Classe de teste" });
+  await page.getByRole("combobox", { name: "Turma", exact: true }).selectOption({ label: "Turma de teste" });
+  const sheet = page.getByRole("region", { name: "Grelha de propinas" });
+  const row = sheet.getByRole("row", { name: /Aluno do uniforme escolar/ });
+  await expect(row).toBeVisible();
+  await expect(sheet.getByRole("columnheader", { name: "Extras" })).toBeVisible();
+  await page.getByRole("button", { name: "Emitir cobrança extra", exact: true }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("Toda a escola · Ano lectivo de teste")).toBeVisible();
+  await dialog.getByLabel("Descrição").fill("Uniforme escolar");
+  await dialog.getByLabel("Valor em MT").fill("175");
+  await dialog.getByLabel("Motivo").fill("Uniforme do ano lectivo");
+  await dialog.getByRole("button", { name: "Consultar prévia" }).click();
+  await expect(dialog.getByText("Alunos abrangidos")).toBeVisible();
+  await expect(dialog.getByText(String(total), { exact: true })).toBeVisible();
+  await expect(dialog.getByText(total * 175 + ",00 MT", { exact: true }).last()).toBeVisible();
+  await dialog.getByRole("button", { name: "Emitir cobranças", exact: true }).click();
+
+  const extra = row.getByRole("button", { name: /Uniforme escolar/ });
+  await expect(extra).toContainText("175,00 MT");
+  await extra.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath("planilha-uniforme-mobile.png"), animations: "disabled" });
+  await extra.click();
+  await expect(dialog.getByRole("heading", { name: "Uniforme escolar" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Registar pagamento" }).click();
+  await expect(dialog.getByLabel("Valor em MT")).toHaveValue("175.00");
+  await expect(dialog.getByRole("checkbox", { name: /Uniforme escolar/ })).toBeChecked();
+  await expect(dialog.getByLabel("Meio de pagamento")).toHaveValue("cash");
+  await dialog.getByRole("button", { name: "Consultar prévia" }).click();
+  await dialog.getByRole("button", { name: "Confirmar pagamento", exact: true }).click();
+  await expect(dialog.getByRole("heading", { name: "Recibo", exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "Fechar", exact: true }).click();
+  await expect(extra).toContainText("Pago");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });

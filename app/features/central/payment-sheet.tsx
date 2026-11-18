@@ -50,8 +50,8 @@ function chargeState(charge: SheetCharge, today: string) {
   return state;
 }
 
-function ChargeCell({ row, charge, title, today, open }: {
-  row: SheetRow; charge?: SheetCharge; title: string; today: string; open(value: SheetSelection): void;
+function ChargeCell({ row, charge, title, today, open, showTitle = false }: {
+  row: SheetRow; charge?: SheetCharge; title: string; today: string; open(value: SheetSelection): void; showTitle?: boolean;
 }) {
   if (!charge) return <span className="text-slate-500">Não aplicável</span>;
   const { label, color } = chargeState(charge, today);
@@ -60,7 +60,8 @@ function ChargeCell({ row, charge, title, today, open }: {
     aria-label={row.fullName + ", " + title + ", " + status}
     onClick={() => open({ student: { id: row.studentId, fullName: row.fullName }, title, status, charge })}
     className={"grid min-h-11 w-full gap-0.5 rounded-lg px-2 py-1.5 text-left leading-snug hover:ring-1 focus-visible:ring-2 focus-visible:ring-teal-700 " + color}>
-    <span className="font-semibold">{label}</span>
+    {showTitle && <span className="font-semibold [overflow-wrap:anywhere]">{title}</span>}
+    <span className={showTitle ? "text-xs" : "font-semibold"}>{label}</span>
     {charge.pendingProof && <span className="text-xs font-semibold">Em análise</span>}
     {charge.status !== "unconfigured" && charge.outstandingCents > 0 &&
       <span className="text-xs">{money(charge.outstandingCents)}</span>}
@@ -149,6 +150,7 @@ export function ClassPaymentSheet({ year, revision, openAccount, openCharge }: {
               <th scope="col" className={"min-w-28 border-b border-slate-200 px-3 py-2 sm:min-w-36 " + widerColumns}>Inscrição</th>
               {visibleMonths.map(item => <th key={item} scope="col"
                 className="min-w-28 border-b border-slate-200 px-3 py-2 sm:min-w-36">{monthName(item)}</th>)}
+              <th scope="col" className="min-w-32 border-b border-slate-200 px-3 py-2 sm:min-w-40">Extras</th>
               <th scope="col" className={"whitespace-nowrap border-b border-slate-200 px-3 py-2 " + widerColumns}>Saldo emitido</th>
             </tr>
           </thead>
@@ -156,6 +158,8 @@ export function ClassPaymentSheet({ year, revision, openAccount, openCharge }: {
             {data.items.map(row => {
               const registration = row.charges.find(charge => charge.kind === "registration");
               const tuition = new Map(row.charges.filter(charge => charge.kind === "tuition").map(charge => [charge.competence, charge]));
+              const extras = row.charges.filter(charge => charge.kind === "extra").sort((a, b) =>
+                a.competence.localeCompare(b.competence) || a.label.localeCompare(b.label));
               return <tr key={row.enrollmentId} className="bg-white">
                 <th scope="row" className="sticky left-0 z-10 max-w-48 border-b border-r border-slate-100 bg-white px-3 py-2 align-top">
                   <button type="button" onClick={() => openAccount(row.studentId)}
@@ -170,6 +174,11 @@ export function ClassPaymentSheet({ year, revision, openAccount, openCharge }: {
                   <ChargeCell row={row} charge={tuition.get(item)} title={"Propina de " + monthName(item)}
                     today={data.today} open={openCharge} />
                 </td>)}
+                <td className="max-w-48 border-b border-slate-100 p-2 align-top">
+                  {extras.length > 0 ? <div className="grid gap-1">{extras.map(extra =>
+                    <ChargeCell key={extra.id} row={row} charge={extra} title={extra.label} showTitle today={data.today} open={openCharge} />
+                  )}</div> : <span className="px-1 text-slate-500" aria-label="Sem cobranças extra">—</span>}
+                </td>
                 <td className={"whitespace-nowrap border-b border-slate-100 p-3 align-top font-semibold " + widerColumns}>{money(row.balanceCents)}</td>
               </tr>;
             })}

@@ -13,7 +13,7 @@ export function PreviewTask<Payload, Preview, Result>({
   title: string; subtitle?: string; close(): void; children: ReactNode;
   prepare(data: FormData): Payload; preview(payload: Payload): Promise<Preview>;
   submit(payload: Payload, result: Preview, key: string): Promise<Result>;
-  review(result: Preview): ReactNode; complete(result: Result): void; label?: string;
+  review(result: Preview, payload: Payload): ReactNode; complete(result: Result): void; label?: string;
 }) {
   const id = useId();
   const [draft, setDraft] = useState<{ payload: Payload; result: Preview }>();
@@ -58,7 +58,7 @@ export function PreviewTask<Payload, Preview, Result>({
       </> : <Button variant="contained" type="submit" form={id} disabled={working}>Consultar prévia</Button>}
     </>}>
     {(error || command.error) && <Alert severity="error" sx={{ mb: 2 }}>{error || command.error}</Alert>}
-    {draft && review(draft.result)}
+    {draft && review(draft.result, draft.payload)}
     <div hidden={Boolean(draft)}>
       <form id={id} onSubmit={check} onChange={() => setDirty(true)} className="grid gap-4">{children}</form>
     </div>
