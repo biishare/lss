@@ -9,6 +9,7 @@ import TextField from "@mui/material/TextField";
 import { TaskSurface } from "../../components/task-surface";
 import { apiRequest, type Schema } from "./client";
 import { CommandDialog, DateField, Heading, Paging, RecordList, ResourceState, Select } from "./controls";
+import { extraChargeTitle, SchoolExtraTask, StudentExtraTask } from "./extra-charges";
 import { cents, dateLabel, methods, money, schoolDay, statuses, text } from "./format";
 import { ClassPaymentSheet, type SheetSelection } from "./payment-sheet";
 import { PreviewTask } from "./preview-task";
@@ -27,7 +28,7 @@ type Operation = { kind: Mode } | { kind: "correction"; payment: Payment } |
 
 const labels = {
   payment: "Registar pagamento", proof: "Registar comprovativo", credit: "Aplicar crédito",
-  refund: "Devolver crédito", extra: "Emitir cobrança extra", benefit: "Registar benefício",
+  refund: "Devolver crédito", extra: extraChargeTitle, benefit: "Registar benefício",
   correction: "Corrigir pagamento", review: "Conferir comprovativo", adjust: "Ajustar cobrança",
 } as const;
 
@@ -205,35 +206,14 @@ function FinanceTask({ op, student, year, charges, initialChargeId, close, chang
     <TextField label="Motivo" name="reason" required />
   </PreviewTask>;
 
-  return <ExtraTask student={student} year={year} close={close} change={change} />;
-}
-
-function ExtraTask({ student, year, close, change }: {
-  student: Pick<Student, "id" | "fullName">; year?: Year; close(): void; change(message: string): void;
-}) {
-  const enrollments = useRemote(student.id + ":" + (year?.id ?? ""), (signal) =>
-    apiRequest("GET", "/api/v1/enrollments", { query: { studentId: student.id, yearId: year?.id, status: "active", page: 1, limit: 100 }, signal }));
-  return <PreviewTask title={labels.extra} subtitle={student.fullName} close={close}
-    prepare={data => ({ enrollmentIds: [text(data, "enrollmentId")], label: text(data, "label"),
-      amountCents: cents(data.get("amount")), dueOn: text(data, "dueOn"), reason: text(data, "reason") })}
-    preview={body => apiRequest("POST", "/api/v1/finance/charges/extras/preview", { body })}
-    submit={(body, { previewToken }, key) => apiRequest("POST", "/api/v1/finance/charges/extras", { body: { ...body, previewToken }, key })}
-    review={result => <p>{result.count} cobrança · Total {money(result.totalCents)}</p>}
-    complete={() => change("Cobrança extra emitida.")}>
-    <ResourceState {...enrollments} retry={enrollments.refresh} />
-    <Select label="Matrícula" name="enrollmentId" defaultValue="" required>
-      <option value="">Seleccione a matrícula</option>
-      {enrollments.value?.items.map(row => <option value={row.id} key={row.id}>{row.number}</option>)}
-    </Select>
-    <TextField label="Descrição" name="label" required /><TextField label="Valor em MT" name="amount" required />
-    <DateField label="Vencimento" name="dueOn" defaultValue={schoolDay()} required /><TextField label="Motivo" name="reason" required />
-  </PreviewTask>;
+  return <StudentExtraTask student={student} year={year} close={close} change={change} />;
 }
 
 export function Payments({ year, canWrite, selected, selectStudent }: {
   year?: Year; canWrite: boolean; selected: string; selectStudent(id: string): void;
 }) {
   const [sheetRevision, setSheetRevision] = useState(0);
+  const [schoolExtra, setSchoolExtra] = useState(false);
   const [sheetSelection, setSheetSelection] = useState<SheetSelection>();
   const [paying, setPaying] = useState(false);
   const [sheetReceipt, setSheetReceipt] = useState<ReceiptData>();
@@ -244,12 +224,19 @@ export function Payments({ year, canWrite, selected, selectStudent }: {
     setPaying(false);
   }
 
+  function refreshSheet() {
+    setSheetRevision(current => current + 1);
+  }
+
   const charge = sheetSelection?.charge;
   const payable = charge && charge.status !== "unconfigured" && charge.status !== "cancelled" && charge.outstandingCents > 0
     ? charge : undefined;
 
   return <div className="grid min-w-0 gap-4">
-    <Heading title="Pagamentos" action={selected ? <Button onClick={() => selectStudent("")}>Voltar à planilha</Button> : undefined} />
+    <Heading title="Pagamentos" action={selected ? <Button onClick={() => selectStudent("")}>Voltar à planilha</Button> :
+      canWrite && year && year.status !== "closed" && <Button variant="outlined" onClick={() => { setNotice(""); setSchoolExtra(true); }}>
+        {extraChargeTitle}
+      </Button>} />
     <Activity mode={selected ? "hidden" : "visible"}>
       {notice && <Alert severity="success" className="mb-4">{notice}</Alert>}
       {year ? <ClassPaymentSheet key={year.id} year={year} revision={sheetRevision} openAccount={selectStudent}
@@ -257,7 +244,9 @@ export function Payments({ year, canWrite, selected, selectStudent }: {
         : <p className="text-sm text-slate-600">Seleccione um ano lectivo para consultar a planilha da turma.</p>}
     </Activity>
     <StudentSearch open={value => selectStudent(value.id)} selected={selected} label="Abrir conta" />
-    {selected && <StudentPayments key={selected} year={year} canWrite={canWrite} selected={selected} />}
+    {selected && <StudentPayments key={selected} year={year} canWrite={canWrite} selected={selected} onChange={refreshSheet} />}
+    {!selected && schoolExtra && canWrite && year && <SchoolExtraTask year={year} close={() => setSchoolExtra(false)}
+      change={message => { setSchoolExtra(false); setNotice(message); refreshSheet(); }} />}
     {!selected && sheetSelection && (paying && canWrite && payable
       ? <FinanceTask op={{ kind: "payment" }} student={sheetSelection.student} year={year}
           charges={[payable]} initialChargeId={payable.id} close={closeCharge}
@@ -265,7 +254,7 @@ export function Payments({ year, canWrite, selected, selectStudent }: {
             closeCharge();
             setNotice(message);
             setSheetReceipt(saved);
-            setSheetRevision(current => current + 1);
+            refreshSheet();
           }} />
       : <TaskSurface title={sheetSelection.title} subtitle={sheetSelection.student.fullName} onClose={closeCharge}
           actions={<>
@@ -286,7 +275,7 @@ export function Payments({ year, canWrite, selected, selectStudent }: {
   </div>;
 }
 
-function StudentPayments({ year, canWrite, selected }: { year?: Year; canWrite: boolean; selected: string }) {
+function StudentPayments({ year, canWrite, selected, onChange }: { year?: Year; canWrite: boolean; selected: string; onChange(): void }) {
   const [section, setSection] = useState<"charges" | "payments" | "proofs" | "history">("charges");
   const [sectionPage, setSectionPage] = useState(1);
   const [op, setOp] = useState<Operation>();
@@ -367,6 +356,7 @@ function StudentPayments({ year, canWrite, selected }: { year?: Year; canWrite: 
             payments.refresh();
             proofs.refresh();
             history.refresh();
+            onChange();
           }} />
       : <div className="lss-responsive-card"><ResourceState {...charges} retry={charges.refresh} />
           <Button onClick={() => setOp(undefined)}>Cancelar operação</Button></div>)}

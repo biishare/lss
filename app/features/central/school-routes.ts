@@ -10,6 +10,8 @@ export const schoolRoutes = [
   ["GET", "/api/v1/finance/groups/{id}/payment-sheet"],
   ["POST", "/api/v1/finance/charges/extras/preview"],
   ["POST", "/api/v1/finance/charges/extras"],
+  ["POST", "/api/v1/finance/charges/extras/school/preview"],
+  ["POST", "/api/v1/finance/charges/extras/school"],
   ["POST", "/api/v1/finance/charges/{id}/adjustments/preview"],
   ["POST", "/api/v1/finance/charges/{id}/adjustments"],
   ["GET", "/api/v1/finance/payments"],

@@ -103,7 +103,7 @@ export interface paths {
         };
         /**
          * Consultar a planilha financeira da turma
-         * @description Devolve a pauta da turma, as cobranças de inscrição e propinas, e as previsões do calendário de cada matrícula. A consulta é de leitura.
+         * @description Devolve a pauta da turma, as cobranças de inscrição, propinas e extras, e as previsões do calendário de cada matrícula. A consulta é de leitura.
          */
         get: operations["readFinancePaymentSheet"];
         put?: never;
@@ -142,6 +142,46 @@ export interface paths {
         put?: never;
         /** Emitir cobranças extras */
         post: operations["confirmFinanceExtras"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/finance/charges/extras/school/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rever cobrança extra para toda a escola
+         * @description Abrange as matrículas activas da instituição no ano lectivo seleccionado.
+         */
+        post: operations["previewFinanceSchoolExtras"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/finance/charges/extras/school": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Emitir cobrança extra para toda a escola
+         * @description Abrange as matrículas activas da instituição no ano lectivo seleccionado.
+         */
+        post: operations["confirmFinanceSchoolExtras"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1944,6 +1984,42 @@ export interface components {
         };
         FinanceExtrasConfirm: {
             enrollmentIds: string[];
+            label: string;
+            amountCents: number;
+            /** Format: date */
+            dueOn: string;
+            reason: string;
+            previewToken: string;
+        };
+        FinanceSchoolExtrasPreview: {
+            /** @example 1 */
+            count: number;
+            /** @example 25000 */
+            unitCents: number;
+            /** @example 25000 */
+            totalCents: number;
+            totalBenefitCents: number;
+            previewToken: string;
+        };
+        FinanceSchoolExtrasInput: {
+            yearId: string;
+            label: string;
+            amountCents: number;
+            /** Format: date */
+            dueOn: string;
+            reason: string;
+        };
+        FinanceSchoolExtrasResult: {
+            /** @example 1 */
+            count: number;
+            /** @example 25000 */
+            unitCents: number;
+            /** @example 25000 */
+            totalCents: number;
+            totalBenefitCents: number;
+        };
+        FinanceSchoolExtrasConfirm: {
+            yearId: string;
             label: string;
             amountCents: number;
             /** Format: date */
@@ -4270,6 +4346,84 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FinanceExtrasResult"];
+                };
+            };
+            400: components["responses"]["Error400"];
+            401: components["responses"]["Error401"];
+            403: components["responses"]["Error403"];
+            404: components["responses"]["Error404"];
+            409: components["responses"]["Error409"];
+            413: components["responses"]["Error413"];
+            422: components["responses"]["Error422"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Error503"];
+        };
+    };
+    previewFinanceSchoolExtras: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A origem deve estar na lista de origens autorizadas da API. */
+                Origin: components["parameters"]["AcademicOrigin"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinanceSchoolExtrasInput"];
+            };
+        };
+        responses: {
+            /** @description Pedido concluído. */
+            200: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceSchoolExtrasPreview"];
+                };
+            };
+            400: components["responses"]["Error400"];
+            401: components["responses"]["Error401"];
+            403: components["responses"]["Error403"];
+            404: components["responses"]["Error404"];
+            409: components["responses"]["Error409"];
+            413: components["responses"]["Error413"];
+            422: components["responses"]["Error422"];
+            500: components["responses"]["InternalError"];
+            503: components["responses"]["Error503"];
+        };
+    };
+    confirmFinanceSchoolExtras: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description A origem deve estar na lista de origens autorizadas da API. */
+                Origin: components["parameters"]["AcademicOrigin"];
+                /** @description Conserva a chave e os dados ao repetir o mesmo comando. O resultado confirmado é reutilizado. */
+                "Idempotency-Key": components["parameters"]["AcademicIdempotency"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FinanceSchoolExtrasConfirm"];
+            };
+        };
+        responses: {
+            /** @description Comando confirmado. */
+            201: {
+                headers: {
+                    "X-Request-Id": components["headers"]["RequestId"];
+                    "Cache-Control": components["headers"]["NoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceSchoolExtrasResult"];
                 };
             };
             400: components["responses"]["Error400"];

@@ -39,10 +39,14 @@ try {
   execFileSync("npm", ["exec", "--yes", "--package=openapi-typescript@7.13.0", "--", "openapi-typescript", spec,
     "--output", new URL("contract.ts", target).pathname], { stdio: "inherit" });
 
-  const lines = Object.entries(schoolPaths).flatMap(([path, methods]) =>
-    Object.keys(methods).filter((method) => ["get", "post", "patch"].includes(method)).map((method) =>
-      `  [${JSON.stringify(method.toUpperCase())}, ${JSON.stringify(path)}],`),
-  );
+  const lines = Object.entries(schoolPaths).flatMap(([path, methods]) => {
+    // A identidade da escola é consultada aqui e editada no painel de administração.
+    if (/^\/api\/v1\/institution(\/|$)/.test(path)) {
+      return path === "/api/v1/institution" && methods.get ? ['  ["GET", "/api/v1/institution"],'] : [];
+    }
+    return Object.keys(methods).filter((method) => ["get", "post", "patch"].includes(method)).map((method) =>
+      `  [${JSON.stringify(method.toUpperCase())}, ${JSON.stringify(path)}],`);
+  });
   writeFileSync(new URL("school-routes.ts", target), [
     "// Generated from lss-api/openapi.json by scripts/generate-school-contract.mjs.",
     "export const schoolRoutes = [", ...lines, "] as const;", "",
